@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Focus Fossil — Study Tracker Widget</title>
+  <link rel="stylesheet" href="src/theme.css" />
+  <style>
+    @keyframes fossilPulse {
+      0%, 100% { opacity: 0.65; }
+      50%      { opacity: 1; }
+    }
+    /* hide scrollbar inside strata timeline */
+    .fossil-strata *::-webkit-scrollbar { display: none; }
+    .fossil-strata * { scrollbar-width: none; }
+
+    /* milestone popup entrance */
+    .fossil-ms-popup {
+      animation: popIn 0.2s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+    }
+    @keyframes popIn {
+      from { opacity: 0; transform: translateX(-50%) scale(0.92); }
+      to   { opacity: 1; transform: translateX(-50%) scale(1); }
+    }
+
+    /* subtle grain overlay for geological feel */
+    .fossil-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 16px;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+      background-size: 200px 200px;
+      opacity: 0.035;
+      pointer-events: none;
+      z-index: 1;
+      mix-blend-mode: overlay;
+    }
+
+    body {
+      min-height: 100vh;
+    }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div style="min-height:100vh;display:grid;place-items:center;color:#888;font-family:system-ui;">Loading Focus Fossil…</div>
+  </div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script src="src/data.jsx"></script>
+  <script type="text/babel" src="src/components.jsx"></script>
+  <script type="text/babel" src="src/fossil.jsx"></script>
+
+  <script type="text/babel">
+    /* ============================================================
+       Demo harness — generates 60+ days of study data
+       ============================================================ */
+
+    function generateFossilDemo() {
+      const data = JSON.parse(JSON.stringify(STData));
+      const courses = ['c-analysis', 'c-algo', 'c-physics', 'c-linalg'];
+      const presets = ['Deep Work', 'Pomodoro', 'Sprint', 'Exam'];
+
+      // Simple deterministic PRNG
+      let seed = 42;
+      const rng = () => {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        return seed / 0x7fffffff;
+      };
+
+      // Recent 60 days (days -7 to -59, existing data covers 0 to -6)
+      for (let d = 7; d < 60; d++) {
+        const dateStr = ST.addDays(-d);
+        const dow = new Date(dateStr + 'T00:00:00').getDay();
+        const isWeekend = dow === 0 || dow === 6;
+
+        // Skip some days
+        if (rng() < (isWeekend ? 0.35 : 0.1)) continue;
+
+        const nSessions = isWeekend
+          ? (rng() < 0.5 ? 1 : 2)
+          : (rng() < 0.25 ? 1 : rng() < 0.7 ? 2 : 3);
+
+        for (let j = 0; j < nSessions; j++) {
+          const cid = courses[Math.floor(rng() * courses.length)];
+          const mins = Math.round(18 + rng() * 72);
+          const hour = 7 + Math.floor(rng() * 12);
+          data.sessions.push({
+            id: `demo-${d}-${j}`,
+            preset: presets[Math.floor(rng() * presets.length)],
+            phase: 'study',
+            semId: 'sem-fs26',
+            courseId: cid,
+            minutes: mins,
+            start: `${dateStr}T${String(hour).padStart(2, '0')}:00`,
+          });
+        }
+      }
+
+      // Historical sessions (60-150 days ago) for higher cumulative total
+      for (let d = 60; d < 150; d++) {
+        const dateStr = ST.addDays(-d);
+        if (rng() < 0.25) continue;
+        const nSessions = rng() < 0.55 ? 1 : 2;
+        for (let j = 0; j < nSessions; j++) {
+          const cid = courses[Math.floor(rng() * courses.length)];
+          const mins = Math.round(20 + rng() * 60);
+          data.sessions.push({
+            id: `hist-${d}-${j}`,
+            preset: 'Deep Work',
+            phase: 'study',
+            semId: 'sem-fs26',
+            courseId: cid,
+            minutes: mins,
+            start: `${dateStr}T10:00`,
+          });
+        }
+      }
+
+      data.streak = 6;
+      return data;
+    }
+
+    function FossilDemo() {
+      const demoData = React.useMemo(() => generateFossilDemo(), []);
+
+      return (
+        <div style={{
+          maxWidth: 780,
+          margin: '0 auto',
+          padding: '48px 24px 64px',
+        }}>
+          {/* Demo title */}
+          <div style={{ marginBottom: 28 }}>
+            <div className="eyebrow" style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="layers" size={12} />
+              Dashboard widget
+            </div>
+            <h1 className="serif" style={{
+              fontSize: 28, fontWeight: 500, margin: 0,
+              letterSpacing: '-0.02em', color: 'var(--ink)',
+            }}>Focus Fossil</h1>
+            <p style={{
+              margin: '6px 0 0', fontSize: 14, color: 'var(--ink-3)',
+              lineHeight: 1.5, maxWidth: 520,
+            }}>
+              Your study history as geological strata. Each layer is a study session,
+              colored by course. Hover any column to explore, click milestones to reveal discoveries.
+            </p>
+          </div>
+
+          {/* The widget */}
+          <FocusFossil data={demoData} />
+
+          {/* Design notes */}
+          <div style={{
+            marginTop: 32, padding: '18px 22px',
+            background: 'var(--surface-inset)', borderRadius: 'var(--r-md)',
+            border: '1px solid var(--line-soft)',
+          }}>
+            <div className="eyebrow" style={{ marginBottom: 8 }}>Design notes</div>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-3)', lineHeight: 1.6 }}>
+              <strong style={{ color: 'var(--ink-2)' }}>Organic layers</strong> — each stratum has randomized border-radius and width, creating irregular sediment feel.
+              <br />
+              <strong style={{ color: 'var(--ink-2)' }}>Milestone fossils</strong> — discovered at 10h, 25h, 50h, 100h, 250h+. Click to reveal.
+              <br />
+              <strong style={{ color: 'var(--ink-2)' }}>Today flag</strong> — amber survey flag marks the excavation site.
+              <br />
+              <strong style={{ color: 'var(--ink-2)' }}>Empty days</strong> — rendered as eroded sediment marks, not blank gaps.
+              <br />
+              <strong style={{ color: 'var(--ink-2)' }}>Depth lines</strong> — faint horizontal guides evoke geological measurement.
+              <br />
+              <strong style={{ color: 'var(--ink-2)' }}>Range toggle</strong> — switch between 14, 30, and 60-day views.
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<FossilDemo />);
+  </script>
+</body>
+</html>

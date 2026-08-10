@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@300;400;500;700&display=swap" rel="stylesheet"><style>
+body{margin:0;background:#e9e5d8;font-family:"Zen Kaku Gothic New","Helvetica Neue",Helvetica,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#4f6b4a}a:hover{color:#374d33}
+input{font-family:inherit}
+</style></helmet>
+
+<div style="min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:34px 34px 60px">
+<div style="width:1240px;max-width:100%;background:#f4f1e8;border:1px solid #d3cdb9;box-shadow:0 1px 0 rgba(28,29,25,.06)">
+
+<div style="display:flex;align-items:center;justify-content:space-between;height:30px;padding:0 13px;background:#1c1d19">
+<span style="font:500 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.2em;color:#9d9f92">STUDY TRACKER</span>
+<span style="font:400 11px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.1em;color:#6f7268">{{ headerClock }}</span>
+</div>
+
+<div style="display:grid;grid-template-columns:186px 1fr;min-height:760px">
+
+<div style="border-right:1px solid #ddd8c8;background:#efebe0;display:flex;flex-direction:column">
+<div style="padding:26px 22px 18px;display:flex;align-items:center;gap:11px">
+<span style="width:15px;height:15px;border:1.5px solid #4f6b4a;border-radius:50%"></span>
+<span style="font:500 15px 'Shippori Mincho',serif;color:#1c1d19">Kokoro</span>
+</div>
+<sc-for list="{{ nav }}" as="item" hint-placeholder-count="6">
+<div onClick="{{ item.go }}" style="padding:11px 22px;cursor:pointer;border-left:2px solid transparent" style-hover="background:#e7e2d4">
+<sc-if value="{{ item.active }}" hint-placeholder-val="{{ true }}">
+<span style="display:flex;align-items:baseline;gap:8px"><span style="font:500 14.5px 'Shippori Mincho',serif;color:#1c1d19">{{ item.label }}</span><sc-if value="{{ showKanji }}" hint-placeholder-val="{{ true }}"><span style="font:400 12px 'Shippori Mincho',serif;color:#b0472e">{{ item.kanji }}</span></sc-if></span>
+<span style="display:block;font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.12em;color:#8d8b7d;margin-top:2px">{{ item.sub }}</span>
+</sc-if>
+<sc-if value="{{ item.idle }}" hint-placeholder-val="{{ false }}">
+<span style="display:flex;align-items:baseline;gap:8px"><span style="font:400 14.5px 'Shippori Mincho',serif;color:#6f7268">{{ item.label }}</span><sc-if value="{{ showKanji }}" hint-placeholder-val="{{ true }}"><span style="font:400 12px 'Shippori Mincho',serif;color:#b9b5a4">{{ item.kanji }}</span></sc-if></span>
+<span style="display:block;font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.12em;color:#a8a494;margin-top:2px">{{ item.sub }}</span>
+</sc-if>
+</div>
+</sc-for>
+<span style="flex:1"></span>
+<div style="padding:18px 22px 22px;border-top:1px solid #ddd8c8">
+<div style="font:400 10px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.18em;color:#a8a494">TENDED TODAY</div>
+<div style="font:500 22px 'Shippori Mincho',serif;color:#1c1d19;margin-top:3px">{{ dayLabel }}</div>
+<div style="height:5px;background:#ddd8c8;margin-top:8px"><div style="height:5px;background:#4f6b4a;width:{{ dayPct }}"></div></div>
+<div onClick="{{ toggleQuiet }}" style="margin-top:16px;font:400 11.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.1em;color:#4f6b4a;cursor:pointer;border-top:1px dotted #cdc8b4;padding-top:14px" style-hover="color:#b0472e">{{ quietLabel }}</div>
+</div>
+</div>
+
+<div style="position:relative">
+
+<sc-if value="{{ quiet }}" hint-placeholder-val="{{ false }}">
+<div style="min-height:760px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:60px">
+<div style="font:400 11px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.24em;color:#8d8b7d">NOW</div>
+<div style="font:500 46px/1.25 'Shippori Mincho',serif;color:#1c1d19;margin-top:18px;text-align:center;max-width:620px;text-wrap:pretty">{{ focusTitle }}</div>
+<div style="font:400 15px 'Zen Kaku Gothic New',sans-serif;color:#8d8b7d;margin-top:10px">{{ focusMeta }}</div>
+<div style="font:500 86px 'Shippori Mincho',serif;color:#1c1d19;margin-top:44px;letter-spacing:.02em">{{ clock }}</div>
+<div style="display:flex;gap:10px;margin-top:30px">
+<span onClick="{{ toggleRun }}" style="font:500 12px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.16em;color:#f4f1e8;background:#1c1d19;padding:13px 30px;cursor:pointer" style-hover="background:#4f6b4a">{{ runLabel }}</span>
+<span onClick="{{ finishFocus }}" style="font:400 12px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.16em;color:#1c1d19;border:1px solid #c8c2ac;padding:12px 22px;cursor:pointer" style-hover="border-color:#1c1d19">DONE, LOG IT</span>
+</div>
+<div onClick="{{ toggleQuiet }}" style="font:400 11.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.14em;color:#a8a494;margin-top:44px;cursor:pointer" style-hover="color:#1c1d19">LEAVE QUIET MODE</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isToday }}" hint-placeholder-val="{{ true }}">
+<div style="padding:34px 40px 44px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:30px">
+<div><div style="font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.22em;color:#8d8b7d">TODAY</div><div style="font:500 26px 'Shippori Mincho',serif;color:#1c1d19;margin-top:4px">{{ dateLabel }}</div></div>
+<div style="font:400 12.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.06em;color:#8d8b7d">{{ remainingLabel }}</div>
+</div>
+
+<div style="margin-top:26px;background:#efebe0;border:1px solid #ddd8c8;padding:28px 30px 26px">
+<div style="font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.22em;color:#b0472e">ONE THING</div>
+<div style="font:500 34px/1.2 'Shippori Mincho',serif;color:#1c1d19;margin-top:8px;text-wrap:pretty">{{ focusTitle }}</div>
+<div style="font:400 14px 'Zen Kaku Gothic New',sans-serif;color:#8d8b7d;margin-top:6px">{{ focusMeta }}</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:22px;flex-wrap:wrap">
+<span onClick="{{ startFocus }}" style="font:500 12px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.16em;color:#f4f1e8;background:#1c1d19;padding:12px 26px;cursor:pointer" style-hover="background:#4f6b4a">{{ startLabel }}</span>
+<span onClick="{{ finishFocus }}" style="font:400 12px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.16em;color:#1c1d19;border:1px solid #c8c2ac;padding:11px 18px;cursor:pointer" style-hover="border-color:#1c1d19">MARK DONE</span>
+<span onClick="{{ nextFocus }}" style="font:400 12px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.16em;color:#6f7268;border:1px solid transparent;padding:11px 12px;cursor:pointer" style-hover="color:#1c1d19">SOMETHING ELSE</span>
+<span style="font:400 13.5px 'Shippori Mincho',serif;color:#a8a494">{{ clock }}</span>
+</div>
+</div>
+
+<div style="display:flex;align-items:center;gap:10px;margin-top:30px;border-bottom:1px solid #1c1d19;padding-bottom:8px">
+<span style="font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.2em;color:#8d8b7d">ADD</span>
+<input value="{{ addText }}" onChange="{{ onAddChange }}" onKeyDown="{{ onAddKey }}" placeholder="task, then Enter — e.g. Exercise sheet 8 · 45" style="flex:1;border:none;background:transparent;outline:none;font:400 15px 'Zen Kaku Gothic New',sans-serif;color:#1c1d19;padding:4px 0"></input>
+<span onClick="{{ cycleAddSubject }}" style="font:400 11px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.1em;color:#4f6b4a;cursor:pointer;white-space:nowrap" style-hover="color:#b0472e">{{ addSubject }} ⇄</span>
+</div>
+
+<div style="margin-top:6px">
+<sc-for list="{{ rows }}" as="row" hint-placeholder-count="5">
+<div style="display:grid;grid-template-columns:24px 1fr 160px 76px 62px;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #e4e0d0">
+<sc-if value="{{ row.done }}" hint-placeholder-val="{{ false }}"><span onClick="{{ row.toggle }}" style="width:14px;height:14px;border-radius:50%;background:#4f6b4a;border:1.5px solid #4f6b4a;cursor:pointer"></span></sc-if>
+<sc-if value="{{ row.open }}" hint-placeholder-val="{{ true }}"><span onClick="{{ row.toggle }}" style="width:14px;height:14px;border-radius:50%;border:1.5px solid #a8a494;cursor:pointer" style-hover="border-color:#4f6b4a"></span></sc-if>
+<sc-if value="{{ row.editing }}" hint-placeholder-val="{{ false }}">
+<input value="{{ row.draft }}" onChange="{{ row.onDraft }}" onKeyDown="{{ row.onKey }}" onBlur="{{ row.commit }}" autoFocus="{{ true }}" style="border:none;border-bottom:1px solid #b0472e;background:transparent;outline:none;font:400 16px 'Shippori Mincho',serif;color:#1c1d19;padding:1px 0"></input>
+</sc-if>
+<sc-if value="{{ row.reading }}" hint-placeholder-val="{{ true }}">
+<sc-if value="{{ row.done }}" hint-placeholder-val="{{ false }}"><span onClick="{{ row.edit }}" style="font:400 16px 'Shippori Mincho',serif;color:#a8a494;text-decoration:line-through;cursor:text">{{ row.title }}</span></sc-if>
+<sc-if value="{{ row.open }}" hint-placeholder-val="{{ true }}"><span onClick="{{ row.edit }}" style="font:400 16px 'Shippori Mincho',serif;color:#1c1d19;cursor:text" style-hover="color:#4f6b4a">{{ row.title }}</span></sc-if>
+</sc-if>
+<span style="font:400 11.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.08em;color:#8d8b7d">{{ row.subject }}</span>
+<span onClick="{{ row.bumpMins }}" style="font:400 12.5px 'Zen Kaku Gothic New',sans-serif;color:#6f7268;cursor:pointer" style-hover="color:#b0472e">{{ row.minsLabel }}</span>
+<span style="text-align:right;font:400 11.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.06em;color:{{ row.dueColor }}">{{ row.due }}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="font:400 12px 'Zen Kaku Gothic New',sans-serif;color:#a8a494;margin-top:16px">Click a title to rename it. Click the minutes to change them. Nothing asks for confirmation.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPlan }}" hint-placeholder-val="{{ false }}">
+<div style="padding:34px 40px 44px">
+<div style="font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.22em;color:#8d8b7d">PLAN</div>
+<div style="font:500 26px 'Shippori Mincho',serif;color:#1c1d19;margin-top:4px">Four things growing</div>
+
+<div style="margin-top:26px;display:flex;flex-wrap:wrap;gap:34px;align-items:flex-start">
+<div style="flex:1 1 560px;min-width:min(560px,100%);max-width:100%">
+<div style="display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid #1c1d19;padding-bottom:7px">
+<span style="display:flex;align-items:baseline;gap:12px"><span style="font:400 13px 'Zen Kaku Gothic New',sans-serif;color:#a8a494;cursor:pointer" style-hover="color:#1c1d19">‹</span><span style="font:500 16px 'Shippori Mincho',serif;color:#1c1d19;white-space:nowrap">{{ calMonth }}</span><span style="font:400 13px 'Zen Kaku Gothic New',sans-serif;color:#a8a494;cursor:pointer" style-hover="color:#1c1d19">›</span></span>
+<span style="display:flex;gap:14px">
+<sc-for list="{{ calLegend }}" as="l" hint-placeholder-count="3">
+<span style="display:flex;align-items:center;gap:5px;font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.06em;color:#8d8b7d"><span style="width:7px;height:7px;border-radius:50%;background:{{ l.color }}"></span>{{ l.label }}</span>
+</sc-for>
+</span>
+</div>
+
+<div style="display:grid;grid-template-columns:40px repeat(7,minmax(0,1fr));margin-top:10px;border-left:1px solid #e4e0d0">
+<span style="font:400 9px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.12em;color:#c8c3ae;padding:0 0 7px 4px">WK</span>
+<sc-for list="{{ weekdays }}" as="w" hint-placeholder-count="7">
+<span style="font:400 9.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.14em;color:#a8a494;padding:0 0 7px 6px">{{ w }}</span>
+</sc-for>
+</div>
+
+<sc-for list="{{ weeks }}" as="week" hint-placeholder-count="6">
+<div style="display:grid;grid-template-columns:40px repeat(7,minmax(0,1fr));border-left:1px solid #e4e0d0;border-top:1px solid #e4e0d0">
+<div style="padding:6px 4px;border-right:1px solid #e4e0d0;background:#f0ece1">
+<div style="font:400 9.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.08em;color:#a8a494">{{ week.no }}</div>
+<div style="font:400 10px 'Zen Kaku Gothic New',sans-serif;color:#8d8b7d;margin-top:16px">{{ week.hours }}</div>
+</div>
+<sc-for list="{{ week.days }}" as="d" hint-placeholder-count="7">
+<div style="min-height:80px;border-right:1px solid #e4e0d0;padding:5px 6px 7px;background:{{ d.bg }}">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:4px">
+<span style="font:400 12.5px 'Zen Kaku Gothic New',sans-serif;color:{{ d.numColor }}">{{ d.n }}</span>
+<sc-if value="{{ d.today }}" hint-placeholder-val="{{ false }}"><span style="font:400 8.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.14em;color:#b0472e">TODAY</span></sc-if>
+</div>
+<sc-if value="{{ d.hasDeadline }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top:4px;border-top:1.5px solid #b0472e;padding-top:3px;font:400 9.5px/1.3 'Zen Kaku Gothic New',sans-serif;color:#b0472e;overflow-wrap:anywhere">{{ d.deadline }}</div>
+</sc-if>
+<sc-if value="{{ d.hasItems }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:3px;margin-top:5px">
+<sc-for list="{{ d.items }}" as="it" hint-placeholder-count="2">
+<span style="display:flex;align-items:center;gap:4px;font:400 9.5px/1.25 'Zen Kaku Gothic New',sans-serif;color:#3f4239;overflow-wrap:anywhere"><span style="flex:none;width:5px;height:5px;border-radius:50%;background:{{ it.color }}"></span>{{ it.title }}</span>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</sc-for>
+<div style="border-top:1px solid #e4e0d0;border-left:1px solid #e4e0d0;font:400 11px 'Zen Kaku Gothic New',sans-serif;color:#a8a494;padding:8px 6px">Vermilion rule = a hand-in or exam. Dots = what you planned to sit down with.</div>
+</div>
+<div style="flex:1 1 260px;border-left:1px solid #ddd8c8;padding-left:26px">
+<div style="font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.2em;color:#8d8b7d">NEXT UP</div>
+<div style="font:400 14.5px/1.9 'Shippori Mincho',serif;color:#1c1d19;margin-top:8px">
+09 Aug · Summary sheet<br>15 Aug · CQP sheet 7<br>17 Aug · Atmosphere exam<br>25 Aug · QM I exam<br>27 Aug · CQP oral<br>02 Oct · Thesis hand-in
+</div>
+<div style="font:400 12px/1.6 'Zen Kaku Gothic New',sans-serif;color:#a8a494;margin-top:16px">Drag a task onto a day to schedule it. The calendar holds dates, not hours.</div>
+</div>
+</div>
+
+<div style="margin-top:34px">
+<sc-for list="{{ beds }}" as="bed" hint-placeholder-count="4">
+<div style="border-top:1px solid #ddd8c8;padding:18px 0 20px;display:grid;grid-template-columns:230px 1fr">
+<div>
+<div style="font:500 17px 'Shippori Mincho',serif;color:#1c1d19">{{ bed.name }}</div>
+<div style="font:400 11px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.12em;color:#8d8b7d;margin-top:3px">{{ bed.meta }}</div>
+<div style="height:4px;background:#ddd8c8;margin-top:10px;width:150px"><div style="height:4px;background:#4f6b4a;width:{{ bed.pct }}"></div></div>
+</div>
+<div>
+<sc-for list="{{ bed.tasks }}" as="row" hint-placeholder-count="2">
+<div style="display:grid;grid-template-columns:24px 1fr 76px 66px;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #eae6d8">
+<sc-if value="{{ row.done }}" hint-placeholder-val="{{ false }}"><span onClick="{{ row.toggle }}" style="width:13px;height:13px;border-radius:50%;background:#4f6b4a;border:1.5px solid #4f6b4a;cursor:pointer"></span></sc-if>
+<sc-if value="{{ row.open }}" hint-placeholder-val="{{ true }}"><span onClick="{{ row.toggle }}" style="width:13px;height:13px;border-radius:50%;border:1.5px solid #a8a494;cursor:pointer"></span></sc-if>
+<span onClick="{{ row.edit }}" style="font:400 15px 'Shippori Mincho',serif;color:#1c1d19;cursor:text" style-hover="color:#4f6b4a">{{ row.title }}</span>
+<span style="font:400 12px 'Zen Kaku Gothic New',sans-serif;color:#6f7268">{{ row.minsLabel }}</span>
+<span style="text-align:right;font:400 11.5px 'Zen Kaku Gothic New',sans-serif;color:{{ row.dueColor }}">{{ row.due }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isTimer }}" hint-placeholder-val="{{ false }}">
+<div style="padding:34px 40px 44px">
+<div style="font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.22em;color:#8d8b7d">TIMER</div>
+<div style="font:500 26px 'Shippori Mincho',serif;color:#1c1d19;margin-top:4px">{{ focusTitle }}</div>
+<div style="display:flex;align-items:flex-end;gap:40px;margin-top:34px">
+<div style="font:500 104px/1 'Shippori Mincho',serif;color:#1c1d19">{{ clock }}</div>
+<div style="padding-bottom:12px">
+<div style="font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.2em;color:#b0472e">{{ phaseLabel }}</div>
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;max-width:420px">
+<sc-for list="{{ modes }}" as="m" hint-placeholder-count="5">
+<span onClick="{{ m.pick }}" style="border:1px solid {{ m.border }};background:{{ m.bg }};padding:7px 13px;cursor:pointer" style-hover="border-color:#1c1d19">
+<span style="display:block;font:400 12.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.06em;color:#1c1d19">{{ m.label }}</span>
+<span style="display:block;font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.08em;color:#8d8b7d">{{ m.sub }}</span>
+</sc-for>
+</div>
+<sc-if value="{{ isCustom }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:12px;margin-top:12px">
+<span onClick="{{ minusFive }}" style="font:400 14px 'Zen Kaku Gothic New',sans-serif;color:#1c1d19;border:1px solid #ddd8c8;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer">−</span>
+<span style="font:400 13.5px 'Zen Kaku Gothic New',sans-serif;color:#1c1d19">{{ lengthLabel }}</span>
+<span onClick="{{ plusFive }}" style="font:400 14px 'Zen Kaku Gothic New',sans-serif;color:#1c1d19;border:1px solid #ddd8c8;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer">+</span>
+</div>
+</sc-if>
+<div style="font:400 11.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.06em;color:#a8a494;margin-top:12px">{{ cycleLabel }}</div>
+</div>
+</div>
+<div style="display:flex;gap:10px;margin-top:32px">
+<span onClick="{{ toggleRun }}" style="font:500 12px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.16em;color:#f4f1e8;background:#1c1d19;padding:13px 30px;cursor:pointer" style-hover="background:#4f6b4a">{{ runLabel }}</span>
+<span onClick="{{ resetTimer }}" style="font:400 12px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.16em;color:#1c1d19;border:1px solid #c8c2ac;padding:12px 20px;cursor:pointer">RESET</span>
+<span onClick="{{ finishFocus }}" style="font:400 12px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.16em;color:#1c1d19;border:1px solid #c8c2ac;padding:12px 20px;cursor:pointer">LOG AND CLOSE</span>
+</div>
+<div style="margin-top:40px;border-top:1px solid #1c1d19;padding-top:12px">
+<div style="font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.2em;color:#8d8b7d">LOGGED TODAY</div>
+<sc-for list="{{ log }}" as="l" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:80px 1fr 90px;gap:14px;padding:10px 0;border-bottom:1px solid #eae6d8;font:400 14px 'Shippori Mincho',serif;color:#1c1d19"><span style="font:400 12px 'Zen Kaku Gothic New',sans-serif;color:#8d8b7d">{{ l.time }}</span><span>{{ l.what }}</span><span style="text-align:right;font:400 12px 'Zen Kaku Gothic New',sans-serif;color:#6f7268">{{ l.mins }}</span></div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isNotes }}" hint-placeholder-val="{{ false }}">
+<div style="padding:34px 40px 44px;display:grid;grid-template-columns:250px 1fr;gap:34px">
+<div>
+<div style="display:flex;gap:14px;border-bottom:1px solid #1c1d19;padding-bottom:7px">
+<sc-for list="{{ noteKinds }}" as="k" hint-placeholder-count="3">
+<span onClick="{{ k.pick }}" style="font:400 11px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:{{ k.color }};cursor:pointer" style-hover="color:#1c1d19">{{ k.label }}</span>
+</sc-for>
+</div>
+<div style="font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.14em;color:#a8a494;margin-top:8px">{{ shelfLabel }}</div>
+<sc-for list="{{ notes }}" as="n" hint-placeholder-count="4">
+<div onClick="{{ n.open }}" style="padding:12px 0;border-bottom:1px solid #e4e0d0;cursor:pointer">
+<div style="font:400 15px 'Shippori Mincho',serif;color:{{ n.color }}">{{ n.title }}</div>
+<div style="font:400 11px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.08em;color:#a8a494;margin-top:2px">{{ n.meta }}</div>
+</div>
+</sc-for>
+</div>
+<div style="border-left:1px solid #ddd8c8;padding-left:34px">
+<div style="font:500 22px 'Shippori Mincho',serif;color:#1c1d19">{{ openNote.title }}</div>
+<div style="font:400 11px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.1em;color:#a8a494;margin-top:4px">{{ openNote.meta }}</div>
+<div style="font:400 15.5px/1.85 'Shippori Mincho',serif;color:#2b2c26;margin-top:20px;white-space:pre-line;max-width:620px">{{ openNote.body }}</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isRest }}" hint-placeholder-val="{{ false }}">
+<div style="position:relative;overflow:hidden;display:flex;flex-direction:column">
+<div style="order:1;position:relative;padding:34px 40px 0">
+<div style="display:flex;flex-direction:column;align-items:center;padding:34px 0 30px">
+<span style="width:96px;height:96px;border:1.5px solid #cdc8b4;border-radius:50%"></span>
+<div style="font:500 24px 'Shippori Mincho',serif;color:#1c1d19;margin-top:24px">Rest, five minutes</div>
+<div style="font:400 14px/1.7 'Zen Kaku Gothic New',sans-serif;color:#8d8b7d;margin-top:8px;max-width:400px;text-align:center">Water the plant on the sill, or play one round of something small.</div>
+<span onClick="{{ startRest }}" style="font:500 12px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.16em;color:#f4f1e8;background:#1c1d19;padding:12px 26px;cursor:pointer;margin-top:22px">START THE FIVE</span>
+</div>
+</div>
+<div style="order:4;position:relative;padding:16px 40px 44px">
+<div style="border-top:1px solid #1c1d19;padding-top:10px;display:flex;align-items:baseline;justify-content:space-between">
+<span style="font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.2em;color:#8d8b7d">GAMES</span>
+<span style="font:400 11.5px 'Zen Kaku Gothic New',sans-serif;color:#a8a494">{{ gameLabel }}</span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:16px">
+<sc-for list="{{ games }}" as="g" hint-placeholder-count="4">
+<div onClick="{{ g.play }}" style="border:1px solid #ddd8c8;background:#efebe0;padding:18px 20px 16px;cursor:pointer" style-hover="border-color:#1c1d19">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+<span style="font:500 18px 'Shippori Mincho',serif;color:#1c1d19">{{ g.name }}</span>
+<sc-if value="{{ g.active }}" hint-placeholder-val="{{ false }}"><span style="font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.14em;color:#b0472e">PLAYING</span></sc-if>
+</div>
+<div style="font:400 11.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.08em;color:#8d8b7d;margin-top:3px">{{ g.sub }}</div>
+<div style="font:400 13px/1.6 'Shippori Mincho',serif;color:#6f7268;margin-top:10px">{{ g.note }}</div>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:16px;font:400 12px 'Zen Kaku Gothic New',sans-serif;color:#a8a494">
+<span>Each game ends with the break. Nothing here can run longer than the clock you set.</span>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isCircle }}" hint-placeholder-val="{{ false }}">
+<div style="padding:34px 40px 44px">
+<div style="font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.22em;color:#8d8b7d">CIRCLE</div>
+<div style="font:500 26px 'Shippori Mincho',serif;color:#1c1d19;margin-top:4px">Who is sitting down today</div>
+<div style="font:400 13.5px 'Zen Kaku Gothic New',sans-serif;color:#8d8b7d;margin-top:8px">Attendance, not a leaderboard. No streaks, no ranks, no numbers you can lose.</div>
+<div style="margin-top:24px;max-width:640px">
+<sc-for list="{{ circle }}" as="c" hint-placeholder-count="4">
+<div style="display:grid;grid-template-columns:1fr 150px 90px;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid #e4e0d0">
+<span style="font:400 16px 'Shippori Mincho',serif;color:#1c1d19">{{ c.name }}</span>
+<span style="font:400 12px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.06em;color:#8d8b7d">{{ c.what }}</span>
+<span style="text-align:right;font:400 11.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.08em;color:{{ c.color }}">{{ c.state }}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="margin-top:40px;max-width:640px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid #1c1d19;padding-bottom:8px">
+<span style="font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.2em;color:#8d8b7d">FEED</span>
+<span style="font:400 11px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.06em;color:#a8a494">oldest first · updates once a day at 20:00</span>
+</div>
+
+<div style="display:flex;align-items:center;gap:10px;padding:14px 0;border-bottom:1px solid #e4e0d0">
+<span style="width:13px;height:13px;border-radius:50%;border:1.5px solid #4f6b4a"></span>
+<input value="{{ postText }}" onChange="{{ onPostChange }}" onKeyDown="{{ onPostKey }}" placeholder="say something to the circle, then Enter" style="flex:1;border:none;background:transparent;outline:none;font:400 15px 'Shippori Mincho',serif;color:#1c1d19;padding:3px 0"></input>
+</div>
+
+<sc-for list="{{ feed }}" as="f" hint-placeholder-count="4">
+<div style="display:grid;grid-template-columns:96px 1fr;gap:16px;padding:16px 0;border-bottom:1px solid #e4e0d0">
+<div><div style="font:500 13.5px 'Shippori Mincho',serif;color:#1c1d19">{{ f.who }}</div><div style="font:400 10.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.08em;color:#a8a494;margin-top:2px">{{ f.when }}</div></div>
+<div>
+<div style="font:400 15.5px/1.6 'Shippori Mincho',serif;color:#2b2c26;text-wrap:pretty">{{ f.text }}</div>
+<sc-if value="{{ f.hasNote }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top:8px;padding-left:13px;border-left:2px solid #ddd8c8;font:400 12.5px 'Zen Kaku Gothic New',sans-serif;color:#8d8b7d">{{ f.note }}</div>
+</sc-if>
+<div style="display:flex;gap:16px;margin-top:10px">
+<span onClick="{{ f.nod }}" style="font:400 11.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.1em;color:#6f7268;cursor:pointer" style-hover="color:#4f6b4a">{{ f.nodLabel }}</span>
+<span style="font:400 11.5px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.1em;color:#a8a494;cursor:pointer" style-hover="color:#1c1d19">REPLY</span>
+</div>
+</div>
+</div>
+</sc-for>
+<div style="font:400 12px 'Zen Kaku Gothic New',sans-serif;color:#a8a494;margin-top:16px">That is the whole feed. No counts, no ranks, nothing new until tomorrow.</div>
+</div>
+</div>
+</sc-if>
+
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1308,&quot;height&quot;:860},&quot;showKanji&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Tool&quot;},&quot;dayGoalMins&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:210,&quot;min&quot;:60,&quot;max&quot;:480,&quot;step&quot;:15,&quot;unit&quot;:&quot;min&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Tool&quot;}}">
+class Component extends DCLogic {
+  state = {
+    tab: "today",
+    quiet: false,
+    addText: "",
+    addSubjectIdx: 0,
+    editId: null,
+    editDraft: "",
+    running: false,
+    length: 50,
+    left: 50 * 60,
+    mode: "deep",
+    phase: "work",
+    cycles: 0,
+    up: 0,
+    noteKind: "notes",
+    hover: null,
+    game: null,
+    doneMins: 168,
+    noteIdx: 0,
+    postText: "",
+    feed: [
+      { id: 1, who: "Mira", when: "yesterday, 20:00", text: "Finished unit 4 of Atmosphere. The summary sheets are doing more for me than the lectures.", note: "shared: Atmosphere · unit 4 summary", nodded: false, nods: 2 },
+      { id: 2, who: "Jonas", when: "yesterday, 20:00", text: "Thesis results section is half drafted. Captions first was good advice.", note: "", nodded: false, nods: 1 },
+      { id: 3, who: "Lea", when: "today, 20:00", text: "Took the day off, no guilt. Back on QM I tomorrow morning.", note: "", nodded: true, nods: 3 },
+      { id: 4, who: "Tom", when: "today, 20:00", text: "Stuck on the autocorrelation time near T_c as well. Thursday session?", note: "shared: CQP · sheet 7 working", nodded: false, nods: 1 }
+    ],
+    tasks: [
+      { id: 1, title: "Exercise sheet 7", subject: "Comp. quantum phys.", mins: 70, due: "15 Aug", done: false },
+      { id: 2, title: "Thesis — results section", subject: "Thesis", mins: 90, due: "weekly", done: false },
+      { id: 3, title: "Summary sheet, unit 4", subject: "Atmosphere", mins: 60, due: "09 Aug", done: false },
+      { id: 4, title: "Lecture notes, unit 18", subject: "Quantum mech. I", mins: 45, due: "today", done: true },
+      { id: 5, title: "Problem set 6", subject: "Comp. quantum phys.", mins: 60, due: "handed in", done: true }
+    ],
+    log: [
+      { time: "14:20", what: "Seminar prep", mins: "35 min" },
+      { time: "17:05", what: "Problem set 6", mins: "1 h 00" },
+      { time: "18:00", what: "Lecture notes, unit 18", mins: "45 min" }
+    ]
+  };
+
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      if (!this.state.running) return;
+      this.setState(s => {
+        if (s.mode === "stop") return { up: s.up + 1 };
+        if (s.left > 1) return { left: s.left - 1 };
+        const m = this.modeDef(s.mode);
+        if (s.phase === "work") return { phase: "break", left: m.brk * 60, cycles: s.cycles + 1, doneMins: s.doneMins + s.length };
+        return { phase: "work", left: s.length * 60, running: false };
+      });
+    }, 1000);
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  modes() {
+    return [
+      { key: "pom", label: "Pomodoro", sub: "25 / 5", work: 25, brk: 5 },
+      { key: "deep", label: "Deep work", sub: "50 / 10", work: 50, brk: 10 },
+      { key: "long", label: "Long sitting", sub: "90 / 20", work: 90, brk: 20 },
+      { key: "stop", label: "Stopwatch", sub: "counts up", work: 0, brk: 0 },
+      { key: "custom", label: "Custom", sub: "set by hand", work: 40, brk: 8 }
+    ];
+  }
+  modeDef(key) { return this.modes().find(m => m.key === key) || this.modes()[1]; }
+
+  subjects() {
+    const seen = [];
+    this.state.tasks.forEach(t => { if (seen.indexOf(t.subject) < 0) seen.push(t.subject); });
+    return seen;
+  }
+  focusTask() { return this.state.tasks.find(t => !t.done) || null; }
+  goal() { return this.props.dayGoalMins ?? 210; }
+
+  patch(id, fields) {
+    this.setState(s => ({ tasks: s.tasks.map(t => (t.id === id ? Object.assign({}, t, fields) : t)) }));
+  }
+
+  row(t) {
+    return {
+      title: t.title,
+      subject: t.subject,
+      minsLabel: t.mins >= 60 ? Math.floor(t.mins / 60) + " h " + (t.mins % 60 ? t.mins % 60 : "00") : t.mins + " min",
+      due: t.due,
+      dueColor: t.due === "09 Aug" || t.due === "15 Aug" ? "#b0472e" : "#8d8b7d",
+      done: !!t.done,
+      open: !t.done,
+      editing: this.state.editId === t.id,
+      reading: this.state.editId !== t.id,
+      draft: this.state.editDraft,
+      toggle: () => this.patch(t.id, { done: !t.done }),
+      edit: () => this.setState({ editId: t.id, editDraft: t.title }),
+      onDraft: e => this.setState({ editDraft: e.target.value }),
+      onKey: e => {
+        if (e.key === "Enter") { this.patch(t.id, { title: this.state.editDraft.trim() || t.title }); this.setState({ editId: null }); }
+        if (e.key === "Escape") this.setState({ editId: null });
+      },
+      commit: () => { this.patch(t.id, { title: this.state.editDraft.trim() || t.title }); this.setState({ editId: null }); },
+      bumpMins: () => {
+        const steps = [25, 45, 60, 70, 90, 120];
+        const i = steps.indexOf(t.mins);
+        this.patch(t.id, { mins: steps[(i + 1) % steps.length] });
+      }
+    };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const focus = this.focusTask();
+    const shown = s.mode === "stop" ? s.up : s.left;
+    const mm = String(Math.floor(shown / 60)).padStart(2, "0");
+    const ss = String(shown % 60).padStart(2, "0");
+    const goal = this.goal();
+    const openCount = s.tasks.filter(t => !t.done).length;
+    const tabs = [
+      ["today", "Today", "今日", "dashboard"],
+      ["plan", "Plan", "計画", "planner"],
+      ["timer", "Timer", "時計", "timer"],
+      ["notes", "Notes", "記録", "vault"],
+      ["rest", "Rest", "休み", "break room"],
+      ["circle", "Circle", "仲間", "social"]
+    ];
+    const library = [
+      { kind: "notes", title: "CQP · sheet 7 working", meta: "edited 12 min ago", body: "Metropolis step: propose, accept with min(1, exp(-ΔE/T)).\n\nStuck on part (c) — the autocorrelation time blows up near T_c. Ask in Thursday's session.\n\nRe-read lecture 9, p. 4." },
+      { kind: "notes", title: "Atmosphere · exam plan", meta: "03 Aug", body: "Twelve units, twelve days, one exam on 17 Aug.\n\nOne unit a day, summary sheet each evening, past papers on the last three days.\n\nDrop the optional reading." },
+      { kind: "notes", title: "Thesis · results outline", meta: "01 Aug", body: "Figure order: setup, convergence, scaling, comparison.\n\nWrite the captions first, then the prose around them." },
+      { kind: "summaries", title: "QM I · unit 18", meta: "1 page · yesterday", body: "Perturbation theory, non-degenerate case.\n\nFirst order: E1 = ⟨n|H'|n⟩.\nSecond order: sum over m ≠ n of |⟨m|H'|n⟩|² / (En − Em).\n\nBreaks down when levels are close: use the degenerate treatment instead." },
+      { kind: "summaries", title: "Atmosphere · units 1–4", meta: "3 pages · 04 Aug", body: "Radiative balance, lapse rates, moist adiabat, stability criteria.\n\nExam-ready: the four stability cases and the Clausius–Clapeyron argument.\n\nStill thin on unit 3, boundary layer." },
+      { kind: "summaries", title: "CQP · methods sheet", meta: "2 pages · 30 Jul", body: "Monte Carlo: importance sampling, detailed balance, error from autocorrelation.\n\nMolecular dynamics: Verlet, thermostats, time-step choice.\n\nOne worked example each." },
+      { kind: "refs", title: "Newman & Barkema — Monte Carlo Methods", meta: "book · ch. 3, 4 · CQP", body: "Chapter 3: importance sampling and the Metropolis algorithm.\nChapter 4: autocorrelation and error estimation — the part on critical slowing down answers sheet 7 (c).\n\nLibrary copy, shelf QC174.85. Scanned pages in the folder." },
+      { kind: "refs", title: "Sakurai — Modern Quantum Mechanics", meta: "book · ch. 5 · QM I", body: "Chapter 5: time-independent perturbation theory, both cases, with the harmonic-oscillator example the lecture skips.\n\nCited in the unit 18 summary." },
+      { kind: "refs", title: "Wallace & Hobbs — Atmospheric Science", meta: "book · ch. 3 · Atmosphere", body: "Chapter 3 covers thermodynamics of moist air. Figures 3.7 and 3.9 are the two the exam keeps reusing.\n\nPDF in the shared folder." },
+      { kind: "refs", title: "Krauth 2006 — Cluster algorithms", meta: "paper · arXiv:cond-mat/0311623", body: "Read for the thesis. Wolff cluster update removes the critical slowing down seen in sheet 7.\n\nQuoted in the results outline, section 2." }
+    ];
+    const beds = this.subjects().map(name => {
+      const list = s.tasks.filter(t => t.subject === name);
+      const done = list.filter(t => t.done).length;
+      return {
+        name: name,
+        meta: done + " of " + list.length + " done",
+        pct: Math.round((done / list.length) * 100) + "%",
+        tasks: list.map(t => this.row(t))
+      };
+    });
+    const shelf = library.filter(n => n.kind === s.noteKind);
+    const note = shelf[s.noteIdx] || shelf[0];
+    const kinds = [["notes", "Notes"], ["summaries", "Summaries"], ["refs", "References"]];
+    const marks = { 9: "Summary sheet", 15: "CQP sheet 7", 17: "Atmosphere exam", 25: "QM I exam", 27: "CQP oral" };
+    const plan = {
+      3: [["QM I, lectures", "#4f6b4a", "1 h"]],
+      4: [["Atmosphere, unit 3", "#8a7226", "1 h"], ["Thesis, reading", "#6f7268", "45 m"]],
+      5: [["Exercise sheet 7", "#4f6b4a", "1 h 10"], ["Lecture notes, u18", "#4f6b4a", "45 m"]],
+      6: [["Thesis, results", "#6f7268", "1 h 30"]],
+      7: [["Summary sheet, u4", "#8a7226", "1 h"]],
+      10: [["Atmosphere, unit 5", "#8a7226", "1 h"]],
+      11: [["Past papers", "#8a7226", "1 h 30"]],
+      12: [["CQP sheet 8", "#4f6b4a", "1 h"], ["Thesis, figures", "#6f7268", "1 h"]],
+      13: [["QM I, revision", "#4f6b4a", "1 h"]],
+      14: [["Atmosphere, unit 7", "#8a7226", "1 h"]],
+      16: [["Rest day", "#a8a494", ""]],
+      24: [["QM I, past papers", "#4f6b4a", "2 h"]]
+    };
+    const weekHours = { 31: "4 h", 32: "11 h 45", 33: "13 h 30", 34: "9 h", 35: "6 h", 36: "—" };
+    const weeks = [];
+    for (let w = 0; w < 6; w++) {
+      const days = [];
+      for (let d = 0; d < 7; d++) {
+        const n = w * 7 + d - 4;
+        const inMonth = n >= 1 && n <= 31;
+        const items = (inMonth && plan[n]) || [];
+        days.push({
+          n: inMonth ? String(n) : n <= 0 ? String(31 + n) : String(n - 31),
+          inMonth: inMonth, outside: !inMonth,
+          today: n === 5,
+          weekend: d >= 5,
+          bg: n === 5 ? "#e9e5d2" : d >= 5 ? "#f0ece1" : "#f4f1e8",
+          numColor: n === 5 ? "#1c1d19" : inMonth ? "#6f7268" : "#c8c3ae",
+          hasDeadline: inMonth && !!marks[n],
+          deadline: marks[n] || "",
+          items: items.map(i => ({ title: i[0], color: i[1], mins: i[2] })),
+          hasItems: items.length > 0
+        });
+      }
+      weeks.push({ no: "W" + (31 + w), hours: weekHours[31 + w] || "—", current: w === 1, days: days });
+    }
+    const games = [
+      { name: "Go, 9 × 9", sub: "against the app, no clock", note: "A short board. Loses gracefully." },
+      { name: "Shisen-shō", sub: "match the tiles", note: "One layout per break, no high score." },
+      { name: "Bonsai", sub: "trim the tree", note: "Grows a little each day you study." },
+      { name: "Hanafuda", sub: "koi-koi, one hand", note: "Twelve months of flowers." }
+    ];
+    return {
+      showKanji: this.props.showKanji ?? true,
+      headerClock: "WED 05 AUG · 19:24",
+      dateLabel: "Wednesday, 5 August",
+      remainingLabel: openCount + " open · " + (goal - s.doneMins > 0 ? (goal - s.doneMins) + " min to today's goal" : "goal met"),
+      dayLabel: Math.floor(s.doneMins / 60) + " h " + String(s.doneMins % 60).padStart(2, "0"),
+      dayPct: Math.min(100, Math.round((s.doneMins / goal) * 100)) + "%",
+      quiet: s.quiet,
+      quietLabel: s.quiet ? "← BACK TO THE APP" : "QUIET MODE →",
+      toggleQuiet: () => this.setState({ quiet: !s.quiet }),
+      isToday: !s.quiet && s.tab === "today",
+      isPlan: !s.quiet && s.tab === "plan",
+      isTimer: !s.quiet && s.tab === "timer",
+      isNotes: !s.quiet && s.tab === "notes",
+      isRest: !s.quiet && s.tab === "rest",
+      isCircle: !s.quiet && s.tab === "circle",
+      nav: tabs.map(t => ({
+        label: t[1], kanji: t[2], sub: t[3],
+        active: s.tab === t[0], idle: s.tab !== t[0],
+        go: () => this.setState({ tab: t[0], quiet: false })
+      })),
+      focusTitle: focus ? focus.title : "Nothing left today",
+      focusMeta: focus ? focus.subject + " · " + focus.mins + " min · due " + focus.due : "Close the laptop.",
+      clock: mm + ":" + ss,
+      runLabel: s.running ? "PAUSE" : "START",
+      startLabel: s.running ? "PAUSE" : "START " + s.length + " MIN",
+      toggleRun: () => this.setState({ running: !s.running }),
+      resetTimer: () => this.setState({ left: s.length * 60, running: false }),
+      startFocus: () => this.setState({ running: !s.running, tab: "timer" }),
+      startRest: () => this.setState({ length: 5, left: 300, running: true, tab: "timer" }),
+      nextFocus: () => this.setState(st => {
+        const i = st.tasks.findIndex(t => !t.done);
+        if (i < 0) return {};
+        const list = st.tasks.slice();
+        const [moved] = list.splice(i, 1);
+        const rest = list.filter(t => !t.done).length;
+        list.splice(rest ? list.findIndex(t => !t.done) + 1 : list.length, 0, moved);
+        return { tasks: list };
+      }),
+      finishFocus: () => this.setState(st => {
+        const f = st.tasks.find(t => !t.done);
+        if (!f) return { running: false };
+        const spent = Math.max(1, Math.round((st.length * 60 - st.left) / 60));
+        return {
+          tasks: st.tasks.map(t => (t.id === f.id ? Object.assign({}, t, { done: true }) : t)),
+          log: st.log.concat([{ time: "19:24", what: f.title, mins: spent + " min" }]),
+          doneMins: st.doneMins + spent,
+          running: false,
+          left: st.length * 60
+        };
+      }),
+      modes: this.modes().map(m => ({
+        label: m.label, sub: m.sub,
+        active: s.mode === m.key,
+        pick: () => this.setState({
+          mode: m.key, phase: "work", up: 0, running: false,
+          length: m.key === "custom" ? s.length : m.work,
+          left: (m.key === "custom" ? s.length : m.work) * 60
+        }),
+        border: s.mode === m.key ? "#1c1d19" : "#ddd8c8",
+        bg: s.mode === m.key ? "#e5e1d0" : "transparent"
+      })),
+      isCustom: s.mode === "custom",
+      isStopwatch: s.mode === "stop",
+      lengthLabel: s.length + " min",
+      minusFive: () => this.setState(st => ({ length: Math.max(5, st.length - 5), left: Math.max(5, st.length - 5) * 60, running: false })),
+      plusFive: () => this.setState(st => ({ length: st.length + 5, left: (st.length + 5) * 60, running: false })),
+      phaseLabel: s.mode === "stop" ? "COUNTING UP" : s.phase === "break" ? "BREAK · " + this.modeDef(s.mode).brk + " MIN" : "WORK · " + s.length + " MIN",
+      cycleLabel: s.cycles === 1 ? "1 round done" : s.cycles + " rounds done",
+      weeks: weeks,
+      calMonth: "August 2026",
+      calLegend: [
+        { label: "Comp. quantum phys.", color: "#4f6b4a" },
+        { label: "Atmosphere", color: "#8a7226" },
+        { label: "Thesis", color: "#6f7268" }
+      ],
+      weekdays: ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
+      games: games.map(g => ({
+        name: g.name, sub: g.sub, note: g.note,
+        active: s.game === g.name,
+        play: () => this.setState({ game: g.name, mode: "custom", length: 5, left: 300, phase: "work", running: true })
+      })),
+      gameLabel: s.game ? s.game + " · five minutes on the clock" : "Pick one. It stops when the break does.",
+      noteKinds: kinds.map(k => ({
+        label: k[1],
+        active: s.noteKind === k[0],
+        color: s.noteKind === k[0] ? "#1c1d19" : "#a8a494",
+        pick: () => this.setState({ noteKind: k[0], noteIdx: 0 })
+      })),
+      shelfLabel: shelf.length + " in this shelf",
+      addText: s.addText,
+      addSubject: this.subjects()[s.addSubjectIdx % this.subjects().length],
+      onAddChange: e => this.setState({ addText: e.target.value }),
+      cycleAddSubject: () => this.setState(st => ({ addSubjectIdx: st.addSubjectIdx + 1 })),
+      onAddKey: e => {
+        if (e.key !== "Enter") return;
+        const raw = this.state.addText.trim();
+        if (!raw) return;
+        const parts = raw.split("·");
+        const mins = parts[1] ? parseInt(parts[1].trim(), 10) || 45 : 45;
+        this.setState(st => ({
+          addText: "",
+          tasks: [{ id: Date.now(), title: parts[0].trim(), subject: this.subjects()[st.addSubjectIdx % this.subjects().length], mins: mins, due: "unset", done: false }].concat(st.tasks)
+        }));
+      },
+      rows: s.tasks.map(t => this.row(t)),
+      beds: beds,
+      log: s.log,
+      notes: shelf.map((n, i) => ({
+        title: n.title, meta: n.meta,
+        color: i === s.noteIdx ? "#1c1d19" : "#6f7268",
+        open: () => this.setState({ noteIdx: i })
+      })),
+      openNote: note,
+      postText: s.postText,
+      onPostChange: e => this.setState({ postText: e.target.value }),
+      onPostKey: e => {
+        if (e.key !== "Enter") return;
+        const raw = this.state.postText.trim();
+        if (!raw) return;
+        this.setState(st => ({
+          postText: "",
+          feed: st.feed.concat([{ id: Date.now(), who: "You", when: "goes out at 20:00", text: raw, note: "", nodded: false, nods: 0 }])
+        }));
+      },
+      feed: s.feed.map(f => ({
+        who: f.who, when: f.when, text: f.text,
+        note: f.note, hasNote: !!f.note,
+        nodLabel: f.nodded ? "NODDED · " + f.nods : "NOD · " + f.nods,
+        nod: () => this.setState(st => ({
+          feed: st.feed.map(x => (x.id === f.id ? Object.assign({}, x, { nodded: !x.nodded, nods: x.nods + (x.nodded ? -1 : 1) }) : x))
+        }))
+      })),
+      circle: [
+        { name: "Mira", what: "Atmosphere, unit 5", state: "sitting", color: "#4f6b4a" },
+        { name: "Jonas", what: "Thesis", state: "sitting", color: "#4f6b4a" },
+        { name: "Lea", what: "—", state: "resting", color: "#8d8b7d" },
+        { name: "Tom", what: "QM I problems", state: "back at 20:00", color: "#8d8b7d" }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

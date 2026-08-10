@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN show_hours_to_friends INTEGER NOT NULL DEFAULT 1;

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Garden of Knowledge — Redesign</title>
+  <link rel="stylesheet" href="src/theme.css" />
+  <style>
+    .gkd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 18px; }
+    .gkd-toggle:hover { background: var(--hover); }
+    a { color: var(--accent); }
+    a:hover { color: var(--accent-strong); }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div style="min-height:100vh;display:grid;place-items:center;color:#888;font-family:system-ui;">Loading garden…</div>
+  </div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script src="src/data.jsx"></script>
+  <script type="text/babel" src="src/garden.jsx"></script>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    /* Build demo datasets for each progress state (deterministic). */
+    function demoData(level) {
+      const d = JSON.parse(JSON.stringify(STData));
+      const courses = ['c-analysis', 'c-algo', 'c-physics', 'c-linalg'];
+      const presets = ['Pomodoro', 'Deep Work', 'Sprint', 'Deep Work'];
+      // synth sessions spread over the last 6 days
+      function synth(n, minsList) {
+        const out = [];
+        for (let i = 0; i < n; i++) {
+          const day = ST.addDays(-(i % 6));
+          out.push({ id: 'demo-' + level + '-' + i, preset: presets[i % 4], phase: 'study',
+            semId: 'sem-fs26', courseId: courses[i % 4], taskId: null,
+            minutes: minsList[i % minsList.length], start: day + 'T09:00', end: day + 'T10:00' });
+        }
+        return out;
+      }
+      const zeroTasks = () => d.semesters[0].courses.forEach(c => c.tasks.forEach(t => { t.done = Math.min(t.done, t.total - 1); }));
+      if (level === 0) { d.sessions = []; d.streak = 0; zeroTasks(); }
+      if (level === 1) { d.sessions = synth(3, [45, 30, 40]); d.streak = 2; zeroTasks(); }
+      if (level === 2) { d.sessions = synth(6, [50, 30, 60, 45]); d.streak = 3;
+        d.semesters[0].courses.forEach((c, i) => c.tasks.forEach((t, j) => { if (!(i === 0 && j === 2)) t.done = Math.min(t.done, t.total - 1); })); }
+      if (level === 3) { d.sessions = synth(9, [55, 40, 70, 50, 60]); d.streak = 4; }
+      if (level === 4) { d.sessions = synth(14, [70, 55, 85, 60, 90]); d.streak = 12; }
+      return d;
+    }
+
+    const STATES = [
+      { lvl: 0, name: '1 · Empty / early', cap: 'Mostly soil. A few tiny sprouts so it never looks broken. A quiet nudge to log the first session.' },
+      { lvl: 1, name: '2 · Low progress', cap: 'Sprouts and small plants scattered across the whole patch — no rows, no grid.' },
+      { lvl: 2, name: '3 · Medium progress', cap: 'Varied species appear; first milestone flower blooms in its course color. The garden feels alive.' },
+      { lvl: 3, name: '4 · High progress', cap: 'Dense, layered greenery with depth — back rows small and muted, front rows large and vivid.' },
+      { lvl: 4, name: '5 · Streak / flourishing', cap: 'The Wise Tree, a golden streak-bloom, fireflies and a butterfly reward a 12-day streak.' },
+    ];
+
+    function App() {
+      const [theme, setTheme] = useState('dark');
+      React.useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
+      return (
+        <div style={{ maxWidth: 1180, margin: '0 auto', padding: '36px 28px 64px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
+            <div>
+              <div className="eyebrow" style={{ color: 'var(--garden)', marginBottom: 6 }}>Widget redesign</div>
+              <h1 className="serif" style={{ fontSize: 30, fontWeight: 500, margin: 0, letterSpacing: '-0.02em' }}>Garden of Knowledge</h1>
+              <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--ink-3)', maxWidth: 640 }}>
+                A generative garden grown from your study data. Every session plants something; milestones bloom in their
+                course color; streaks grow rare golden flora. Same data always grows the same garden. Hover any plant to
+                see what it represents.
+              </p>
+            </div>
+            <button className="gkd-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-2)',
+                borderRadius: 'var(--r-pill)', padding: '7px 14px', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
+              {theme === 'dark' ? '☾ dark' : '☀ light'} — switch
+            </button>
+          </div>
+
+          <div className="eyebrow" style={{ margin: '26px 0 12px' }}>Progress states</div>
+          <div className="gkd-grid">
+            {STATES.map(s => (
+              <div key={s.lvl} className="card" style={{ padding: 14 }} data-screen-label={s.name}>
+                <KnowledgeGarden data={demoData(s.lvl)} height={205}></KnowledgeGarden>
+                <div style={{ padding: '11px 4px 2px' }}>
+                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-2)', letterSpacing: '0.05em' }}>{s.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4, lineHeight: 1.5 }}>{s.cap}</div>
+                </div>
+              </div>
+            ))}
+            <div className="card" style={{ padding: 14, display: 'flex', flexDirection: 'column' }} data-screen-label="Mobile width">
+              <div style={{ width: 300, margin: '0 auto' }}>
+                <KnowledgeGarden data={demoData(3)} height={185}></KnowledgeGarden>
+              </div>
+              <div style={{ padding: '11px 4px 2px' }}>
+                <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-2)', letterSpacing: '0.05em' }}>Mobile width</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4, lineHeight: 1.5 }}>Ambient density drops ~45% under 430px; data plants stay, so nothing meaningful is lost.</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="eyebrow" style={{ margin: '30px 0 12px' }}>In context — dashboard column</div>
+          <div style={{ maxWidth: 420 }}>
+            <div className="card" style={{ padding: 20 }} data-screen-label="Dashboard context">
+              <KnowledgeGarden data={STData} height={215}></KnowledgeGarden>
+            </div>
+          </div>
+
+          <div className="eyebrow" style={{ margin: '30px 0 12px' }}>How data becomes garden</div>
+          <div className="card" style={{ padding: '18px 20px', maxWidth: 640 }}>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.9 }}>
+              <li>Study session → a plant. Species from a hash of its id; maturity from minutes; blossoms in the course color.</li>
+              <li>Completed task → a flower in the course color.</li>
+              <li>Streak ≥ 5 days → golden glow-bloom + fireflies. Stage 5 or streak ≥ 10 → the Wise Tree.</li>
+              <li>Weekly stage (0–5) sets ambient grass density; recent sessions render brighter ("freshly grown").</li>
+              <li>Placement is deterministic (seeded best-candidate sampling) — same data, same garden. A keep-out zone under the stats keeps text readable.</li>
+            </ul>
+          </div>
+
+          <p style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 22 }}>
+            The live widget is already wired into <a href="Study Tracker.html">Study Tracker</a> — implementation in <span className="mono">src/garden.jsx</span>.
+          </p>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App></App>);
+  </script>
+</body>
+</html>

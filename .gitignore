@@ -1,0 +1,9 @@
+.idea/
+node_modules/
+cloudflare/node_modules/
+cloudflare/.wrangler/
+.env
+.env.*
+.dev.vars
+*.pem
+*.log

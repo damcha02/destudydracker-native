@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Study Tracker</title>
+  <link rel="stylesheet" href="src/theme.css" />
+  <link rel="stylesheet" href="src/arena.css" />
+  <style>
+    /* hover refinements */
+    .btn-primary:hover { filter: brightness(1.06); transform: translateY(-1px); }
+    .btn-solid:hover { background: var(--hover) !important; border-color: var(--line-strong) !important; }
+    .btn-ghost:hover { background: var(--accent-soft) !important; color: var(--accent) !important; border-color: var(--accent-line) !important; }
+    .btn-quiet:hover { color: var(--ink-2) !important; background: var(--surface-2) !important; }
+    .danger-hover:hover { color: var(--danger) !important; background: var(--danger-soft) !important; border-color: transparent !important; }
+    .card:hover, .card-raised:hover { border-color: var(--line-strong); }
+    .mini-btn:hover { background: var(--hover) !important; border-color: var(--line-strong) !important; color: var(--ink) !important; }
+
+    /* responsive: collapse multi-column layouts on smaller laptops */
+    @media (max-width: 1180px) {
+      .dash-3col { grid-template-columns: 1fr 1fr !important; }
+      .dash-3col > div:nth-child(3) { grid-column: 1 / -1; }
+      .dash-3col > div:nth-child(3) { display: grid !important; grid-template-columns: 1fr 1fr; gap: 16px; }
+    }
+    @media (max-width: 1080px) {
+      .planner-rail, .timer-rail { position: static !important; }
+      .planner-main, .vault-grid, .dash-focus, .dash-2col, .timer-main { }
+    }
+    @media (max-width: 980px) {
+      .dash-3col, .dash-focus, .dash-2col, .vault-grid { grid-template-columns: 1fr !important; }
+      .dash-3col > div:nth-child(3) { display: flex !important; flex-direction: column; }
+      .dash-stats { grid-template-columns: repeat(2, 1fr) !important; }
+      [class*="grid-template-columns"] { }
+    }
+    @media (max-width: 920px) {
+      .planner-main + .planner-rail, .timer-rail { }
+    }
+    /* planner + timer rails stack under 1080 */
+    @media (max-width: 1080px) {
+      .fade-up > [style*="340px"], .fade-up > [style*="360px"] { }
+    }
+    /* vault responsive */
+    @media (max-width: 980px) {
+      .vault-settings-grid { grid-template-columns: 1fr !important; }
+    }
+    @media (max-width: 780px) {
+      .vault-split { grid-template-columns: 1fr !important; }
+      .vault-split > div:nth-child(2) { border-left: none !important; border-top: 1px solid var(--line) !important; }
+      .vault-toolbar { flex-direction: column !important; align-items: flex-start !important; }
+    }
+    @media (max-width: 600px) {
+      .vault-nav { gap: 0 !important; }
+      .vault-nav button { padding: 8px 10px 7px !important; font-size: 11.5px !important; }
+      .vault-stats { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div style="min-height:100vh;display:grid;place-items:center;color:#888;font-family:system-ui;">Loading Study Tracker…</div>
+  </div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script src="src/data.jsx"></script>
+  <script src="src/friends-data.jsx"></script>
+  <script src="src/effects.js"></script>
+  <script type="text/babel" src="src/components.jsx"></script>
+  <script type="text/babel" src="src/garden.jsx"></script>
+  <script type="text/babel" src="src/dashboard.jsx"></script>
+  <script type="text/babel" src="src/planner-forms.jsx"></script>
+  <script type="text/babel" src="src/planner.jsx"></script>
+  <script type="text/babel" src="src/timer.jsx"></script>
+  <script type="text/babel" src="src/vault.jsx"></script>
+  <script type="text/babel" src="src/friends.jsx"></script>
+  <script type="text/babel" src="src/app.jsx"></script>
+</body>
+</html>

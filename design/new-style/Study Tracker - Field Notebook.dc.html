@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet"><style>
+body{margin:0;background:#e6dfd1;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#3c5f7a}a:hover{color:#22405a}
+.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(35,33,29,.1);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}
+.dv-tid{font:700 10px 'Courier Prime',monospace;padding:3px 7px;background:#23211d;color:#f4efe3;border-radius:2px;text-decoration:none}
+.dv-tname{font:500 14px/1.2 Newsreader,Georgia,serif;color:#23211d}
+.dv-opts{display:flex;flex-wrap:wrap;gap:34px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+.dv-oid{font:700 10.5px 'Courier Prime',monospace;padding:3px 7px;background:rgba(35,33,29,.1);color:#23211d;border-radius:2px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11.5px/1.3 'Courier Prime',monospace;letter-spacing:.04em;color:rgba(35,33,29,.6)}
+.dv-card{max-width:100%;background:#fbf8f0;border:1px solid #cec3ae;box-shadow:0 2px 0 rgba(35,33,29,.06);overflow:hidden}
+.dv-opt:target .dv-oid{background:#8c4b2f;color:#fff}
+.dv-next{margin:26px 0 0;font:12px/1.6 'Courier Prime',monospace;color:rgba(35,33,29,.55)}
+</style></helmet>
+
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Quiet dashboard (switches with <a class="dv-oid" href="#1a">1a</a>), Social as a study circle, and the missing header cluster</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="2a"><div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Dashboard · Quiet — one question, one answer, one column</div>
+<div class="dv-card" style="width:1400px">
+<div style="display:flex;align-items:center;justify-content:space-between;height:30px;padding:0 12px;background:#e4dccb;border-bottom:1px solid #cec3ae">
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474">STUDY TRACKER</span>
+<span style="display:flex;gap:14px;font:400 11px 'Courier Prime',monospace;color:#8b8474">— □ ✕</span>
+</div>
+<div style="display:flex;align-items:flex-end;gap:2px;padding:10px 22px 0;background:#efe8da;border-bottom:1px solid #cec3ae">
+<span style="padding:8px 18px 9px;background:#fbf8f0;border:1px solid #cec3ae;border-bottom:1px solid #fbf8f0;border-radius:3px 3px 0 0;margin-bottom:-1px;font:500 13px Newsreader,Georgia,serif;color:#23211d">Dashboard</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Planner</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Timer</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Vault</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Break room</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Social</span>
+<span style="flex:1"></span>
+<span style="display:flex;align-items:center;gap:10px;padding:0 2px 7px">
+<span style="font:400 9.5px 'Courier Prime',monospace;letter-spacing:.14em;color:#a29a88">VIEW</span>
+<span style="display:flex"><span style="font:400 11px 'Courier Prime',monospace;color:#23211d;border:1px solid #23211d;padding:4px 11px;background:#fbf8f0">QUIET</span><span style="font:400 11px 'Courier Prime',monospace;color:#8b8474;border:1px solid #cec3ae;border-left:none;padding:4px 11px">FULL</span></span>
+<span style="width:1px;height:18px;background:#d5cbb7;margin:0 2px"></span>
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.1em;color:#6d6656;border:1px solid #cec3ae;padding:5px 9px;background:#f4efe3">WATCH 44</span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#6d6656;border:1px solid #cec3ae;padding:4px 9px;background:#f4efe3">☀</span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#6d6656;border:1px solid #cec3ae;padding:4px 9px;background:#f4efe3">☰</span>
+</span>
+</div>
+
+<div style="display:grid;grid-template-columns:minmax(0,760px) 1fr;gap:64px;padding:58px 54px 84px;background:#fbf8f0">
+<div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.22em;color:#a29a88">MONDAY 03 AUGUST 2026 · SEMESTER 8 · WEEK 6 OF 14</div>
+<h1 style="margin:20px 0 0;font:400 40px/1.15 Newsreader,Georgia,serif;color:#23211d;letter-spacing:-.015em;text-wrap:pretty">Next: exercise sheet 7,<br>Computational Quantum Physics.</h1>
+<div style="font:400 13px/1.6 'Courier Prime',monospace;color:#6d6656;margin-top:14px">½ unit · about 1 h 10 m · due 15 Aug · feeds the oral exam on 27 Aug</div>
+<div style="display:flex;align-items:center;gap:14px;margin-top:30px">
+<button style="font:500 15px Newsreader,Georgia,serif;color:#fbf8f0;background:#23211d;border:1px solid #23211d;padding:12px 28px;cursor:pointer">Start focus</button>
+<button style="font:400 11px 'Courier Prime',monospace;letter-spacing:.08em;color:#6d6656;background:none;border:1px solid #c6bba3;padding:11px 20px;cursor:pointer">SOMETHING ELSE ▾</button>
+<span style="font:italic 400 13.5px Newsreader,Georgia,serif;color:#8b8474">2 h 48 m of 3 h 30 m done today.</span>
+</div>
+<div style="height:1px;background:#e2dac9;margin:44px 0 4px"></div>
+<div style="display:flex;align-items:center;gap:16px;padding:15px 0;border-bottom:1px dotted #e0d8c6">
+<span style="width:8px;height:8px;background:#4f6b4a;flex:none"></span>
+<span style="font:400 16px Newsreader,Georgia,serif;color:#23211d;flex:1">Lectures · unit 19 of 40 &nbsp;<span style="color:#a29a88;font-size:13px">Quantum Mechanics I</span></span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#8b8474">45 m</span>
+</div>
+<div style="display:flex;align-items:center;gap:16px;padding:15px 0;border-bottom:1px dotted #e0d8c6">
+<span style="width:8px;height:8px;background:#9a7c3a;flex:none"></span>
+<span style="font:400 16px Newsreader,Georgia,serif;color:#23211d;flex:1">Summary sheet · radiation balance &nbsp;<span style="color:#a29a88;font-size:13px">Atmosphere</span></span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#9c5a34">exam in 14 d</span>
+</div>
+<div style="display:flex;align-items:center;gap:16px;padding:15px 0">
+<span style="width:8px;height:8px;background:#8a5670;flex:none"></span>
+<span style="font:400 16px Newsreader,Georgia,serif;color:#23211d;flex:1">Chapter 2 outline &nbsp;<span style="color:#a29a88;font-size:13px">Bachelor Thesis</span></span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#8b8474">3 h</span>
+</div>
+<div style="height:1px;background:#e2dac9"></div>
+<sc-if value="{{ showMarginNotes }}" hint-placeholder-val="{{ true }}">
+<div style="margin-top:30px;padding-left:15px;border-left:2px solid #ddd3bd;font:italic 400 14px/1.55 Newsreader,Georgia,serif;color:#8b8474;max-width:560px">Course ledger, weekly rhythm, vault links and circle activity all still exist — they live under <span style="font-family:'Courier Prime',monospace;font-style:normal;font-size:11.5px;color:#6d6656">FULL</span>. Quiet shows one decision and nothing you can scroll past.</div>
+</sc-if>
+</div>
+
+<div style="padding-top:36px">
+<div style="font:400 9.5px 'Courier Prime',monospace;letter-spacing:.18em;color:#a29a88">PACE</div>
+<div style="font:400 13px/1.8 'Courier Prime',monospace;color:#6d6656;margin-top:7px">61 units left<br>12 days<br><span style="color:#9c5a34">5.1 / day to stay ahead</span></div>
+<div style="font:400 9.5px 'Courier Prime',monospace;letter-spacing:.18em;color:#a29a88;margin-top:32px">AHEAD</div>
+<div style="display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px dotted #e0d8c6;font:400 12px 'Courier Prime',monospace;color:#6d6656;margin-top:7px"><span>ATM exam</span><span style="color:#9c5a34">17 Aug</span></div>
+<div style="display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px dotted #e0d8c6;font:400 12px 'Courier Prime',monospace;color:#6d6656"><span>QM exam</span><span>25 Aug</span></div>
+<div style="display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px dotted #e0d8c6;font:400 12px 'Courier Prime',monospace;color:#6d6656"><span>CQP oral</span><span>27 Aug</span></div>
+<div style="display:flex;justify-content:space-between;gap:16px;padding:9px 0;font:400 12px 'Courier Prime',monospace;color:#6d6656"><span>Thesis</span><span>02 Oct</span></div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="2b"><div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Social · Study circle — attendance sheet, not an arena</div>
+<div class="dv-card" style="width:1400px">
+<div style="display:flex;align-items:center;justify-content:space-between;height:30px;padding:0 12px;background:#e4dccb;border-bottom:1px solid #cec3ae">
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474">STUDY TRACKER</span>
+<span style="display:flex;gap:14px;font:400 11px 'Courier Prime',monospace;color:#8b8474">— □ ✕</span>
+</div>
+<div style="display:flex;align-items:flex-end;gap:2px;padding:10px 22px 0;background:#efe8da;border-bottom:1px solid #cec3ae">
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Dashboard</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Planner</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Timer</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Vault</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Break room</span>
+<span style="padding:8px 18px 9px;background:#fbf8f0;border:1px solid #cec3ae;border-bottom:1px solid #fbf8f0;border-radius:3px 3px 0 0;margin-bottom:-1px;font:500 13px Newsreader,Georgia,serif;color:#23211d">Circle</span>
+<span style="flex:1"></span>
+<span style="display:flex;align-items:center;gap:8px;padding:0 2px 7px">
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.1em;color:#6d6656;border:1px solid #cec3ae;padding:5px 9px;background:#f4efe3">WATCH 44</span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#6d6656;border:1px solid #cec3ae;padding:4px 9px;background:#f4efe3">☀</span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#6d6656;border:1px solid #cec3ae;padding:4px 9px;background:#f4efe3">☰</span>
+</span>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 380px;background:#fbf8f0">
+<div style="padding:28px 34px 40px;border-right:1px solid #ded5c3">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #23211d;padding-bottom:12px">
+<div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.2em;color:#8b8474">STUDY CIRCLE · CHUPACABRA · 3 OF 4 SEATS</div>
+<h2 style="margin:6px 0 0;font:500 27px/1.1 Newsreader,Georgia,serif;color:#23211d">Who's at the table this week</h2>
+</div>
+<div style="display:flex;gap:8px">
+<span style="font:400 10.5px 'Courier Prime',monospace;color:#6d6656;border:1px solid #c6bba3;padding:6px 11px;cursor:pointer">DAY</span>
+<span style="font:400 10.5px 'Courier Prime',monospace;color:#23211d;border:1px solid #23211d;padding:6px 11px;background:#f4efe3;cursor:pointer">WEEK</span>
+<span style="font:400 10.5px 'Courier Prime',monospace;color:#6d6656;border:1px solid #c6bba3;padding:6px 11px;cursor:pointer">TERM</span>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:22px 1fr 88px 1fr 76px;gap:0;margin-top:18px;font:400 9.5px 'Courier Prime',monospace;letter-spacing:.14em;color:#8b8474;padding-bottom:6px;border-bottom:1px solid #23211d">
+<span></span><span>NAME</span><span>HOURS</span><span>THIS WEEK</span><span style="text-align:right">SESSIONS</span>
+</div>
+<div style="display:grid;grid-template-columns:22px 1fr 88px 1fr 76px;align-items:center;padding:13px 0;border-bottom:1px dotted #d5cbb7">
+<span style="font:400 11px 'Courier Prime',monospace;color:#a29a88">1</span>
+<span style="font:500 15.5px Newsreader,Georgia,serif;color:#23211d">Maggus Rühl</span>
+<span style="font:400 12.5px 'Courier Prime',monospace;color:#23211d">6 h 07 m</span>
+<span style="display:flex;align-items:center"><span style="height:7px;width:96%;background:#4f6b4a"></span></span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#8b8474;text-align:right">3</span>
+</div>
+<div style="display:grid;grid-template-columns:22px 1fr 88px 1fr 76px;align-items:center;padding:13px 0;border-bottom:1px dotted #d5cbb7">
+<span style="font:400 11px 'Courier Prime',monospace;color:#a29a88">2</span>
+<span style="font:500 15.5px Newsreader,Georgia,serif;color:#23211d">Nicht Allianz Alex</span>
+<span style="font:400 12.5px 'Courier Prime',monospace;color:#23211d">5 h 59 m</span>
+<span style="display:flex;align-items:center"><span style="height:7px;width:93%;background:#4f6b4a"></span></span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#8b8474;text-align:right">4</span>
+</div>
+<div style="display:grid;grid-template-columns:22px 1fr 88px 1fr 76px;align-items:center;padding:13px 0;border-bottom:1px dotted #d5cbb7">
+<span style="font:400 11px 'Courier Prime',monospace;color:#a29a88">3</span>
+<span style="font:500 15.5px Newsreader,Georgia,serif;color:#23211d">Nictaz <span style="font:400 10px 'Courier Prime',monospace;color:#8b8474;border:1px solid #d5cbb7;padding:2px 5px;margin-left:6px">CO-LEAD</span></span>
+<span style="font:400 12.5px 'Courier Prime',monospace;color:#23211d">5 h 26 m</span>
+<span style="display:flex;align-items:center"><span style="height:7px;width:85%;background:#4f6b4a"></span></span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#8b8474;text-align:right">5</span>
+</div>
+<div style="display:grid;grid-template-columns:22px 1fr 88px 1fr 76px;align-items:center;padding:13px 0;border-bottom:1px dotted #d5cbb7">
+<span style="font:400 11px 'Courier Prime',monospace;color:#a29a88">4</span>
+<span style="font:500 15.5px Newsreader,Georgia,serif;color:#23211d">Hannover</span>
+<span style="font:400 12.5px 'Courier Prime',monospace;color:#23211d">5 h 13 m</span>
+<span style="display:flex;align-items:center"><span style="height:7px;width:82%;background:#4f6b4a"></span></span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#8b8474;text-align:right">8</span>
+</div>
+<div style="display:grid;grid-template-columns:22px 1fr 88px 1fr 76px;align-items:center;padding:13px 0;border-bottom:1px solid #23211d;background:#f6f1e5">
+<span style="font:400 11px 'Courier Prime',monospace;color:#9c5a34">6</span>
+<span style="font:500 15.5px Newsreader,Georgia,serif;color:#23211d">You <span style="font:400 10px 'Courier Prime',monospace;color:#8b8474;border:1px solid #d5cbb7;padding:2px 5px;margin-left:6px">ZRWL-WKNF</span></span>
+<span style="font:400 12.5px 'Courier Prime',monospace;color:#23211d">2 h 48 m</span>
+<span style="display:flex;align-items:center"><span style="height:7px;width:44%;background:#9c5a34"></span></span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#8b8474;text-align:right">6</span>
+</div>
+<div style="font:400 11px/1.6 'Courier Prime',monospace;color:#a29a88;margin-top:8px">Bars are relative to the top of the circle. Nobody gets a podium, a medal, or a rank badge.</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:32px;border-bottom:1px solid #23211d;padding-bottom:5px">
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.2em;color:#23211d">CIRCLE LOG</span>
+<span style="font:400 10px 'Courier Prime',monospace;color:#8b8474">FRIENDS · GLOBAL · REFRESHED 19:21</span>
+</div>
+<div style="display:flex;gap:14px;padding:15px 0;border-bottom:1px dotted #d5cbb7">
+<span style="flex:none;width:64px;font:400 10.5px 'Courier Prime',monospace;color:#a29a88;padding-top:3px">15:56</span>
+<div style="flex:1">
+<div style="font:500 15px Newsreader,Georgia,serif;color:#23211d">Maggus Rühl — 1 h 53 m, Swiss ecosystem deep dive</div>
+<div style="font:italic 400 13.5px/1.5 Newsreader,Georgia,serif;color:#77705f;margin-top:4px">“Deep dive. Still not done with the reading list.”</div>
+<div style="display:flex;gap:14px;margin-top:8px;font:400 10.5px 'Courier Prime',monospace;color:#8b8474"><span style="cursor:pointer">+ nod (3)</span><span style="cursor:pointer">+ same boat (1)</span><span style="cursor:pointer">reply</span></div>
+</div>
+</div>
+<div style="display:flex;gap:14px;padding:15px 0;border-bottom:1px dotted #d5cbb7">
+<span style="flex:none;width:64px;font:400 10.5px 'Courier Prime',monospace;color:#a29a88;padding-top:3px">14:02</span>
+<div style="flex:1">
+<div style="font:500 15px Newsreader,Georgia,serif;color:#23211d">Nictaz — 48 m, thermodynamics problem set</div>
+<div style="display:flex;gap:14px;margin-top:8px;font:400 10.5px 'Courier Prime',monospace;color:#8b8474"><span style="cursor:pointer">+ nod (1)</span><span style="cursor:pointer">reply</span></div>
+</div>
+</div>
+<div style="display:flex;gap:14px;padding:15px 0">
+<span style="flex:none;width:64px;font:400 10.5px 'Courier Prime',monospace;color:#a29a88;padding-top:3px">09:40</span>
+<div style="flex:1">
+<div style="font:500 15px Newsreader,Georgia,serif;color:#23211d">Hannover — 2 h 11 m, exam simulation</div>
+<div style="font:italic 400 13.5px/1.5 Newsreader,Georgia,serif;color:#77705f;margin-top:4px">“Two hours straight, no phone. It worked.”</div>
+</div>
+</div>
+</div>
+
+<div style="padding:28px 26px 40px;background:#f4efe3">
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#23211d;padding-bottom:6px;border-bottom:1px solid #23211d">POST YOUR LAST BLOCK</div>
+<div style="margin-top:12px;font:400 12px 'Courier Prime',monospace;color:#6d6656">1 h 12 m · Exercise sheets · QM I</div>
+<div style="margin-top:10px;padding:10px 12px;background:#fbf8f0;border:1px solid #ded5c3;font:italic 400 13.5px/26px Newsreader,Georgia,serif;color:#a29a88;background-image:repeating-linear-gradient(#fbf8f0 0 25px,#eae2d0 25px 26px);min-height:76px">One line, or leave it blank…</div>
+<div style="display:flex;gap:8px;margin-top:10px">
+<button style="font:500 12.5px Newsreader,Georgia,serif;color:#fbf8f0;background:#23211d;border:1px solid #23211d;padding:8px 16px;cursor:pointer">Post to circle</button>
+<button style="font:400 10.5px 'Courier Prime',monospace;color:#6d6656;background:none;border:1px solid #c6bba3;padding:8px 12px;cursor:pointer">KEEP PRIVATE</button>
+</div>
+
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#23211d;padding-bottom:6px;border-bottom:1px solid #23211d;margin-top:30px">STUDYING RIGHT NOW</div>
+<div style="display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px dotted #d5cbb7;font:400 13px Newsreader,Georgia,serif;color:#23211d"><span><span style="display:inline-block;width:7px;height:7px;background:#4f6b4a;border-radius:50%;margin-right:8px"></span>Bian</span><span style="font:400 11px 'Courier Prime',monospace;color:#8b8474">42 m in</span></div>
+<div style="display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px dotted #d5cbb7;font:400 13px Newsreader,Georgia,serif;color:#23211d"><span><span style="display:inline-block;width:7px;height:7px;background:#4f6b4a;border-radius:50%;margin-right:8px"></span>Durak Deputy</span><span style="font:400 11px 'Courier Prime',monospace;color:#8b8474">1 h 18 m in</span></div>
+<div style="display:flex;justify-content:space-between;padding:11px 0;font:400 13px Newsreader,Georgia,serif;color:#23211d"><span><span style="display:inline-block;width:7px;height:7px;background:#4f6b4a;border-radius:50%;margin-right:8px"></span>Hannover</span><span style="font:400 11px 'Courier Prime',monospace;color:#8b8474">7 m in</span></div>
+
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#23211d;padding-bottom:6px;border-bottom:1px solid #23211d;margin-top:30px">YOUR CARD</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 14px;margin-top:12px">
+<div style="padding:9px 0;border-bottom:1px dotted #d5cbb7"><div style="font:400 17px 'Courier Prime',monospace;color:#23211d">2 h 48 m</div><div style="font:400 9.5px 'Courier Prime',monospace;letter-spacing:.1em;color:#8b8474;margin-top:2px">TODAY · 6 SES.</div></div>
+<div style="padding:9px 0;border-bottom:1px dotted #d5cbb7"><div style="font:400 17px 'Courier Prime',monospace;color:#23211d">9 h</div><div style="font:400 9.5px 'Courier Prime',monospace;letter-spacing:.1em;color:#8b8474;margin-top:2px">THIS MONTH · 16</div></div>
+<div style="padding:9px 0"><div style="font:400 17px 'Courier Prime',monospace;color:#23211d">60 h 14 m</div><div style="font:400 9.5px 'Courier Prime',monospace;letter-spacing:.1em;color:#8b8474;margin-top:2px">ALL TIME · 163</div></div>
+<div style="padding:9px 0"><div style="font:400 17px 'Courier Prime',monospace;color:#23211d">10 d</div><div style="font:400 9.5px 'Courier Prime',monospace;letter-spacing:.1em;color:#8b8474;margin-top:2px">STREAK</div></div>
+</div>
+<div style="margin-top:14px;font:400 11px/1.7 'Courier Prime',monospace;color:#8b8474">Tag ZRWL-WKNF · invite link · public profile on · auto-post off · synced 19:21</div>
+<sc-if value="{{ showMarginNotes }}" hint-placeholder-val="{{ true }}">
+<div style="margin-top:22px;transform:rotate(.7deg);background:#f0e6c8;border:1px solid #ddceA6;padding:12px 13px;box-shadow:1px 2px 0 rgba(35,33,29,.07);font:italic 400 13.5px/1.5 Newsreader,Georgia,serif;color:#4d4534">Gone: “Study Arena”, gradient wordmark, avatar emoji tiles, gold/silver/bronze podium, rank chips, arena/league switchers. Kept: feed, leaderboard, friends, squad, profile, sync — all five as one page with a period switch.</div>
+</sc-if>
+</div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="2c"><div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>Header cluster + menu (the piece that was missing)</div>
+<div class="dv-card" style="width:640px">
+<div style="padding:0;background:#efe8da">
+<div style="display:flex;align-items:center;justify-content:flex-end;gap:9px;padding:14px 20px;border-bottom:1px solid #cec3ae">
+<span style="display:flex;align-items:center;gap:9px;border:1px solid #cec3ae;background:#f4efe3;padding:5px 10px">
+<span style="font:400 9.5px 'Courier Prime',monospace;letter-spacing:.14em;color:#8b8474">OVERALL</span>
+<span style="font:400 13px 'Courier Prime',monospace;color:#23211d">44</span>
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.08em;color:#9c5a34">WATCH</span>
+</span>
+<span style="font:400 12px 'Courier Prime',monospace;color:#6d6656;border:1px solid #cec3ae;background:#f4efe3;padding:5px 10px;cursor:pointer">☀ LIGHT</span>
+<span style="font:400 12px 'Courier Prime',monospace;color:#23211d;border:1px solid #23211d;background:#fbf8f0;padding:5px 11px;cursor:pointer">☰</span>
+</div>
+<div style="display:flex;justify-content:flex-end;padding:0 20px 26px;background:#fbf8f0">
+<div style="width:236px;margin-top:-1px;border:1px solid #23211d;background:#fbf8f0;box-shadow:0 2px 0 rgba(35,33,29,.08)">
+<div style="padding:9px 14px;font:400 9.5px 'Courier Prime',monospace;letter-spacing:.16em;color:#8b8474;border-bottom:1px solid #ded5c3">MENU</div>
+<div style="padding:11px 14px;font:400 14px Newsreader,Georgia,serif;color:#23211d;border-bottom:1px dotted #d5cbb7;cursor:pointer">Backup JSON</div>
+<div style="padding:11px 14px;font:400 14px Newsreader,Georgia,serif;color:#23211d;border-bottom:1px dotted #d5cbb7;cursor:pointer">Change theme</div>
+<div style="padding:11px 14px;font:400 14px Newsreader,Georgia,serif;color:#23211d;border-bottom:1px dotted #d5cbb7;cursor:pointer">Personal</div>
+<div style="padding:11px 14px;font:400 14px Newsreader,Georgia,serif;color:#23211d;border-bottom:1px dotted #d5cbb7;cursor:pointer">Options</div>
+<div style="padding:11px 14px;font:400 14px Newsreader,Georgia,serif;color:#23211d;cursor:pointer">Settings</div>
+</div>
+</div>
+<div style="padding:0 20px 22px;background:#fbf8f0;font:400 11px/1.7 'Courier Prime',monospace;color:#8b8474">Square dropdown, 1 px ink border, dotted row rules, no radius, no blur, no shadow beyond the 2 px offset. It sits in the tab strip at the right, so it never competes with the page title.</div>
+</div>
+</div>
+</div>
+
+</div>
+<p class="dv-next">Try next: “make <a class="dv-oid" href="#2a">2a</a> the default and move the extras into a drawer” · “dark graphite version of <a class="dv-oid" href="#2a">2a</a>” · “add Break room in this style”</p>
+</section>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Field Notebook — visual direction, four screens, and the system behind them</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Dashboard — task-first desk sheet, asymmetric 3-column</div>
+<div class="dv-card" style="width:1400px">
+
+<div style="display:flex;align-items:center;justify-content:space-between;height:30px;padding:0 12px;background:#e4dccb;border-bottom:1px solid #cec3ae">
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474">STUDY TRACKER</span>
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.1em;color:#a29a88">SEM 8 · 2026 · VAULT LINKED</span>
+<span style="display:flex;gap:14px;font:400 11px 'Courier Prime',monospace;color:#8b8474">— □ ✕</span>
+</div>
+
+<div style="display:flex;align-items:flex-end;gap:2px;padding:10px 22px 0;background:#efe8da;border-bottom:1px solid #cec3ae">
+<span style="padding:8px 18px 9px;background:#fbf8f0;border:1px solid #cec3ae;border-bottom:1px solid #fbf8f0;border-radius:3px 3px 0 0;margin-bottom:-1px;font:500 13px Newsreader,Georgia,serif;color:#23211d">Dashboard</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Planner</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Timer</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Vault</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Break room</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Social</span>
+<span style="flex:1"></span>
+<span style="display:flex;align-items:center;gap:8px;padding:0 4px 8px;font:400 10px 'Courier Prime',monospace;letter-spacing:.12em;color:#8b8474">SEARCH ⌘K</span>
+</div>
+
+<div style="padding:26px 34px 30px;background:#fbf8f0">
+
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:40px;border-bottom:2px solid #23211d;padding-bottom:14px">
+<div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.2em;color:#8b8474">MONDAY · 03 AUG 2026 · WEEK 32</div>
+<h1 style="margin:6px 0 0;font:500 34px/1.05 Newsreader,Georgia,serif;color:#23211d;letter-spacing:-.01em">Three things stand between you and Friday.</h1>
+<div style="margin-top:7px;font:400 12.5px/1.5 'Courier Prime',monospace;color:#6d6656">Semester 8 · week 6 of 14 &nbsp;·&nbsp; 61 units left &nbsp;·&nbsp; nearest deadline Aug 15</div>
+</div>
+<div style="flex:none;display:flex;align-items:flex-start;gap:18px;padding-top:4px">
+<div style="text-align:right">
+<div style="font:400 9.5px 'Courier Prime',monospace;letter-spacing:.16em;color:#8b8474">FOCUSED TODAY</div>
+<div style="font:400 30px/1 'Courier Prime',monospace;color:#23211d;margin-top:4px">2:48<span style="font-size:14px;color:#8b8474"> / 3:30</span></div>
+<div style="width:150px;height:5px;margin-top:7px;background:#e2dac9;border:1px solid #d1c7b2">
+<div style="width:80%;height:100%;background:#4f6b4a"></div>
+</div>
+<div style="font:400 9.5px 'Courier Prime',monospace;letter-spacing:.1em;color:#8b8474;margin-top:5px">80% OF DAILY GOAL · STREAK 10 D</div>
+</div>
+<div style="flex:none;transform:rotate(-4deg);border:2px solid #9c5a34;color:#9c5a34;padding:6px 10px 5px;text-align:center;border-radius:2px">
+<div style="font:700 15px/1 'Courier Prime',monospace;letter-spacing:.06em">WATCH</div>
+<div style="font:400 9px/1 'Courier Prime',monospace;letter-spacing:.14em;margin-top:4px">SCORE 44</div>
+</div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:1.62fr 1fr 0.74fr;gap:30px;margin-top:24px;align-items:start">
+
+<div style="display:flex;flex-direction:column;gap:26px">
+
+<div>
+<div style="display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid #23211d;padding-bottom:5px">
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.2em;color:#23211d">STUDY QUEUE · ORDERED BY PRESSURE</span>
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.1em;color:#8b8474">5 OPEN · 3 PLANNED TODAY</span>
+</div>
+
+<div style="display:grid;grid-template-columns:3px 1fr;background:#f6f1e5;border:1px solid #c6bba3;border-left:none;margin-top:12px">
+<div style="background:#4a5f86"></div>
+<div style="padding:14px 16px 13px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px">
+<div>
+<div style="display:flex;align-items:center;gap:9px">
+<span style="font:700 9.5px 'Courier Prime',monospace;letter-spacing:.1em;color:#4a5f86;border:1px solid #4a5f86;padding:2px 5px">CQP</span>
+<span style="font:400 9.5px 'Courier Prime',monospace;letter-spacing:.16em;color:#9c5a34">▲ DO THIS NEXT</span>
+</div>
+<div style="font:500 21px/1.2 Newsreader,Georgia,serif;color:#23211d;margin-top:8px">Exercise sheet 7 — variational methods</div>
+<div style="font:400 12px/1.5 'Courier Prime',monospace;color:#6d6656;margin-top:5px">½ unit remaining · est. 1 h 10 m · due <span style="color:#9c5a34">Aug 15 (T−12)</span> · oral exam weight 100%</div>
+</div>
+<div style="flex:none;display:flex;flex-direction:column;gap:7px;align-items:stretch">
+<button style="font:500 13px Newsreader,Georgia,serif;color:#fbf8f0;background:#23211d;border:1px solid #23211d;padding:8px 20px;cursor:pointer">Start focus</button>
+<button style="font:400 11px 'Courier Prime',monospace;letter-spacing:.06em;color:#6d6656;background:none;border:1px solid #c6bba3;padding:6px 20px;cursor:pointer">MARK DONE</button>
+</div>
+</div>
+</div>
+</div>
+
+<div style="border:1px solid #ddd4c2;border-top:none;background:#fbf8f0">
+<div style="display:grid;grid-template-columns:3px 1fr;border-bottom:1px dotted #d5cbb7">
+<div style="background:#4f6b4a"></div>
+<div style="display:flex;align-items:center;gap:14px;padding:11px 16px">
+<span style="width:13px;height:13px;border:1.5px solid #a89f8b;flex:none"></span>
+<span style="font:700 9px 'Courier Prime',monospace;letter-spacing:.1em;color:#4f6b4a;border:1px solid #b9c3b3;padding:2px 5px;flex:none">QM I</span>
+<span style="font:500 15px Newsreader,Georgia,serif;color:#23211d;flex:1">Lectures · unit 19 of 40</span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#8b8474;flex:none">45 m</span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#6d6656;flex:none;width:92px;text-align:right">due Aug 15</span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#3c5f7a;flex:none;cursor:pointer">focus →</span>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:3px 1fr;border-bottom:1px dotted #d5cbb7">
+<div style="background:#9a7c3a"></div>
+<div style="display:flex;align-items:center;gap:14px;padding:11px 16px">
+<span style="width:13px;height:13px;border:1.5px solid #a89f8b;flex:none"></span>
+<span style="font:700 9px 'Courier Prime',monospace;letter-spacing:.1em;color:#9a7c3a;border:1px solid #d3c49b;padding:2px 5px;flex:none">ATM</span>
+<span style="font:500 15px Newsreader,Georgia,serif;color:#23211d;flex:1">Summary sheet · radiation balance</span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#8b8474;flex:none">2 h</span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#9c5a34;flex:none;width:92px;text-align:right">exam T−14</span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#3c5f7a;flex:none;cursor:pointer">focus →</span>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:3px 1fr;border-bottom:1px dotted #d5cbb7">
+<div style="background:#8a5670"></div>
+<div style="display:flex;align-items:center;gap:14px;padding:11px 16px">
+<span style="width:13px;height:13px;border:1.5px solid #a89f8b;flex:none"></span>
+<span style="font:700 9px 'Courier Prime',monospace;letter-spacing:.1em;color:#8a5670;border:1px solid #cdb0be;padding:2px 5px;flex:none">THES</span>
+<span style="font:500 15px Newsreader,Georgia,serif;color:#23211d;flex:1">Thesis · chapter 2 outline <span style="font:400 12px 'Courier Prime',monospace;color:#a89f8b">untouched 9 days</span></span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#8b8474;flex:none">3 h</span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#6d6656;flex:none;width:92px;text-align:right">due Oct 2</span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#3c5f7a;flex:none;cursor:pointer">focus →</span>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:3px 1fr;background:#f4efe3">
+<div style="background:#4f6b4a"></div>
+<div style="display:flex;align-items:center;gap:14px;padding:11px 16px">
+<span style="width:13px;height:13px;border:1.5px solid #4f6b4a;background:#4f6b4a;flex:none;color:#fbf8f0;font:700 10px/12px 'Courier Prime',monospace;text-align:center">✓</span>
+<span style="font:700 9px 'Courier Prime',monospace;letter-spacing:.1em;color:#7d7869;border:1px solid #ccc3af;padding:2px 5px;flex:none">QM I</span>
+<span style="font:400 15px Newsreader,Georgia,serif;color:#9a9382;flex:1;text-decoration:line-through">Lectures · units 17 &amp; 18 of 40</span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#9a9382;flex:none">1 h 32 m logged</span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#9a9382;flex:none;width:92px;text-align:right">today</span>
+<span style="width:44px"></span>
+</div>
+</div>
+</div>
+<sc-if value="{{ showMarginNotes }}" hint-placeholder-val="{{ true }}">
+<div style="margin-top:9px;padding-left:14px;border-left:2px solid #c7bda6;font:italic 400 13.5px/1.5 Newsreader,Georgia,serif;color:#77705f">Queue order comes from deadline × weight × how long it's been sitting. Drag a row to pin it to today instead.</div>
+</sc-if>
+</div>
+
+<div>
+<div style="display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid #23211d;padding-bottom:5px">
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.2em;color:#23211d">WEEKLY RHYTHM · HOURS FOCUSED</span>
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.1em;color:#8b8474">2 H 48 M THIS WEEK · GOAL 3 H 30 M / DAY</span>
+</div>
+<div style="position:relative;height:132px;margin-top:16px;background-image:repeating-linear-gradient(to top,transparent 0 32px,#ece4d3 32px 33px);border-bottom:1px solid #23211d">
+<div style="position:absolute;left:0;right:0;bottom:98px;border-top:1px dashed #9c5a34"></div>
+<div style="position:absolute;left:0;bottom:100px;font:400 9px 'Courier Prime',monospace;color:#9c5a34;letter-spacing:.1em">GOAL</div>
+<div style="position:absolute;inset:0;display:grid;grid-template-columns:repeat(7,1fr);align-items:end;gap:26px;padding:0 6px">
+<div style="height:80px;background:#4f6b4a;border-top:2px solid #23211d"></div>
+<div style="height:0;border-top:2px solid #ded5c3"></div>
+<div style="height:0;border-top:2px solid #ded5c3"></div>
+<div style="height:0;border-top:2px solid #ded5c3"></div>
+<div style="height:0;border-top:2px solid #ded5c3"></div>
+<div style="height:0;border-top:2px solid #ded5c3"></div>
+<div style="height:0;border-top:2px solid #ded5c3"></div>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:26px;padding:6px 6px 0;font:400 10px 'Courier Prime',monospace;letter-spacing:.1em;color:#8b8474;text-align:center">
+<span style="color:#23211d">MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span><span>SUN</span>
+</div>
+<div style="display:flex;gap:22px;margin-top:12px;font:400 11px 'Courier Prime',monospace;color:#6d6656">
+<span><span style="display:inline-block;width:9px;height:9px;background:#4f6b4a;margin-right:6px"></span>Quantum Mechanics I</span>
+<span><span style="display:inline-block;width:9px;height:9px;background:#4a5f86;margin-right:6px"></span>Comp. Quantum Physics</span>
+<span style="color:#a89f8b">6 empty days this week — biggest day 2 h 48 m</span>
+</div>
+</div>
+
+</div>
+
+<div style="display:flex;flex-direction:column;gap:26px">
+
+<div>
+<div style="border-bottom:1px solid #23211d;padding-bottom:5px;font:400 10px 'Courier Prime',monospace;letter-spacing:.2em;color:#23211d">COURSE LEDGER</div>
+
+<div style="margin-top:14px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="width:9px;height:9px;background:#4a5f86"></span><span style="font:500 15px Newsreader,Georgia,serif;color:#23211d;flex:1">Computational Quantum Physics</span><span style="font:400 12px 'Courier Prime',monospace;color:#9c5a34">39</span></div>
+<div style="height:6px;margin-top:7px;background:#ece4d3;border:1px solid #d9d0bc"><div style="width:39%;height:100%;background:#4a5f86"></div></div>
+<div style="font:400 11px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">2 tasks · 2 h 35 m · target 6.0 · oral T−24</div>
+</div>
+<div style="margin-top:16px;padding-top:16px;border-top:1px dotted #d5cbb7">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="width:9px;height:9px;background:#4f6b4a"></span><span style="font:500 15px Newsreader,Georgia,serif;color:#23211d;flex:1">Quantum Mechanics I</span><span style="font:400 12px 'Courier Prime',monospace;color:#4f6b4a">59</span></div>
+<div style="height:6px;margin-top:7px;background:#ece4d3;border:1px solid #d9d0bc"><div style="width:59%;height:100%;background:#4f6b4a"></div></div>
+<div style="font:400 11px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">2 tasks · 23 h 57 m · target 5.5 · exam T−22</div>
+</div>
+<div style="margin-top:16px;padding-top:16px;border-top:1px dotted #d5cbb7">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="width:9px;height:9px;background:#9a7c3a"></span><span style="font:500 15px Newsreader,Georgia,serif;color:#23211d;flex:1">Atmosphere</span><span style="font:400 12px 'Courier Prime',monospace;color:#9a7c3a">68</span></div>
+<div style="height:6px;margin-top:7px;background:#ece4d3;border:1px solid #d9d0bc"><div style="width:68%;height:100%;background:#9a7c3a"></div></div>
+<div style="font:400 11px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">1 task · 8 h 23 m · target 5.75 · exam T−14</div>
+</div>
+<div style="margin-top:16px;padding-top:16px;border-top:1px dotted #d5cbb7">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="width:9px;height:9px;background:#8a5670"></span><span style="font:500 15px Newsreader,Georgia,serif;color:#23211d;flex:1">Bachelor Thesis</span><span style="font:400 12px 'Courier Prime',monospace;color:#9c5a34">0</span></div>
+<div style="height:6px;margin-top:7px;background:#ece4d3;border:1px solid #d9d0bc"><div style="width:2%;height:100%;background:#8a5670"></div></div>
+<div style="font:400 11px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">0 tasks · 21 h 49 m · target 6.0 · hand-in T−60</div>
+</div>
+</div>
+
+<div style="border:1px solid #c6bba3;background:#f4efe3;padding:14px 16px">
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474">PACE LEDGER · TOTAL WORKLOAD</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px">
+<div><div style="font:400 22px/1 'Courier Prime',monospace;color:#23211d">61</div><div style="font:400 10px 'Courier Prime',monospace;color:#8b8474;letter-spacing:.08em;margin-top:4px">UNITS LEFT</div></div>
+<div><div style="font:400 22px/1 'Courier Prime',monospace;color:#23211d">12</div><div style="font:400 10px 'Courier Prime',monospace;color:#8b8474;letter-spacing:.08em;margin-top:4px">DAYS LEFT</div></div>
+<div><div style="font:400 22px/1 'Courier Prime',monospace;color:#9c5a34">5.1</div><div style="font:400 10px 'Courier Prime',monospace;color:#8b8474;letter-spacing:.08em;margin-top:4px">UNITS / DAY</div></div>
+</div>
+<div style="font:italic 400 13px/1.5 Newsreader,Georgia,serif;color:#77705f;margin-top:12px">34 of 95 units complete. At today's rate you finish Aug 19 — four days late.</div>
+</div>
+
+</div>
+
+<div style="display:flex;flex-direction:column;gap:24px;padding-left:24px;border-left:1px solid #ded5c3">
+<div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474;padding-bottom:6px;border-bottom:1px solid #23211d">EXAM RUNWAY</div>
+<div style="display:flex;gap:12px;padding:13px 0;border-bottom:1px dotted #d5cbb7">
+<div style="flex:none;width:38px;text-align:right"><div style="font:400 22px/1 'Courier Prime',monospace;color:#9c5a34">14</div><div style="font:400 8.5px 'Courier Prime',monospace;color:#a89f8b;letter-spacing:.1em">DAYS</div></div>
+<div><div style="font:500 14px/1.25 Newsreader,Georgia,serif;color:#23211d">Atmosphere exam</div><div style="font:400 10.5px 'Courier Prime',monospace;color:#8b8474;margin-top:3px">17 Aug · weight 100% · 0% prepped</div></div>
+</div>
+<div style="display:flex;gap:12px;padding:13px 0;border-bottom:1px dotted #d5cbb7">
+<div style="flex:none;width:38px;text-align:right"><div style="font:400 22px/1 'Courier Prime',monospace;color:#23211d">22</div><div style="font:400 8.5px 'Courier Prime',monospace;color:#a89f8b;letter-spacing:.1em">DAYS</div></div>
+<div><div style="font:500 14px/1.25 Newsreader,Georgia,serif;color:#23211d">QM I exam</div><div style="font:400 10.5px 'Courier Prime',monospace;color:#8b8474;margin-top:3px">25 Aug · weight 100% · 0% prepped</div></div>
+</div>
+<div style="display:flex;gap:12px;padding:13px 0;border-bottom:1px dotted #d5cbb7">
+<div style="flex:none;width:38px;text-align:right"><div style="font:400 22px/1 'Courier Prime',monospace;color:#23211d">24</div><div style="font:400 8.5px 'Courier Prime',monospace;color:#a89f8b;letter-spacing:.1em">DAYS</div></div>
+<div><div style="font:500 14px/1.25 Newsreader,Georgia,serif;color:#23211d">CQP oral</div><div style="font:400 10.5px 'Courier Prime',monospace;color:#8b8474;margin-top:3px">27 Aug · weight 100% · 5% prepped</div></div>
+</div>
+<div style="display:flex;gap:12px;padding:13px 0">
+<div style="flex:none;width:38px;text-align:right"><div style="font:400 22px/1 'Courier Prime',monospace;color:#23211d">60</div><div style="font:400 8.5px 'Courier Prime',monospace;color:#a89f8b;letter-spacing:.1em">DAYS</div></div>
+<div><div style="font:500 14px/1.25 Newsreader,Georgia,serif;color:#23211d">Hand in thesis</div><div style="font:400 10.5px 'Courier Prime',monospace;color:#8b8474;margin-top:3px">02 Oct · weight 100% · 30% drafted</div></div>
+</div>
+</div>
+
+<sc-if value="{{ showMarginNotes }}" hint-placeholder-val="{{ true }}">
+<div style="transform:rotate(-1.1deg);background:#f0e6c8;border:1px solid #ddceA6;padding:13px 14px;box-shadow:1px 2px 0 rgba(35,33,29,.07)">
+<div style="font:400 9px 'Courier Prime',monospace;letter-spacing:.16em;color:#95814f">MARGIN NOTE · YOU, FRI 31 JUL</div>
+<div style="font:italic 400 14px/1.5 Newsreader,Georgia,serif;color:#4d4534;margin-top:7px">Atmosphere is the whole grade and it's first. Block two mornings for the summary sheet before touching the thesis.</div>
+</div>
+</sc-if>
+
+<div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474;padding-bottom:6px;border-bottom:1px solid #23211d">FROM THE VAULT</div>
+<div style="padding:11px 0;border-bottom:1px dotted #d5cbb7"><div style="font:400 11px 'Courier Prime',monospace;color:#3c5f7a">Daily/2026-08-03.md</div><div style="font:400 11.5px/1.5 'Courier Prime',monospace;color:#8b8474;margin-top:3px">6 sessions · draft ready to append</div></div>
+<div style="padding:11px 0;border-bottom:1px dotted #d5cbb7"><div style="font:400 11px 'Courier Prime',monospace;color:#3c5f7a">CQP/References.md</div><div style="font:400 11.5px/1.5 'Courier Prime',monospace;color:#8b8474;margin-top:3px">edited 2 days ago</div></div>
+<div style="padding:11px 0"><div style="font:400 11px 'Courier Prime',monospace;color:#a89f8b">Atmosphere/Summaries — empty</div></div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:7px">
+<button style="font:500 13px Newsreader,Georgia,serif;color:#23211d;background:#efe8da;border:1px solid #c6bba3;padding:9px;cursor:pointer">Open today's note</button>
+<button style="font:400 11px 'Courier Prime',monospace;letter-spacing:.06em;color:#6d6656;background:none;border:1px solid #d5cbb7;padding:8px;cursor:pointer">LOG A SESSION MANUALLY</button>
+</div>
+</div>
+
+</div>
+
+<div style="display:flex;justify-content:space-between;margin-top:30px;padding-top:12px;border-top:1px solid #ded5c3;font:400 10.5px 'Courier Prime',monospace;letter-spacing:.06em;color:#a29a88">
+<span>60 h 14 m logged across 45 days since 26 Apr</span>
+<span>Study circle: 3 friends active now · Sofia is on hour 2 of Atmosphere</span>
+</div>
+
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Planner — course folders, semester ledger, week strip</div>
+<div class="dv-card" style="width:1400px">
+<div style="display:flex;align-items:center;justify-content:space-between;height:30px;padding:0 12px;background:#e4dccb;border-bottom:1px solid #cec3ae">
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474">STUDY TRACKER</span>
+<span style="display:flex;gap:14px;font:400 11px 'Courier Prime',monospace;color:#8b8474">— □ ✕</span>
+</div>
+<div style="display:flex;align-items:flex-end;gap:2px;padding:10px 22px 0;background:#efe8da;border-bottom:1px solid #cec3ae">
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Dashboard</span>
+<span style="padding:8px 18px 9px;background:#fbf8f0;border:1px solid #cec3ae;border-bottom:1px solid #fbf8f0;border-radius:3px 3px 0 0;margin-bottom:-1px;font:500 13px Newsreader,Georgia,serif;color:#23211d">Planner</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Timer</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Vault</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Break room</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Social</span>
+</div>
+
+<div style="display:grid;grid-template-columns:214px 1fr;background:#fbf8f0">
+
+<div style="background:#efe8da;border-right:1px solid #cec3ae;padding:22px 0 30px">
+<div style="padding:0 16px 10px;font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474">SEMESTERS</div>
+<div style="padding:8px 16px;background:#fbf8f0;border-top:1px solid #cec3ae;border-bottom:1px solid #cec3ae;margin-right:-1px"><div style="font:500 14px Newsreader,Georgia,serif;color:#23211d">Semester 8 · 2026</div><div style="font:400 10px 'Courier Prime',monospace;color:#8b8474;margin-top:2px">4 COURSES · 5 TASKS</div></div>
+<div style="padding:8px 16px"><div style="font:400 14px Newsreader,Georgia,serif;color:#7e7666">Semester 7 · 2025</div><div style="font:400 10px 'Courier Prime',monospace;color:#a89f8b;margin-top:2px">ARCHIVED</div></div>
+<div style="padding:14px 16px 0"><span style="font:400 11px 'Courier Prime',monospace;color:#3c5f7a;cursor:pointer">+ new semester</span></div>
+
+<div style="padding:26px 16px 10px;font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474">COURSE FOLDERS</div>
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;align-items:center;gap:9px;padding:10px 16px;background:#fbf8f0;border-top:1px solid #cec3ae;border-bottom:1px solid #cec3ae;border-left:3px solid #4a5f86;margin-right:-1px"><span style="font:500 13.5px Newsreader,Georgia,serif;color:#23211d;flex:1">Comp. Quantum Physics</span><span style="font:400 10px 'Courier Prime',monospace;color:#8b8474">2</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:10px 16px;border-left:3px solid #4f6b4a"><span style="font:400 13.5px Newsreader,Georgia,serif;color:#4b4539;flex:1">Quantum Mechanics I</span><span style="font:400 10px 'Courier Prime',monospace;color:#8b8474">2</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:10px 16px;border-left:3px solid #9a7c3a"><span style="font:400 13.5px Newsreader,Georgia,serif;color:#4b4539;flex:1">Atmosphere</span><span style="font:400 10px 'Courier Prime',monospace;color:#8b8474">1</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:10px 16px;border-left:3px solid #8a5670"><span style="font:400 13.5px Newsreader,Georgia,serif;color:#4b4539;flex:1">Bachelor Thesis</span><span style="font:400 10px 'Courier Prime',monospace;color:#8b8474">0</span></div>
+</div>
+<div style="padding:14px 16px 0"><span style="font:400 11px 'Courier Prime',monospace;color:#3c5f7a;cursor:pointer">+ new course</span></div>
+</div>
+
+<div style="padding:24px 30px 30px">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #23211d;padding-bottom:12px">
+<div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.2em;color:#8b8474">SEMESTER 8 · 2026 · WEEK 6 OF 14</div>
+<h2 style="margin:6px 0 0;font:500 27px/1.1 Newsreader,Georgia,serif;color:#23211d">Computational Quantum Physics</h2>
+<div style="font:400 11.5px 'Courier Prime',monospace;color:#6d6656;margin-top:6px">39% of 26 units · oral exam 27 Aug · target grade 6.0 · 2 h 35 m logged</div>
+</div>
+<div style="display:flex;gap:8px">
+<button style="font:400 11px 'Courier Prime',monospace;color:#6d6656;background:none;border:1px solid #c6bba3;padding:7px 13px;cursor:pointer">EDIT COURSE</button>
+<button style="font:500 12.5px Newsreader,Georgia,serif;color:#fbf8f0;background:#23211d;border:1px solid #23211d;padding:7px 15px;cursor:pointer">+ Add task</button>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:22px 1fr 118px 96px 92px 78px;gap:0;margin-top:20px;font:400 9.5px 'Courier Prime',monospace;letter-spacing:.14em;color:#8b8474;padding-bottom:6px;border-bottom:1px solid #23211d">
+<span></span><span>TASK</span><span>UNITS</span><span>EST.</span><span>DUE</span><span style="text-align:right">WEIGHT</span>
+</div>
+<div style="display:grid;grid-template-columns:22px 1fr 118px 96px 92px 78px;align-items:center;padding:12px 0;border-bottom:1px dotted #d5cbb7">
+<span style="width:13px;height:13px;border:1.5px solid #a89f8b"></span>
+<span style="font:500 15px Newsreader,Georgia,serif;color:#23211d">Exercise sheets</span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#6d6656">6.5 / 14</span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#6d6656">1 h 10 m ea.</span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#9c5a34">15 Aug</span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#6d6656;text-align:right">40%</span>
+</div>
+<div style="display:grid;grid-template-columns:22px 1fr 118px 96px 92px 78px;align-items:center;padding:12px 0;border-bottom:1px dotted #d5cbb7">
+<span style="width:13px;height:13px;border:1.5px solid #a89f8b"></span>
+<span style="font:500 15px Newsreader,Georgia,serif;color:#23211d">Project — Ising model in 2D</span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#6d6656">1 / 4</span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#6d6656">4 h ea.</span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#6d6656">05 Sep</span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#6d6656;text-align:right">60%</span>
+</div>
+<div style="display:grid;grid-template-columns:22px 1fr 118px 96px 92px 78px;align-items:center;padding:12px 0;border-bottom:1px solid #ded5c3;background:#f6f1e5">
+<span style="width:13px;height:13px;border:1.5px solid #4f6b4a;background:#4f6b4a;color:#fbf8f0;font:700 10px/12px 'Courier Prime',monospace;text-align:center">✓</span>
+<span style="font:400 15px Newsreader,Georgia,serif;color:#9a9382;text-decoration:line-through">Setup &amp; toolchain</span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#9a9382">2 / 2</span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#9a9382">—</span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#9a9382">done 21 Jul</span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#9a9382;text-align:right">—</span>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:34px;border-bottom:1px solid #23211d;padding-bottom:5px">
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.2em;color:#23211d">WEEK OF 03 – 09 AUG · PLAN ONE UNIT AT A TIME</span>
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.08em;color:#8b8474">◀ PREV &nbsp; TODAY &nbsp; NEXT ▶ &nbsp;|&nbsp; WEEK / MONTH</span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(7,1fr);margin-top:14px;border:1px solid #ded5c3;border-right:none">
+<div style="border-right:1px solid #ded5c3;background:#f6f1e5">
+<div style="display:flex;justify-content:space-between;padding:7px 9px;border-bottom:1px solid #ded5c3"><span style="font:700 12px 'Courier Prime',monospace;color:#23211d">MON 3</span><span style="font:400 9.5px 'Courier Prime',monospace;color:#9c5a34">TODAY</span></div>
+<div style="padding:8px;display:flex;flex-direction:column;gap:6px;min-height:150px">
+<div style="border-left:3px solid #4a5f86;background:#fbf8f0;border:1px solid #ded5c3;border-left:3px solid #4a5f86;padding:6px 7px"><div style="font:500 12px Newsreader,Georgia,serif;color:#23211d">Exercise sheet 7</div><div style="font:400 9.5px 'Courier Prime',monospace;color:#8b8474">½ unit · CQP</div></div>
+<div style="border:1px solid #dfe4dc;background:#f2f5f0;border-left:3px solid #4f6b4a;padding:6px 7px"><div style="font:400 12px Newsreader,Georgia,serif;color:#9a9382;text-decoration:line-through">Lectures 17</div><div style="font:400 9.5px 'Courier Prime',monospace;color:#a3a08f">done · 46 m</div></div>
+<div style="border:1px solid #dfe4dc;background:#f2f5f0;border-left:3px solid #4f6b4a;padding:6px 7px"><div style="font:400 12px Newsreader,Georgia,serif;color:#9a9382;text-decoration:line-through">Lectures 18</div><div style="font:400 9.5px 'Courier Prime',monospace;color:#a3a08f">done · 46 m</div></div>
+</div>
+</div>
+<div style="border-right:1px solid #ded5c3">
+<div style="padding:7px 9px;border-bottom:1px solid #ded5c3;font:400 12px 'Courier Prime',monospace;color:#6d6656">TUE 4</div>
+<div style="padding:8px;min-height:150px;display:flex;flex-direction:column;gap:6px">
+<div style="border:1px solid #ded5c3;border-left:3px solid #9a7c3a;background:#fbf8f0;padding:6px 7px"><div style="font:500 12px Newsreader,Georgia,serif;color:#23211d">Summary sheet</div><div style="font:400 9.5px 'Courier Prime',monospace;color:#8b8474">1 unit · ATM</div></div>
+</div>
+</div>
+<div style="border-right:1px solid #ded5c3">
+<div style="padding:7px 9px;border-bottom:1px solid #ded5c3;font:400 12px 'Courier Prime',monospace;color:#6d6656">WED 5</div>
+<div style="padding:8px;min-height:150px;background-image:repeating-linear-gradient(transparent 0 25px,#f1ebdd 25px 26px)"></div>
+</div>
+<div style="border-right:1px solid #ded5c3">
+<div style="padding:7px 9px;border-bottom:1px solid #ded5c3;font:400 12px 'Courier Prime',monospace;color:#6d6656">THU 6</div>
+<div style="padding:8px;min-height:150px;display:flex;flex-direction:column;gap:6px">
+<div style="border:1px solid #ded5c3;border-left:3px solid #4a5f86;background:#fbf8f0;padding:6px 7px"><div style="font:500 12px Newsreader,Georgia,serif;color:#23211d">Project · Ising</div><div style="font:400 9.5px 'Courier Prime',monospace;color:#8b8474">1 unit · CQP</div></div>
+</div>
+</div>
+<div style="border-right:1px solid #ded5c3">
+<div style="padding:7px 9px;border-bottom:1px solid #ded5c3;font:400 12px 'Courier Prime',monospace;color:#6d6656">FRI 7</div>
+<div style="padding:8px;min-height:150px;background-image:repeating-linear-gradient(transparent 0 25px,#f1ebdd 25px 26px)"></div>
+</div>
+<div style="border-right:1px solid #ded5c3;background:#f3eee2">
+<div style="padding:7px 9px;border-bottom:1px solid #ded5c3;font:400 12px 'Courier Prime',monospace;color:#a29a88">SAT 8</div>
+<div style="padding:8px;min-height:150px"></div>
+</div>
+<div style="border-right:1px solid #ded5c3;background:#f3eee2">
+<div style="padding:7px 9px;border-bottom:1px solid #ded5c3;font:400 12px 'Courier Prime',monospace;color:#a29a88">SUN 9</div>
+<div style="padding:8px;min-height:150px"></div>
+</div>
+</div>
+<sc-if value="{{ showMarginNotes }}" hint-placeholder-val="{{ true }}">
+<div style="margin-top:10px;padding-left:14px;border-left:2px solid #c7bda6;font:italic 400 13px/1.5 Newsreader,Georgia,serif;color:#77705f">Two units planned against a 5.1/day pace. Wednesday and Friday are still blank — that's where the gap is.</div>
+</sc-if>
+</div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Timer — one course, one task, one sheet</div>
+<div class="dv-card" style="width:1400px">
+<div style="display:flex;align-items:center;justify-content:space-between;height:30px;padding:0 12px;background:#e4dccb;border-bottom:1px solid #cec3ae">
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474">STUDY TRACKER</span>
+<span style="display:flex;gap:14px;font:400 11px 'Courier Prime',monospace;color:#8b8474">— □ ✕</span>
+</div>
+<div style="display:flex;align-items:flex-end;gap:2px;padding:10px 22px 0;background:#efe8da;border-bottom:1px solid #cec3ae">
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Dashboard</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Planner</span>
+<span style="padding:8px 18px 9px;background:#fbf8f0;border:1px solid #cec3ae;border-bottom:1px solid #fbf8f0;border-radius:3px 3px 0 0;margin-bottom:-1px;font:500 13px Newsreader,Georgia,serif;color:#23211d">Timer</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Vault</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Break room</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Social</span>
+</div>
+<div style="display:grid;grid-template-columns:1fr 372px;background:#fbf8f0">
+
+<div style="padding:30px 34px 36px;border-right:1px solid #ded5c3">
+<div style="display:flex;align-items:center;gap:14px;padding-bottom:12px;border-bottom:2px solid #23211d">
+<span style="font:700 9.5px 'Courier Prime',monospace;letter-spacing:.1em;color:#4f6b4a;border:1px solid #4f6b4a;padding:3px 6px">QM I</span>
+<span style="font:500 17px Newsreader,Georgia,serif;color:#23211d">Exercise sheets</span>
+<span style="font:400 11.5px 'Courier Prime',monospace;color:#8b8474">unit 7 of 14 · due 15 Aug</span>
+<span style="flex:1"></span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#3c5f7a;cursor:pointer">change ▾</span>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:center;gap:56px;padding:42px 0 34px">
+<div style="text-align:center">
+<div style="font:400 92px/.9 'Courier Prime',monospace;color:#23211d;letter-spacing:-.02em">25:00</div>
+<div style="font:400 10.5px 'Courier Prime',monospace;letter-spacing:.2em;color:#8b8474;margin-top:12px">READY · 0 M LOGGED THIS BLOCK</div>
+<div style="width:340px;height:2px;background:#e2dac9;margin:18px auto 0"><div style="width:0;height:100%;background:#4f6b4a"></div></div>
+<div style="display:flex;justify-content:space-between;width:340px;margin:6px auto 0;font:400 9px 'Courier Prime',monospace;color:#b3ab98;letter-spacing:.1em"><span>0</span><span>12:30</span><span>25:00</span></div>
+</div>
+<div style="width:1px;height:130px;background:#e2dac9"></div>
+<div style="display:flex;flex-direction:column;gap:10px;width:172px">
+<button style="font:500 15px Newsreader,Georgia,serif;color:#fbf8f0;background:#23211d;border:1px solid #23211d;padding:12px;cursor:pointer">Start block</button>
+<button style="font:400 11px 'Courier Prime',monospace;letter-spacing:.08em;color:#6d6656;background:none;border:1px solid #c6bba3;padding:10px;cursor:pointer">PAUSE</button>
+<button style="font:400 11px 'Courier Prime',monospace;letter-spacing:.08em;color:#6d6656;background:none;border:1px solid #c6bba3;padding:10px;cursor:pointer">END &amp; LOG</button>
+<div style="font:italic 400 12.5px/1.45 Newsreader,Georgia,serif;color:#8b8474;margin-top:4px">Ends 19:37. Break at 25:00 unless you keep going.</div>
+</div>
+</div>
+
+<div style="display:flex;align-items:stretch;border-top:1px solid #ded5c3;border-bottom:1px solid #ded5c3">
+<span style="padding:12px 18px;border-right:1px solid #ded5c3;background:#f4efe3"><span style="display:block;font:500 13.5px Newsreader,Georgia,serif;color:#23211d">Pomodoro</span><span style="display:block;font:400 10px 'Courier Prime',monospace;color:#8b8474;margin-top:2px">25 / 5</span></span>
+<span style="padding:12px 18px;border-right:1px solid #ded5c3"><span style="display:block;font:400 13.5px Newsreader,Georgia,serif;color:#4b4539">Deep work</span><span style="display:block;font:400 10px 'Courier Prime',monospace;color:#8b8474;margin-top:2px">52 / 17</span></span>
+<span style="padding:12px 18px;border-right:1px solid #ded5c3"><span style="display:block;font:400 13.5px Newsreader,Georgia,serif;color:#4b4539">Sprint</span><span style="display:block;font:400 10px 'Courier Prime',monospace;color:#8b8474;margin-top:2px">90 / 20</span></span>
+<span style="padding:12px 18px;border-right:1px solid #ded5c3"><span style="display:block;font:400 13.5px Newsreader,Georgia,serif;color:#4b4539">Exam sim</span><span style="display:block;font:400 10px 'Courier Prime',monospace;color:#8b8474;margin-top:2px">120 min</span></span>
+<span style="padding:12px 18px;border-right:1px solid #ded5c3"><span style="display:block;font:400 13.5px Newsreader,Georgia,serif;color:#4b4539">Open-ended</span><span style="display:block;font:400 10px 'Courier Prime',monospace;color:#8b8474;margin-top:2px">no limit</span></span>
+<span style="padding:12px 18px;flex:1"><span style="display:block;font:400 13.5px Newsreader,Georgia,serif;color:#4b4539">Custom…</span><span style="display:block;font:400 10px 'Courier Prime',monospace;color:#8b8474;margin-top:2px">45 / 10</span></span>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:26px">
+<div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474;padding-bottom:6px;border-bottom:1px solid #23211d">TODAY ON THIS TASK</div>
+<div style="display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px dotted #d5cbb7;font:400 12px 'Courier Prime',monospace;color:#4b4539"><span>18:35 – 19:47</span><span>1 h 12 m</span></div>
+<div style="display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px dotted #d5cbb7;font:400 12px 'Courier Prime',monospace;color:#4b4539"><span>15:52 – 16:38</span><span>46 m</span></div>
+<div style="display:flex;justify-content:space-between;padding:11px 0;font:400 12px 'Courier Prime',monospace;color:#23211d"><span>TOTAL</span><span>1 h 58 m</span></div>
+</div>
+<div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474;padding-bottom:6px;border-bottom:1px solid #23211d">REFLECTION · APPENDED TO DAILY NOTE</div>
+<div style="margin-top:10px;padding:12px 13px;background:#f6f1e5;border:1px solid #ded5c3;background-image:repeating-linear-gradient(#f6f1e5 0 25px,#eae2d0 25px 26px);min-height:96px;font:italic 400 13.5px/26px Newsreader,Georgia,serif;color:#77705f">Where did you get stuck?</div>
+</div>
+</div>
+</div>
+
+<div style="padding:30px 26px 36px;background:#f4efe3">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding-bottom:6px;border-bottom:1px solid #23211d">
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#23211d">FOCUS LOG</span>
+<span style="font:400 10px 'Courier Prime',monospace;color:#8b8474">157 SESSIONS</span>
+</div>
+<div style="display:flex;gap:12px;padding:13px 0;border-bottom:1px dotted #d5cbb7">
+<span style="flex:none;width:3px;background:#4f6b4a"></span>
+<div style="flex:1"><div style="font:500 14px Newsreader,Georgia,serif;color:#23211d">Exercise sheets · QM I</div><div style="font:400 10.5px 'Courier Prime',monospace;color:#8b8474;margin-top:3px">03 AUG · 18:35 · 1 h 12 m · unit 1/5</div></div>
+</div>
+<div style="display:flex;gap:12px;padding:13px 0;border-bottom:1px dotted #d5cbb7">
+<span style="flex:none;width:3px;background:#4f6b4a"></span>
+<div style="flex:1"><div style="font:500 14px Newsreader,Georgia,serif;color:#23211d">Lectures · QM I</div><div style="font:400 10.5px 'Courier Prime',monospace;color:#8b8474;margin-top:3px">03 AUG · 15:52 · 46 m · unit 18/40</div></div>
+</div>
+<div style="display:flex;gap:12px;padding:13px 0;border-bottom:1px dotted #d5cbb7">
+<span style="flex:none;width:3px;background:#4f6b4a"></span>
+<div style="flex:1"><div style="font:500 14px Newsreader,Georgia,serif;color:#23211d">Lectures · QM I</div><div style="font:400 10.5px 'Courier Prime',monospace;color:#8b8474;margin-top:3px">03 AUG · 12:37 · 46 m · unit 17/40</div></div>
+</div>
+<div style="display:flex;gap:12px;padding:13px 0;border-bottom:1px dotted #d5cbb7">
+<span style="flex:none;width:3px;background:#4a5f86"></span>
+<div style="flex:1"><div style="font:500 14px Newsreader,Georgia,serif;color:#23211d">Exercises · CQP</div><div style="font:400 10.5px 'Courier Prime',monospace;color:#8b8474;margin-top:3px">03 AUG · 00:57 · 1 m · unit 6.5/14</div></div>
+</div>
+<div style="display:flex;gap:12px;padding:13px 0">
+<span style="flex:none;width:3px;background:#9a7c3a"></span>
+<div style="flex:1"><div style="font:400 14px Newsreader,Georgia,serif;color:#4b4539">Summary sheet · ATM</div><div style="font:400 10.5px 'Courier Prime',monospace;color:#8b8474;margin-top:3px">31 JUL · 09:12 · 2 h 04 m</div></div>
+</div>
+<div style="margin-top:20px;padding-top:14px;border-top:1px solid #ded5c3;font:400 10.5px/1.7 'Courier Prime',monospace;color:#a29a88">Sessions write straight into Daily/2026-08-03.md when the block ends.</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Vault — desk drawer of notes, references, summaries</div>
+<div class="dv-card" style="width:1400px">
+<div style="display:flex;align-items:center;justify-content:space-between;height:30px;padding:0 12px;background:#e4dccb;border-bottom:1px solid #cec3ae">
+<span style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474">STUDY TRACKER</span>
+<span style="display:flex;gap:14px;font:400 11px 'Courier Prime',monospace;color:#8b8474">— □ ✕</span>
+</div>
+<div style="display:flex;align-items:flex-end;gap:2px;padding:10px 22px 0;background:#efe8da;border-bottom:1px solid #cec3ae">
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Dashboard</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Planner</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Timer</span>
+<span style="padding:8px 18px 9px;background:#fbf8f0;border:1px solid #cec3ae;border-bottom:1px solid #fbf8f0;border-radius:3px 3px 0 0;margin-bottom:-1px;font:500 13px Newsreader,Georgia,serif;color:#23211d">Vault</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Break room</span>
+<span style="padding:7px 16px;background:#e4dccb;border:1px solid #d5cbb7;border-bottom:none;border-radius:3px 3px 0 0;font:400 13px Newsreader,Georgia,serif;color:#7e7666">Social</span>
+</div>
+
+<div style="display:grid;grid-template-columns:268px 1fr 300px;background:#fbf8f0">
+
+<div style="background:#efe8da;border-right:1px solid #cec3ae;padding:22px 0 30px">
+<div style="padding:0 18px 14px;display:flex;align-items:center;gap:8px">
+<span style="width:7px;height:7px;background:#4f6b4a;border-radius:50%"></span>
+<span style="font:400 11px 'Courier Prime',monospace;color:#4b4539">StudyTrackerVault</span>
+<span style="font:400 9.5px 'Courier Prime',monospace;color:#a29a88;letter-spacing:.1em">SYNCED</span>
+</div>
+<div style="display:flex;gap:0;padding:0 18px;border-bottom:1px solid #d5cbb7">
+<span style="padding:6px 0;margin-right:16px;font:500 12.5px Newsreader,Georgia,serif;color:#23211d;border-bottom:2px solid #23211d">Daily</span>
+<span style="padding:6px 0;margin-right:16px;font:400 12.5px Newsreader,Georgia,serif;color:#7e7666">References</span>
+<span style="padding:6px 0;font:400 12.5px Newsreader,Georgia,serif;color:#7e7666">Summaries</span>
+</div>
+<div style="padding:16px 18px 8px;font:400 9.5px 'Courier Prime',monospace;letter-spacing:.16em;color:#8b8474">AUGUST 2026</div>
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;align-items:baseline;gap:10px;padding:9px 18px;background:#fbf8f0;border-top:1px solid #cec3ae;border-bottom:1px solid #cec3ae;margin-right:-1px"><span style="font:400 12px 'Courier Prime',monospace;color:#23211d">2026-08-03</span><span style="font:400 10px 'Courier Prime',monospace;color:#8b8474;flex:1">6 sessions</span><span style="font:400 9px 'Courier Prime',monospace;color:#9c5a34">TODAY</span></div>
+<div style="display:flex;align-items:baseline;gap:10px;padding:9px 18px"><span style="font:400 12px 'Courier Prime',monospace;color:#4b4539">2026-08-02</span><span style="font:400 10px 'Courier Prime',monospace;color:#a29a88;flex:1">0 sessions</span></div>
+<div style="display:flex;align-items:baseline;gap:10px;padding:9px 18px"><span style="font:400 12px 'Courier Prime',monospace;color:#4b4539">2026-08-01</span><span style="font:400 10px 'Courier Prime',monospace;color:#a29a88;flex:1">1 session</span></div>
+</div>
+<div style="padding:14px 18px 8px;font:400 9.5px 'Courier Prime',monospace;letter-spacing:.16em;color:#8b8474">JULY 2026</div>
+<div style="display:flex;align-items:baseline;gap:10px;padding:9px 18px"><span style="font:400 12px 'Courier Prime',monospace;color:#4b4539">2026-07-31</span><span style="font:400 10px 'Courier Prime',monospace;color:#a29a88;flex:1">3 sessions</span></div>
+<div style="display:flex;align-items:baseline;gap:10px;padding:9px 18px"><span style="font:400 12px 'Courier Prime',monospace;color:#4b4539">2026-07-30</span><span style="font:400 10px 'Courier Prime',monospace;color:#a29a88;flex:1">2 sessions</span></div>
+<div style="padding:18px 18px 0"><span style="font:400 11px 'Courier Prime',monospace;color:#3c5f7a;cursor:pointer">open vault folder ↗</span></div>
+</div>
+
+<div style="padding:26px 34px 40px">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #23211d;padding-bottom:12px">
+<div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474">DAILY/2026-08-03.MD · SAVED 19:48</div>
+<h2 style="margin:6px 0 0;font:500 27px/1.1 Newsreader,Georgia,serif;color:#23211d">Monday, 3 August</h2>
+</div>
+<div style="display:flex;gap:8px">
+<button style="font:400 11px 'Courier Prime',monospace;color:#6d6656;background:none;border:1px solid #c6bba3;padding:7px 13px;cursor:pointer">MARKDOWN</button>
+<button style="font:400 11px 'Courier Prime',monospace;color:#6d6656;background:none;border:1px solid #c6bba3;padding:7px 13px;cursor:pointer">APPEND SESSION DRAFT</button>
+<button style="font:500 12.5px Newsreader,Georgia,serif;color:#fbf8f0;background:#23211d;border:1px solid #23211d;padding:7px 15px;cursor:pointer">Edit</button>
+</div>
+</div>
+
+<div style="margin-top:22px;padding:0 0 0 26px;border-left:1px solid #e0c9c0">
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474">STUDY SUMMARY</div>
+<div style="font:400 15px/28px Newsreader,Georgia,serif;color:#2e2b25;margin-top:8px;background-image:repeating-linear-gradient(transparent 0 27px,#ece4d3 27px 28px)">
+Total focused time — 2 h 48 m across 6 sessions.<br>
+Daily goal 3 h 30 m · 80% reached · streak 10 days.
+</div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474;margin-top:26px">WHAT I STUDIED</div>
+<div style="font:400 15px/28px Newsreader,Georgia,serif;color:#2e2b25;margin-top:8px;background-image:repeating-linear-gradient(transparent 0 27px,#ece4d3 27px 28px)">
+Quantum Mechanics I — exercise sheets, 1 h 12 m<br>
+Quantum Mechanics I — lectures 17 &amp; 18, 1 h 32 m<br>
+Computational Quantum Physics — exercises, 1 m
+</div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#8b8474;margin-top:26px">NOTES TO SELF</div>
+<div style="font:italic 400 15px/28px Newsreader,Georgia,serif;color:#4b4539;margin-top:8px;background-image:repeating-linear-gradient(transparent 0 27px,#ece4d3 27px 28px)">
+Sheet 7 part (c) — the variational ansatz still doesn't converge. Ask in Thursday's tutorial.<br>
+Atmosphere exam is in two weeks and I have no summary sheet yet.
+</div>
+</div>
+</div>
+
+<div style="padding:26px 24px 40px;background:#f4efe3;border-left:1px solid #ded5c3">
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#23211d;padding-bottom:6px;border-bottom:1px solid #23211d">LINKED THIS DAY</div>
+<div style="padding:12px 0;border-bottom:1px dotted #d5cbb7"><div style="font:400 11.5px 'Courier Prime',monospace;color:#3c5f7a">QM-I/Exercise-sheets.md</div></div>
+<div style="padding:12px 0;border-bottom:1px dotted #d5cbb7"><div style="font:400 11.5px 'Courier Prime',monospace;color:#3c5f7a">CQP/References.md</div></div>
+<div style="padding:12px 0"><div style="font:400 11.5px 'Courier Prime',monospace;color:#3c5f7a">Atmosphere/Exam-17-08.md</div></div>
+
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#23211d;padding-bottom:6px;border-bottom:1px solid #23211d;margin-top:28px">DRAWERS BY COURSE</div>
+<div style="display:flex;align-items:center;gap:9px;padding:11px 0;border-bottom:1px dotted #d5cbb7"><span style="width:9px;height:9px;background:#4a5f86"></span><span style="font:400 13px Newsreader,Georgia,serif;color:#23211d;flex:1">Comp. Quantum Physics</span><span style="font:400 10.5px 'Courier Prime',monospace;color:#8b8474">4 files</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:11px 0;border-bottom:1px dotted #d5cbb7"><span style="width:9px;height:9px;background:#4f6b4a"></span><span style="font:400 13px Newsreader,Georgia,serif;color:#23211d;flex:1">Quantum Mechanics I</span><span style="font:400 10.5px 'Courier Prime',monospace;color:#8b8474">9 files</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:11px 0;border-bottom:1px dotted #d5cbb7"><span style="width:9px;height:9px;background:#9a7c3a"></span><span style="font:400 13px Newsreader,Georgia,serif;color:#23211d;flex:1">Atmosphere</span><span style="font:400 10.5px 'Courier Prime',monospace;color:#9c5a34">empty</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:11px 0"><span style="width:9px;height:9px;background:#8a5670"></span><span style="font:400 13px Newsreader,Georgia,serif;color:#23211d;flex:1">Bachelor Thesis</span><span style="font:400 10.5px 'Courier Prime',monospace;color:#8b8474">12 files</span></div>
+
+<sc-if value="{{ showMarginNotes }}" hint-placeholder-val="{{ true }}">
+<div style="margin-top:26px;transform:rotate(.8deg);background:#f0e6c8;border:1px solid #ddceA6;padding:12px 13px;box-shadow:1px 2px 0 rgba(35,33,29,.07);font:italic 400 13.5px/1.5 Newsreader,Georgia,serif;color:#4d4534">Drop PDFs and cheat-sheet photos straight onto a drawer to file them under that course.</div>
+</sc-if>
+</div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Compact style guide + CSS tokens</div>
+<div class="dv-card" style="width:900px">
+<div style="padding:30px 34px 36px;background:#fbf8f0">
+<div style="border-bottom:2px solid #23211d;padding-bottom:12px">
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.2em;color:#8b8474">SYSTEM SHEET · V1</div>
+<h2 style="margin:6px 0 0;font:500 26px/1.15 Newsreader,Georgia,serif;color:#23211d">Field Notebook — paper, ink, graphite</h2>
+<div style="font:400 12px/1.55 'Courier Prime',monospace;color:#6d6656;margin-top:6px">Everything is a sheet of paper on a desk. Structure comes from rules and stamps, not from shadows and radii. Corners are 0–3 px. One shadow value exists and it is almost invisible.</div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:34px;margin-top:24px">
+<div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#23211d;border-bottom:1px solid #23211d;padding-bottom:5px">SURFACES &amp; INK</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+<div><div style="height:46px;background:#fbf8f0;border:1px solid #cec3ae"></div><div style="font:400 9px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">paper-0<br>#FBF8F0</div></div>
+<div><div style="height:46px;background:#f4efe3;border:1px solid #cec3ae"></div><div style="font:400 9px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">paper-1<br>#F4EFE3</div></div>
+<div><div style="height:46px;background:#e4dccb;border:1px solid #cec3ae"></div><div style="font:400 9px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">paper-2<br>#E4DCCB</div></div>
+<div><div style="height:46px;background:#f0e6c8;border:1px solid #cec3ae"></div><div style="font:400 9px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">note-slip<br>#F0E6C8</div></div>
+<div><div style="height:46px;background:#23211d"></div><div style="font:400 9px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">ink<br>#23211D</div></div>
+<div><div style="height:46px;background:#6d6656"></div><div style="font:400 9px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">graphite<br>#6D6656</div></div>
+<div><div style="height:46px;background:#a89f8b"></div><div style="font:400 9px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">pencil<br>#A89F8B</div></div>
+<div><div style="height:46px;background:#9c5a34"></div><div style="font:400 9px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">stamp-red<br>#9C5A34</div></div>
+</div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#23211d;border-bottom:1px solid #23211d;padding-bottom:5px;margin-top:26px">COURSE INKS · MUTED, EQUAL WEIGHT</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+<div><div style="height:36px;background:#4a5f86"></div><div style="font:400 9px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">slate-blue</div></div>
+<div><div style="height:36px;background:#4f6b4a"></div><div style="font:400 9px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">moss</div></div>
+<div><div style="height:36px;background:#9a7c3a"></div><div style="font:400 9px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">ochre</div></div>
+<div><div style="height:36px;background:#8a5670"></div><div style="font:400 9px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">mulberry</div></div>
+</div>
+<div style="font:400 11px/1.6 'Courier Prime',monospace;color:#8b8474;margin-top:8px">All four sit at the same lightness/chroma so no course shouts louder than another. Colour appears only as a 3 px spine, a 9 px square, or a bordered code chip — never as a fill behind text.</div>
+</div>
+
+<div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#23211d;border-bottom:1px solid #23211d;padding-bottom:5px">TYPE · THREE ROLES</div>
+<div style="margin-top:14px;padding-bottom:12px;border-bottom:1px dotted #d5cbb7">
+<div style="font:500 26px/1.1 Newsreader,Georgia,serif;color:#23211d">Newsreader 500 · headings &amp; task titles</div>
+<div style="font:400 10px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">15–34 PX · SLIGHTLY TIGHT · SENTENCE CASE, NEVER SHOUTY</div>
+</div>
+<div style="margin-top:12px;padding-bottom:12px;border-bottom:1px dotted #d5cbb7">
+<div style="font:400 15px/1.5 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#23211d">Helvetica · controls, buttons, dense UI text</div>
+<div style="font:400 10px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">12–15 PX · NEUTRAL, GETS OUT OF THE WAY</div>
+</div>
+<div style="margin-top:12px">
+<div style="font:400 15px/1.5 'Courier Prime',monospace;color:#23211d">Courier Prime · numbers, dates, stamps</div>
+<div style="font:400 10px 'Courier Prime',monospace;color:#8b8474;margin-top:5px">9–92 PX · ALL LABELS ARE UPPERCASE + 0.18 EM TRACKING</div>
+</div>
+
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#23211d;border-bottom:1px solid #23211d;padding-bottom:5px;margin-top:26px">COMPONENTS</div>
+<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px">
+<button style="font:500 13px Newsreader,Georgia,serif;color:#fbf8f0;background:#23211d;border:1px solid #23211d;padding:8px 18px;cursor:pointer">Primary</button>
+<button style="font:500 13px Newsreader,Georgia,serif;color:#23211d;background:#efe8da;border:1px solid #c6bba3;padding:8px 18px;cursor:pointer">Secondary</button>
+<button style="font:400 11px 'Courier Prime',monospace;letter-spacing:.06em;color:#6d6656;background:none;border:1px solid #d5cbb7;padding:7px 14px;cursor:pointer">QUIET ACTION</button>
+<span style="font:700 9.5px 'Courier Prime',monospace;letter-spacing:.1em;color:#4a5f86;border:1px solid #4a5f86;padding:3px 6px">CQP</span>
+<span style="width:13px;height:13px;border:1.5px solid #a89f8b;display:inline-block"></span>
+<span style="width:13px;height:13px;border:1.5px solid #4f6b4a;background:#4f6b4a;display:inline-block;color:#fbf8f0;font:700 10px/12px 'Courier Prime',monospace;text-align:center">✓</span>
+<span style="display:inline-block;transform:rotate(-4deg);border:2px solid #9c5a34;color:#9c5a34;padding:4px 8px;font:700 11px 'Courier Prime',monospace;letter-spacing:.06em">WATCH 44</span>
+</div>
+<div style="margin-top:14px;display:grid;grid-template-columns:3px 1fr;border:1px solid #ded5c3;border-left:none">
+<div style="background:#4f6b4a"></div>
+<div style="display:flex;align-items:center;gap:12px;padding:10px 12px"><span style="width:13px;height:13px;border:1.5px solid #a89f8b"></span><span style="font:500 14px Newsreader,Georgia,serif;color:#23211d;flex:1">Task row · spine + rule, no card</span><span style="font:400 10.5px 'Courier Prime',monospace;color:#8b8474">45 m</span></div>
+</div>
+<div style="font:400 11px/1.6 'Courier Prime',monospace;color:#8b8474;margin-top:10px">Rules: section headers = 1 px ink rule + mono label. Page headers = 2 px ink rule. Row separators = 1 px dotted pencil. Panels get a 1 px #CEC3AE border and at most <span style="color:#23211d">0 2px 0 rgba(35,33,29,.06)</span>.</div>
+</div>
+</div>
+
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#23211d;border-bottom:1px solid #23211d;padding-bottom:5px;margin-top:30px">TOKENS · DROP INTO :ROOT</div>
+<pre style="margin:14px 0 0;padding:16px 18px;background:#f4efe3;border:1px solid #ded5c3;font:400 11.5px/1.75 'Courier Prime',monospace;color:#3d382f;white-space:pre-wrap">:root{
+  /* paper */
+  --paper-0:#fbf8f0; --paper-1:#f4efe3; --paper-2:#e4dccb; --paper-3:#efe8da;
+  --slip:#f0e6c8; --desk:#e6dfd1;
+  /* ink */
+  --ink:#23211d; --graphite:#6d6656; --pencil:#a89f8b; --faint:#c9c0ad;
+  --stamp:#9c5a34; --link:#3c5f7a;
+  /* lines */
+  --rule-hard:1px solid var(--ink);
+  --rule-soft:1px solid #ded5c3;
+  --rule-dot:1px dotted #d5cbb7;
+  --edge:1px solid #cec3ae;
+  --ruled-sheet:repeating-linear-gradient(transparent 0 27px,#ece4d3 27px 28px);
+  /* course inks — same L/C, hue only */
+  --c1:oklch(.48 .07 258); --c2:oklch(.48 .07 145);
+  --c3:oklch(.58 .08  80); --c4:oklch(.48 .07 350);
+  /* type */
+  --serif:"Newsreader",Georgia,serif;
+  --ui:"Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mono:"Courier Prime","SF Mono",monospace;
+  --label:400 10px/1 var(--mono); --label-track:.18em;
+  /* form */
+  --r-0:0; --r-1:2px; --r-tab:3px 3px 0 0;
+  --shadow:0 2px 0 rgba(35,33,29,.06);
+  --pad-panel:24px 30px; --gap-section:26px;
+}</pre>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="1f"><div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>What to remove, tone down, or keep</div>
+<div class="dv-card" style="width:900px">
+<div style="padding:30px 34px 36px;background:#fbf8f0">
+<div style="border-bottom:2px solid #23211d;padding-bottom:12px">
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.2em;color:#8b8474">MIGRATION NOTES · CURRENT BUILD → FIELD NOTEBOOK</div>
+<h2 style="margin:6px 0 0;font:500 26px/1.15 Newsreader,Georgia,serif;color:#23211d">Nothing loses a feature. Things lose their costume.</h2>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:34px;margin-top:22px">
+<div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#9c5a34;border-bottom:1px solid #23211d;padding-bottom:5px">REMOVE</div>
+<div style="padding:11px 0;border-bottom:1px dotted #d5cbb7;font:400 13.5px/1.5 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#3d382f">Gradient logo tile and the gradient page background — flat paper instead.</div>
+<div style="padding:11px 0;border-bottom:1px dotted #d5cbb7;font:400 13.5px/1.5 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#3d382f">“Good evening, Danil” hero block. The date stamp plus one sentence about the real workload does the same job in a third of the height.</div>
+<div style="padding:11px 0;border-bottom:1px dotted #d5cbb7;font:400 13.5px/1.5 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#3d382f">Layout switcher pills (Focus / Cockpit / Analyst / Custom). One good layout beats four adequate ones; keep the reorder ability in settings if it's already built.</div>
+<div style="padding:11px 0;border-bottom:1px dotted #d5cbb7;font:400 13.5px/1.5 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#3d382f">Knowledge-garden illustration and the fossil/ammonite badges. If the reward loop matters, move it into Break room — it competes with exams for attention on the dashboard.</div>
+<div style="padding:11px 0;border-bottom:1px dotted #d5cbb7;font:400 13.5px/1.5 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#3d382f">Big ring donut for “percent done”. A ledger line (34/95 · 61 left · 12 days · 5.1/day) is more actionable and smaller.</div>
+<div style="padding:11px 0;font:400 13.5px/1.5 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#3d382f">Glowing outlined circle around the timer digits, and the drop-shadowed rounded cards everywhere.</div>
+</div>
+<div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#9a7c3a;border-bottom:1px solid #23211d;padding-bottom:5px">TONE DOWN</div>
+<div style="padding:11px 0;border-bottom:1px dotted #d5cbb7;font:400 13.5px/1.5 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#3d382f">Radii: 12–20 px → 0–3 px. Only folder tabs are rounded, and only on top.</div>
+<div style="padding:11px 0;border-bottom:1px dotted #d5cbb7;font:400 13.5px/1.5 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#3d382f">Card nesting: card→card→card becomes sheet → ruled section → row. Max one border deep.</div>
+<div style="padding:11px 0;border-bottom:1px dotted #d5cbb7;font:400 13.5px/1.5 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#3d382f">Score chip: keep the 0–100 score, render it as a rotated rubber stamp so it reads as an annotation, not a KPI.</div>
+<div style="padding:11px 0;border-bottom:1px dotted #d5cbb7;font:400 13.5px/1.5 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#3d382f">Saturated course colours → the four muted inks, used as spines and 9 px squares only.</div>
+<div style="padding:11px 0;font:400 13.5px/1.5 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#3d382f">Time-range pills (7d/14d/30d/60d/1y) → a single mono segmented rule under the chart.</div>
+<div style="font:400 10px 'Courier Prime',monospace;letter-spacing:.18em;color:#4f6b4a;border-bottom:1px solid #23211d;padding-bottom:5px;margin-top:26px">KEEP</div>
+<div style="padding:11px 0;border-bottom:1px dotted #d5cbb7;font:400 13.5px/1.5 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#3d382f">Unit-based task model, workload calculator, exam weights, session log, Obsidian daily-note writing — the whole reason the app is good.</div>
+<div style="padding:11px 0;font:400 13.5px/1.5 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#3d382f">Dark mode: same tokens inverted to graphite paper (#22201c / #2a2823) with warm ink (#eee6d6). Keep the four course hues, drop their lightness by 0.06.</div>
+</div>
+</div>
+<div style="margin-top:26px;padding-top:14px;border-top:1px solid #ded5c3;font:italic 400 14px/1.55 Newsreader,Georgia,serif;color:#77705f">Social tab is left out on purpose — send the screenshots and it gets the same treatment: a study circle as a ruled attendance sheet, names and hours, no podiums.</div>
+</div>
+</div>
+</div>
+
+</div>
+<p class="dv-next">Try next: “do the Social tab once I paste screenshots” · “show <a class="dv-oid" href="#1a">1a</a> in dark graphite mode” · “tighten <a class="dv-oid" href="#1b">1b</a> to a denser task table”</p>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showMarginNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Field notebook&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return { showMarginNotes: this.props.showMarginNotes ?? true };
+  }
+}
+</script>
+</body>
+</html>

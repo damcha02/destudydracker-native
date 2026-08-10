@@ -1,0 +1,11 @@
+# Copy this file to .dev.vars (gitignored) and fill in local-dev-only values.
+# Never put real production secret values in this file or in .dev.vars.
+# Production secrets are set via `wrangler secret put <NAME>` and are not stored in this repo.
+
+# Used to derive a non-reversible, keyed correlation hash from a signup IP address.
+# Required for new-account creation to succeed at all (fails closed if unset) — see PRIVACY.md.
+IP_HASH_SECRET=replace-with-a-local-dev-only-random-value
+
+# Used to hash device_secret at rest (migration 0018). Must be a DIFFERENT value from
+# IP_HASH_SECRET — these protect unrelated things and must never share a key.
+DEVICE_SECRET_HASH_SECRET=replace-with-a-different-local-dev-only-random-value

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Social Tab — Feed Design</title>
+  <link rel="stylesheet" href="src/theme.css" />
+  <style>
+    body { margin: 0; background: var(--bg); color: var(--ink); min-height: 100vh; }
+    #root { max-width: 720px; margin: 0 auto; padding: 24px 20px 80px; }
+
+    /* Stories strip */
+    .stories { display: flex; gap: 16px; padding: 0 4px 20px; overflow-x: auto; scrollbar-width: none; }
+    .stories::-webkit-scrollbar { display: none; }
+    .story { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; cursor: pointer; }
+    .story__ring { width: 60px; height: 60px; border-radius: 50%; padding: 3px; background: conic-gradient(var(--accent), var(--garden), var(--warn), var(--accent)); }
+    .story__ring--self { background: var(--line); }
+    .story__ring--idle { background: var(--line-soft); opacity: 0.6; }
+    .story__avatar { width: 100%; height: 100%; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 18px; color: #fff; border: 3px solid var(--bg); }
+    .story__name { font-size: 10.5px; font-weight: 600; color: var(--ink-3); max-width: 64px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .story__name--active { color: var(--ink); }
+
+    /* Live studying now bar */
+    .live-bar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 14px; background: color-mix(in oklch, var(--garden) 8%, var(--surface)); border: 1px solid color-mix(in oklch, var(--garden) 20%, var(--line)); margin-bottom: 20px; }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--garden); box-shadow: 0 0 8px var(--garden); animation: livePulse 2s ease-in-out infinite; }
+    @keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* Feed cards */
+    .feed-card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; margin-bottom: 14px; overflow: hidden; transition: border-color 0.15s; }
+    .feed-card:hover { border-color: var(--line-strong); }
+    .feed-card__head { display: flex; align-items: center; gap: 12px; padding: 16px 18px 12px; }
+    .feed-card__avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 15px; color: #fff; flex-shrink: 0; }
+    .feed-card__meta { flex: 1; min-width: 0; }
+    .feed-card__name { font-size: 14px; font-weight: 700; }
+    .feed-card__time { font-size: 11.5px; color: var(--ink-4); font-family: var(--font-mono); }
+    .feed-card__body { padding: 0 18px 16px; }
+    .feed-card__session { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--surface-inset); border: 1px solid var(--line-soft); }
+    .feed-card__session-icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-size: 18px; flex-shrink: 0; }
+    .feed-card__subject { font-size: 13.5px; font-weight: 600; }
+    .feed-card__detail { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; font-family: var(--font-mono); }
+    .feed-card__note { font-size: 13px; color: var(--ink-2); line-height: 1.55; margin-top: 10px; font-style: italic; }
+
+    /* Reactions bar */
+    .feed-card__reactions { display: flex; align-items: center; gap: 4px; padding: 10px 18px 14px; border-top: 1px solid var(--line-soft); }
+    .reaction-btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 99px; border: 1px solid var(--line-soft); background: transparent; color: var(--ink-3); font-size: 12.5px; font-family: var(--font-sans); font-weight: 600; cursor: pointer; transition: all 0.15s; }
+    .reaction-btn:hover { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); }
+    .reaction-btn--active { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); }
+
+    /* Milestone card */
+    .milestone { background: linear-gradient(135deg, color-mix(in oklch, var(--warn) 10%, var(--surface)), var(--surface)); border: 1px solid color-mix(in oklch, var(--warn) 25%, var(--line)); border-radius: 18px; padding: 20px; margin-bottom: 14px; display: flex; align-items: center; gap: 16px; }
+    .milestone__icon { width: 52px; height: 52px; border-radius: 16px; background: linear-gradient(145deg, #FFD700, #FFA000); display: grid; place-items: center; font-size: 26px; flex-shrink: 0; box-shadow: 0 4px 16px rgba(255,215,0,0.25); }
+    .milestone__text { flex: 1; }
+    .milestone__title { font-size: 15px; font-weight: 700; }
+    .milestone__sub { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; }
+
+    /* Weekly comparison strip */
+    .week-compare { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px; margin-bottom: 14px; }
+    .week-compare__title { font-family: var(--font-serif); font-size: 17px; font-weight: 600; margin-bottom: 14px; }
+    .week-compare__row { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+    .week-compare__row + .week-compare__row { border-top: 1px solid var(--line-soft); }
+    .week-compare__avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 11px; color: #fff; flex-shrink: 0; }
+    .week-compare__name { font-size: 13px; font-weight: 600; flex: 1; min-width: 0; }
+    .week-compare__bar-wrap { width: 140px; height: 8px; border-radius: 99px; background: var(--ring-track); overflow: hidden; flex-shrink: 0; }
+    .week-compare__bar { height: 100%; border-radius: 99px; transition: width 0.6s cubic-bezier(0.2,0.7,0.3,1); }
+    .week-compare__mins { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--ink-2); width: 48px; text-align: right; flex-shrink: 0; }
+
+    /* Section label */
+    .section-label { font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-4); margin: 20px 0 10px 4px; }
+
+    /* Header */
+    .page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+    .page-head__title { font-family: var(--font-serif); font-size: 28px; font-weight: 600; letter-spacing: -0.02em; }
+    .page-head__sub { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+    .page-head__right { display: flex; align-items: center; gap: 8px; }
+    .theme-btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); display: grid; place-items: center; cursor: pointer; }
+    .theme-btn:hover { border-color: var(--line-strong); color: var(--ink); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script src="src/data.jsx"></script>
+  <script src="src/friends-data.jsx"></script>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    function hue(name) { return name ? [...name].reduce((a,c) => a + c.charCodeAt(0), 0) % 360 : 200; }
+    function avatarBg(name) { const h = hue(name); return `oklch(0.58 0.13 ${h})`; }
+    function initials(name) { return (name||'??').split(/[\s_]/).map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+
+    const STUDYING_NOW = [
+      { name: 'FocusPhoenix', subject: 'Algorithms', mins: 23 },
+      { name: 'NightOwlCS', subject: 'Linear Algebra', mins: 45 },
+    ];
+
+    const FEED_ITEMS = [
+      { type: 'session', user: 'FocusPhoenix', time: '12 min ago', subject: 'Algorithms & DS', detail: '52 min · Deep Work', note: 'Finally cracked Dijkstra with negative-weight workaround. Priority queues are beautiful.', icon: '⚡', reactions: { fire: 3, brain: 1 } },
+      { type: 'milestone', user: 'NightOwlCS', icon: '🏆', title: 'NightOwlCS hit a 14-day streak!', sub: 'Longest streak in your friend group' },
+      { type: 'session', user: 'MathWiz42', time: '1h ago', subject: 'Analysis II', detail: '90 min · Sprint', note: 'Change of variables finally clicked. Jacobians next.', icon: '📐', reactions: { fire: 1, brain: 2 } },
+      { type: 'session', user: 'Student XKCD', time: '2h ago', subject: 'Algorithms & DS', detail: '52 min · Deep Work', note: 'BFS/DFS templates committed to muscle memory.', icon: '🧠', isSelf: true, reactions: { fire: 2, brain: 0 } },
+      { type: 'session', user: 'CodeNinja', time: '3h ago', subject: 'Physics II', detail: '25 min · Pomodoro', note: '', icon: '⚛', reactions: { fire: 0, brain: 1 } },
+      { type: 'session', user: 'StudyStorm', time: '5h ago', subject: 'Linear Algebra', detail: '50 min · Deep Work', note: 'SVD geometric meaning — singular values stretch space.', icon: '📊', reactions: { fire: 1, brain: 3 } },
+    ];
+
+    const WEEK_DATA = [
+      { name: 'FocusPhoenix', mins: 540 },
+      { name: 'NightOwlCS', mins: 495 },
+      { name: 'Student XKCD', mins: 389, isSelf: true },
+      { name: 'MathWiz42', mins: 360 },
+      { name: 'CodeNinja', mins: 310 },
+      { name: 'StudyStorm', mins: 240 },
+    ];
+
+    function Stories() {
+      const all = [
+        { name: 'Your Story', isSelf: true, active: false },
+        { name: 'FocusPhoenix', active: true },
+        { name: 'NightOwlCS', active: true },
+        { name: 'MathWiz42', active: true },
+        { name: 'CodeNinja', active: false },
+        { name: 'StudyStorm', active: false },
+        { name: 'DeepDiver', active: false },
+        { name: 'QuantumLeap', active: false },
+      ];
+      return (
+        <div className="stories">
+          {all.map((s, i) => (
+            <div key={i} className="story">
+              <div className={`story__ring ${s.isSelf ? 'story__ring--self' : !s.active ? 'story__ring--idle' : ''}`}>
+                <div className="story__avatar" style={{ background: s.isSelf ? 'var(--accent)' : avatarBg(s.name) }}>
+                  {s.isSelf ? '+' : initials(s.name)}
+                </div>
+              </div>
+              <span className={`story__name ${s.active ? 'story__name--active' : ''}`}>{s.isSelf ? 'You' : s.name.slice(0,10)}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    function LiveBar() {
+      return (
+        <div className="live-bar">
+          <span className="live-dot"></span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>
+            <span style={{ color: 'var(--garden)' }}>2 friends</span> studying right now
+          </span>
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--ink-4)', fontFamily: 'var(--font-mono)' }}>
+            FocusPhoenix · NightOwlCS
+          </span>
+        </div>
+      );
+    }
+
+    function SessionCard({ item }) {
+      const [reacted, setReacted] = useState({});
+      const toggle = (k) => setReacted(prev => ({ ...prev, [k]: !prev[k] }));
+      return (
+        <div className="feed-card">
+          <div className="feed-card__head">
+            <div className="feed-card__avatar" style={{ background: item.isSelf ? 'var(--accent)' : avatarBg(item.user) }}>
+              {initials(item.user)}
+            </div>
+            <div className="feed-card__meta">
+              <div className="feed-card__name" style={{ color: item.isSelf ? 'var(--accent)' : 'var(--ink)' }}>
+                {item.user}{item.isSelf ? ' (You)' : ''}
+              </div>
+              <div className="feed-card__time">{item.time}</div>
+            </div>
+          </div>
+          <div className="feed-card__body">
+            <div className="feed-card__session">
+              <div className="feed-card__session-icon" style={{ background: 'var(--accent-soft)' }}>{item.icon}</div>
+              <div>
+                <div className="feed-card__subject">{item.subject}</div>
+                <div className="feed-card__detail">{item.detail}</div>
+              </div>
+            </div>
+            {item.note && <div className="feed-card__note">"{item.note}"</div>}
+          </div>
+          <div className="feed-card__reactions">
+            <button className={`reaction-btn ${reacted.fire ? 'reaction-btn--active' : ''}`} onClick={() => toggle('fire')}>
+              🔥 {(item.reactions?.fire || 0) + (reacted.fire ? 1 : 0)}
+            </button>
+            <button className={`reaction-btn ${reacted.brain ? 'reaction-btn--active' : ''}`} onClick={() => toggle('brain')}>
+              🧠 {(item.reactions?.brain || 0) + (reacted.brain ? 1 : 0)}
+            </button>
+            <button className={`reaction-btn ${reacted.clap ? 'reaction-btn--active' : ''}`} onClick={() => toggle('clap')}>
+              👏 {reacted.clap ? 1 : 0}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    function MilestoneCard({ item }) {
+      return (
+        <div className="milestone">
+          <div className="milestone__icon">{item.icon}</div>
+          <div className="milestone__text">
+            <div className="milestone__title">{item.title}</div>
+            <div className="milestone__sub">{item.sub}</div>
+          </div>
+        </div>
+      );
+    }
+
+    function WeekCompare() {
+      const max = Math.max(...WEEK_DATA.map(d => d.mins));
+      return (
+        <div className="week-compare">
+          <div className="week-compare__title">This Week</div>
+          {WEEK_DATA.map((d, i) => (
+            <div key={i} className="week-compare__row">
+              <div className="week-compare__avatar" style={{ background: d.isSelf ? 'var(--accent)' : avatarBg(d.name) }}>
+                {initials(d.name)}
+              </div>
+              <div className="week-compare__name" style={{ color: d.isSelf ? 'var(--accent)' : 'var(--ink)' }}>
+                {d.name}{d.isSelf ? ' (You)' : ''}
+              </div>
+              <div className="week-compare__bar-wrap">
+                <div className="week-compare__bar" style={{ width: (d.mins / max * 100) + '%', background: d.isSelf ? 'var(--accent)' : avatarBg(d.name) }}></div>
+              </div>
+              <div className="week-compare__mins">{ST.fmtMins(d.mins)}</div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    function App() {
+      const [theme, setTheme] = useState(() => localStorage.getItem('studytracker.theme') || 'dark');
+      React.useEffect(() => { document.documentElement.setAttribute('data-theme', theme); }, [theme]);
+      const palette = localStorage.getItem('studytracker.palette') || 'default';
+      React.useEffect(() => { document.documentElement.setAttribute('data-palette', palette); }, [palette]);
+
+      return (
+        <div>
+          <div className="page-head">
+            <div>
+              <div className="page-head__title">Feed</div>
+              <div className="page-head__sub">See what your study circle is up to</div>
+            </div>
+            <div className="page-head__right">
+              <button className="theme-btn" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
+                {theme === 'dark' ? '☀' : '🌙'}
+              </button>
+            </div>
+          </div>
+
+          <Stories />
+          <LiveBar />
+
+          <div className="section-label">Activity</div>
+
+          {FEED_ITEMS.map((item, i) => {
+            if (item.type === 'milestone') return <MilestoneCard key={i} item={item} />;
+            return <SessionCard key={i} item={item} />;
+          })}
+
+          <div className="section-label" style={{ marginTop: 28 }}>Leaderboard</div>
+          <WeekCompare />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

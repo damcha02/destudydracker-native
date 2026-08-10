@@ -1,0 +1,52 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Study Tracker",
+  "version": "0.1.58",
+  "identifier": "com.damcha.studytracker",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev -- --host 0.0.0.0 --port 1420",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Study Tracker",
+        "width": 1520,
+        "height": 980,
+        "minWidth": 1180,
+        "minHeight": 760,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: https://asset.localhost blob: data: https://study-tracker-social.danil-poluyanov13.workers.dev https://*.workers.dev; media-src 'self'; font-src 'self' data:; connect-src 'self' http://localhost:1420 ws://localhost:1420 https://study-tracker-social.danil-poluyanov13.workers.dev https://*.workers.dev https://github.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJENEZGNEYyMzMwNTdGMTIKUldRU2Z3VXo4dlJQdldobHhZdHVtUXViNTJvaXY5M01YbDg3aWRjNUc0SWtWUVp0ZUp0UUU3WWEK",
+      "endpoints": [
+        "https://github.com/damcha02/destudydracker/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

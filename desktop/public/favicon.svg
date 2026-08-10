@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#10263b" />
+      <stop offset="100%" stop-color="#08111c" />
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#9bd0ff" />
+      <stop offset="100%" stop-color="#7ef0b8" />
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8ff0a4" />
+      <stop offset="100%" stop-color="#4aa56e" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bg)" />
+  <path d="M52 179c18-24 47-36 77-36s60 12 75 36" fill="none" stroke="#1f3950" stroke-width="18" stroke-linecap="round" />
+  <circle cx="128" cy="118" r="58" fill="none" stroke="url(#ring)" stroke-width="18" />
+  <path d="M128 83v38l26 21" fill="none" stroke="#eef7ff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M96 178c10-31 20-54 32-72" fill="none" stroke="#7bd28d" stroke-width="12" stroke-linecap="round" />
+  <path d="M120 141c-24-7-38-24-44-44 26 2 44 16 52 37" fill="url(#leaf)" />
+  <path d="M138 172c28 0 48 13 58 34H80c9-20 29-34 58-34z" fill="#14311f" opacity="0.65" />
+</svg>

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Japanese Garden of Knowledge</title>
+  <link rel="stylesheet" href="src/theme.css" />
+  <style>
+    .jgd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 18px; }
+    .jgd-toggle:hover { background: var(--hover); }
+    a { color: var(--accent); }
+    a:hover { color: var(--accent-strong); }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div style="min-height:100vh;display:grid;place-items:center;color:#888;font-family:system-ui;">Loading garden…</div>
+  </div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script src="src/data.jsx"></script>
+  <script type="text/babel" src="src/garden-jp.jsx"></script>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    /* nine deterministic demo datasets, one per growth stage */
+    function jpDemo(level) {
+      const d = JSON.parse(JSON.stringify(STData));
+      const courses = ['c-analysis', 'c-algo', 'c-physics', 'c-linalg'];
+      const presets = ['Pomodoro', 'Deep Work', 'Sprint', 'Deep Work'];
+      const PLAN = [
+        { n: 0,  mins: [0],            streak: 0,  done: 0 },
+        { n: 3,  mins: [30, 25, 35],   streak: 1,  done: 0 },
+        { n: 5,  mins: [40, 30, 45],   streak: 2,  done: 1 },
+        { n: 7,  mins: [50, 35, 55],   streak: 3,  done: 2 },
+        { n: 10, mins: [55, 40, 60],   streak: 4,  done: 3 },
+        { n: 13, mins: [60, 45, 70],   streak: 6,  done: 4 },
+        { n: 16, mins: [65, 50, 80],   streak: 9,  done: 6 },
+        { n: 20, mins: [70, 55, 90],   streak: 12, done: 8 },
+        { n: 26, mins: [80, 60, 95],   streak: 18, done: 99 },
+      ][level];
+      const out = [];
+      for (let i = 0; i < PLAN.n; i++) {
+        const day = ST.addDays(-(i % 6));
+        out.push({ id: 'jp-' + level + '-' + i, preset: presets[i % 4], phase: 'study',
+          semId: 'sem-fs26', courseId: courses[i % 4], taskId: null,
+          minutes: PLAN.mins[i % PLAN.mins.length], start: day + 'T09:00', end: day + 'T10:00' });
+      }
+      d.sessions = out;
+      d.streak = PLAN.streak;
+      /* cap completed tasks to PLAN.done so milestones arrive gradually */
+      let kept = 0;
+      d.semesters[0].courses.forEach(c => c.tasks.forEach(t => {
+        const complete = t.total > 0 && t.done >= t.total;
+        if (complete && kept < PLAN.done) { kept++; return; }
+        if (complete) t.done = Math.max(0, t.total - 1);
+      }));
+      return d;
+    }
+
+    const STATES = [
+      'Bare ground — raked gravel, a few stones. Nothing lost, nothing yet grown.',
+      'First shoots break the gravel; the first stone is set.',
+      'Moss takes hold across the ground plane; the first milestone blossoms.',
+      'Susuki grass and ferns fill in, and the tea house is built at the back of the garden.',
+      'Bamboo grove and the stone lantern unlock. Mid-ground fills.',
+      'The upper koi pond is dug. The Old Maple anchors the left, petals begin to drift.',
+      'A river runs from the upper pond down to a second pond, with the arched bridge across it.',
+      'Every bed planted and the Great Pine arrives — still one planting per bed.',
+      'Long tended: nothing new is squeezed in, everything standing simply grows larger.',
+    ];
+
+    /* gardens mount once, staged so the first paint isn't 12 generative scenes at
+       once; IntersectionObserver only brings a card forward, it never gates it */
+    function Lazy({ height, order = 0, children }) {
+      const ref = React.useRef(null);
+      const [on, setOn] = useState(order < 2);
+      React.useEffect(() => {
+        if (on) return;
+        const timer = setTimeout(() => setOn(true), 150 + order * 220);
+        let io;
+        if (ref.current && typeof IntersectionObserver !== 'undefined') {
+          io = new IntersectionObserver(es => { if (es[0].isIntersecting) setOn(true); }, { rootMargin: '400px 0px' });
+          io.observe(ref.current);
+        }
+        return () => { clearTimeout(timer); if (io) io.disconnect(); };
+      }, [on, order]);
+      return <div ref={ref} style={{ minHeight: height }}>{on ? children : null}</div>;
+    }
+
+    function App() {
+      const [theme, setTheme] = useState('dark');
+      React.useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
+      return (
+        <div style={{ maxWidth: 1180, margin: '0 auto', padding: '36px 28px 64px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
+            <div>
+              <div className="eyebrow" style={{ color: 'var(--garden)', marginBottom: 6 }}>Widget variant · counterpart to the Garden</div>
+              <h1 className="serif" style={{ fontSize: 30, fontWeight: 500, margin: 0, letterSpacing: '-0.02em' }}>Japanese Garden of Knowledge</h1>
+              <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--ink-3)', maxWidth: 660 }}>
+                The same study data grown as a Japanese garden: momiji and sakura, pruned pine, bamboo, azalea mounds,
+                iris, bush clover, moss and set stones. Nine growth stages instead of five, a tea house, two koi ponds joined
+                by a river and an arched bridge across it, and beds that fill evenly before the plantings start growing larger
+                instead of multiplying. Hover any plant to see what it represents.
+              </p>
+            </div>
+            <button className="jgd-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-2)',
+                borderRadius: 'var(--r-pill)', padding: '7px 14px', fontSize: 12, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+              {theme === 'dark' ? '☾ dark' : '☀ light'}
+            </button>
+          </div>
+
+          <div className="eyebrow" style={{ margin: '26px 0 12px' }}>Growth stages</div>
+          <div className="jgd-grid">
+            {STATES.map((cap, lvl) => {
+              const data = jpDemo(lvl);
+              const name = (lvl + 1) + ' · ' + JG_STAGE_NAMES[jgStage(data)];
+              return (
+                <div key={lvl} className="card" style={{ padding: 14 }} data-screen-label={name}>
+                  <Lazy height={205} order={lvl}><JapaneseGarden data={data} height={205}></JapaneseGarden></Lazy>
+                  <div style={{ padding: '11px 4px 2px' }}>
+                    <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-2)', letterSpacing: '0.05em' }}>{name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4, lineHeight: 1.5 }}>{cap}</div>
+                  </div>
+                </div>
+              );
+            })}
+            <div className="card" style={{ padding: 14, display: 'flex', flexDirection: 'column' }} data-screen-label="Mobile width">
+              <div style={{ width: 300, margin: '0 auto' }}>
+                <Lazy height={185} order={9}><JapaneseGarden data={jpDemo(6)} height={185}></JapaneseGarden></Lazy>
+              </div>
+              <div style={{ padding: '11px 4px 2px' }}>
+                <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-2)', letterSpacing: '0.05em' }}>Mobile width</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4, lineHeight: 1.5 }}>Ambient density halves under 430px; data plants and milestones all stay.</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="eyebrow" style={{ margin: '30px 0 12px' }}>In context — dashboard column</div>
+          <div style={{ maxWidth: 420 }}>
+            <div className="card" style={{ padding: 20 }} data-screen-label="Dashboard context">
+              <Lazy height={215} order={10}><JapaneseGarden data={STData} height={215}></JapaneseGarden></Lazy>
+            </div>
+          </div>
+
+          <div className="eyebrow" style={{ margin: '30px 0 12px' }}>How data becomes garden</div>
+          <div className="card" style={{ padding: '18px 20px', maxWidth: 660 }}>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.9 }}>
+              <li>Study session → a plant. Species from a hash of its id; short sessions become shoots and susuki, long ones bamboo, momiji, sakura or pine.</li>
+              <li>Completed task → a sakura tree or azalea mound in the course color. Every milestone adds a permanent planting.</li>
+              <li>Stage 3 → the tea house. Stage 4 → stone lantern. Stage 5 → the upper koi pond and the Old Maple. Stage 6 → the river, the lower pond and the bridge across it. Stage 7 or streak ≥ 14 → the Great Pine.</li>
+              <li>Streak ≥ 5 → golden kiku and fireflies; stage ≥ 5 → drifting petals.</li>
+              <li>Nine stages (0–8) by weekly minutes: 0 / 45 / 120 / 240 / 400 / 600 / 850 / 1150 / 1500.</li>
+              <li>The garden is laid out as beds — four depth rows across the full width, one planting per bed, evenly spread left to right. Nothing is planted on top of anything else.</li>
+              <li>Once every bed is taken, further study no longer adds plants: the existing ones grow larger instead, so a well-studied garden reads as tended rather than overgrown.</li>
+            </ul>
+          </div>
+
+          <p style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 22 }}>
+            Counterpart: <a href="Garden of Knowledge.html">Garden of Knowledge</a> · implementation in <span className="mono">src/garden-jp.jsx</span>.
+          </p>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App></App>);
+  </script>
+</body>
+</html>

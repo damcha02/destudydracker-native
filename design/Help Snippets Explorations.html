@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="design_doc_mode" content="canvas">
+<title>Help Snippets — 3 Explorations</title>
+<link rel="stylesheet" href="src/theme.css">
+<style>
+a{color:var(--accent);text-decoration:none}a:hover{color:var(--accent-strong);text-decoration:underline}
+body{font-family:var(--font-sans)}
+.frame{position:absolute;width:560px;background:linear-gradient(180deg,var(--surface-raised),var(--surface));border:1px solid var(--line);border-radius:var(--r-xl);box-shadow:var(--shadow-lg);padding:26px 28px 24px}
+.note{position:absolute;width:340px;background:var(--surface-inset);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:20px 22px;font-size:12.5px;line-height:1.55;color:var(--ink-2)}
+.note h3{font-family:var(--font-serif);font-size:17px;font-weight:500;margin:0 0 10px;color:var(--ink)}
+.note .eyebrow{display:block;margin:14px 0 5px}
+.note code{font-family:var(--font-mono);font-size:10.5px;background:var(--surface-2);border:1px solid var(--line-soft);border-radius:4px;padding:1px 5px;color:var(--accent)}
+.note ul{margin:4px 0;padding-left:16px}
+.note li{margin:3px 0}
+.frame-tag{position:absolute;top:-30px;left:2px;font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-4)}
+/* --- shared modal chrome --- */
+.hm-eyebrow{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-4)}
+.hm-title{font-family:var(--font-serif);font-size:26px;font-weight:500;letter-spacing:-0.01em;margin:6px 0 8px;color:var(--ink)}
+.hm-purpose{font-size:13.5px;line-height:1.55;color:var(--ink-2);margin:0 0 18px}
+.hm-steps{display:flex;flex-direction:column;gap:9px;margin:10px 0 22px;padding:0;list-style:none;counter-reset:step}
+.hm-steps li{display:flex;gap:11px;align-items:baseline;font-size:13px;color:var(--ink-2);counter-increment:step}
+.hm-steps li::before{content:counter(step);flex-shrink:0;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:10.5px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:var(--r-pill);transform:translateY(3px)}
+.hm-sec{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+.hm-sec hr{flex:1;height:1px;background:var(--line-soft);border:0;margin:0}
+.hm-cta{display:flex;justify-content:flex-end;margin-top:20px}
+.hm-btn{font-family:var(--font-sans);font-size:13.5px;font-weight:600;color:oklch(0.16 0.02 252);background:var(--accent);border:0;border-radius:var(--r-pill);padding:10px 20px;box-shadow:var(--shadow-sm)}
+.hm-btn:hover{background:var(--accent-strong)}
+.hm-close{position:absolute;top:18px;right:18px;width:28px;height:28px;border-radius:var(--r-pill);border:1px solid var(--line-soft);background:transparent;color:var(--ink-4);font-size:13px;line-height:1}
+/* ============ A — CLEAN PRACTICAL: recipe → result ============ */
+.hs-example{background:var(--surface-inset);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:14px 16px;display:grid;grid-template-columns:1fr auto;gap:4px 16px;align-items:center}
+.hs-stack{display:flex;flex-direction:column;gap:10px}
+.hs-task{font-size:14px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:9px}
+.hs-dot{width:9px;height:9px;border-radius:3px;flex-shrink:0}
+.hs-recipe{font-size:12px;color:var(--ink-3);grid-column:1;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.hs-chip{font-family:var(--font-mono);font-size:10.5px;font-weight:500;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line-soft);border-radius:var(--r-pill);padding:2px 9px}
+.hs-x{color:var(--ink-4);font-size:11px}
+.hs-result{grid-column:2;grid-row:1 / span 2;display:flex;flex-direction:column;align-items:flex-end;gap:7px}
+.hs-next{font-family:var(--font-mono);font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:var(--r-pill);padding:4px 12px;white-space:nowrap}
+/* app-style progress bar: pct label + rounded track with accent fill */
+.hs-prog{display:flex;align-items:center;gap:9px;width:200px}
+.hs-pct{font-family:var(--font-mono);font-size:11px;color:var(--ink-3);min-width:30px;text-align:right;font-variant-numeric:tabular-nums}
+.hs-track{flex:1;height:9px;border-radius:var(--r-pill);background:linear-gradient(90deg,var(--ring-track),var(--surface-2));overflow:hidden}
+.hs-fill{height:100%;border-radius:var(--r-pill);background:var(--accent);min-width:9px}
+.hs-hint{grid-column:1 / -1;font-size:11.5px;color:var(--ink-4);margin-top:6px;padding-top:9px;border-top:1px dashed var(--line-soft)}
+/* ============ B — PLAYFUL: index-card stack ============ */
+.hp-stack{display:flex;flex-direction:column;gap:14px}
+.hp-card{position:relative;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-lg);padding:15px 17px 13px;box-shadow:var(--shadow-sm)}
+.hp-card:nth-child(1){transform:rotate(-0.6deg)}
+.hp-card:nth-child(2){transform:rotate(0.5deg)}
+.hp-card:nth-child(3){transform:rotate(-0.4deg)}
+.hp-card::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;border-radius:var(--r-lg) var(--r-lg) 0 0}
+.hp-card.c1::before{background:var(--accent)}
+.hp-card.c2::before{background:var(--garden)}
+.hp-card.c3::before{background:var(--warn)}
+.hp-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.hp-task{font-family:var(--font-serif);font-size:17px;font-weight:500;color:var(--ink)}
+.hp-unit{font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4)}
+.hp-unit b{color:var(--ink-2);font-weight:600}
+.hp-row{display:flex;align-items:center;gap:4px;margin:11px 0 9px;flex-wrap:wrap}
+.hp-cell{width:22px;height:26px;border-radius:5px;background:var(--surface-inset);border:1px solid var(--line-soft);display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:9.5px;color:var(--ink-4)}
+.hp-cell.done{background:var(--garden-soft);border-color:var(--garden);color:var(--garden)}
+.hp-cell.next{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600;box-shadow:0 0 0 3px var(--accent-soft)}
+.hp-caption{font-size:12px;color:var(--ink-3)}
+.hp-caption b{font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--accent)}
+/* ============ C — COMPACT: ledger rows ============ */
+.hc-table{background:var(--surface-inset);border:1px solid var(--line-soft);border-radius:var(--r-md);overflow:hidden}
+.hc-head{display:grid;grid-template-columns:1.3fr .9fr 1.2fr;gap:10px;padding:8px 14px;background:var(--surface-2);border-bottom:1px solid var(--line-soft)}
+.hc-head span{font-family:var(--font-mono);font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-4)}
+.hc-row{display:grid;grid-template-columns:1.3fr .9fr 1.2fr;gap:10px;padding:10px 14px;align-items:center;border-bottom:1px solid var(--line-soft)}
+.hc-row:last-child{border-bottom:0}
+.hc-row:hover{background:var(--hover)}
+.hc-task{font-size:12.5px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:8px;min-width:0}
+.hc-task .hs-dot{width:7px;height:7px}
+.hc-units{font-family:var(--font-mono);font-size:11px;color:var(--ink-3)}
+.hc-units b{color:var(--ink-2);font-weight:600}
+.hc-next{font-family:var(--font-mono);font-size:10.5px;font-weight:600;color:var(--accent);justify-self:start;background:var(--accent-soft);border-radius:var(--r-pill);padding:3px 10px;white-space:nowrap}
+.hc-foot{font-size:11.5px;color:var(--ink-4);margin-top:8px}
+/* recommendation card */
+.rec{position:absolute;width:560px;background:linear-gradient(180deg,var(--surface-raised),var(--surface));border:1px solid var(--accent-line);border-radius:var(--r-xl);box-shadow:var(--shadow-lg);padding:26px 30px}
+.rec h2{font-family:var(--font-serif);font-size:22px;font-weight:500;margin:6px 0 12px;color:var(--ink)}
+.rec p{font-size:13.5px;line-height:1.6;color:var(--ink-2);margin:0 0 10px}
+</style>
+</head>
+<body>
+
+<!-- ================= A · CLEAN PRACTICAL ================= -->
+<div class="frame" style="left:60px;top:80px">
+<span class="frame-tag">A · Clean practical — “recipe → result”</span>
+<button class="hm-close">✕</button>
+<span class="hm-eyebrow">Guide · Planner</span>
+<h1 class="hm-title">Plan work you can count</h1>
+<p class="hm-purpose">The Planner breaks each task into <strong>units</strong> — countable pieces like lectures or sheets, not hours. Tick one off whenever you finish one.</p>
+<ol class="hm-steps">
+<li>Add a course, then a task inside it.</li>
+<li>Give the task a unit label and a total.</li>
+<li>Log progress one unit at a time.</li>
+</ol>
+<div class="hm-sec"><span class="hm-eyebrow">Examples</span><hr></div>
+<div class="hs-stack">
+<div class="hs-example">
+<div class="hs-task"><span class="hs-dot" style="background:var(--accent)"></span>Watch lectures</div>
+<div class="hs-recipe"><span class="hs-chip">Lecture</span><span class="hs-x">×</span><span class="hs-chip">10 total</span></div>
+<div class="hs-result"><span class="hs-next">Next: Lecture 4 of 10</span>
+<div class="hs-prog"><span class="hs-pct">30%</span><div class="hs-track"><div class="hs-fill" style="width:30%"></div></div></div></div>
+</div>
+<div class="hs-example">
+<div class="hs-task"><span class="hs-dot" style="background:var(--garden)"></span>Exercise sheets</div>
+<div class="hs-recipe"><span class="hs-chip">Sheet</span><span class="hs-x">×</span><span class="hs-chip">14 total</span></div>
+<div class="hs-result"><span class="hs-next">Next: Sheet 7 of 14</span>
+<div class="hs-prog"><span class="hs-pct">43%</span><div class="hs-track"><div class="hs-fill" style="width:43%"></div></div></div></div>
+</div>
+<div class="hs-example">
+<div class="hs-task"><span class="hs-dot" style="background:var(--warn)"></span>Old exams</div>
+<div class="hs-recipe"><span class="hs-chip">Exam</span><span class="hs-x">×</span><span class="hs-chip">5 total</span></div>
+<div class="hs-result"><span class="hs-next">Next: Exam 2 of 5</span>
+<div class="hs-prog"><span class="hs-pct">20%</span><div class="hs-track"><div class="hs-fill" style="width:20%"></div></div></div></div>
+</div>
+</div>
+<div class="hm-cta"><button class="hm-btn">Start tutorial →</button></div>
+</div>
+
+<div class="note" style="left:660px;top:80px">
+<h3>A · Clean practical</h3>
+<span class="eyebrow">Layout</span>
+Each example is one inset card, two columns: <b>left</b> = what you type (task name + label/total chips joined by “×”), <b>right</b> = what you get (the “Next: …” pill above the app’s real progress bar: mono % label + rounded track with accent fill). Reads left→right as cause→effect.
+<span class="eyebrow">Hierarchy</span>
+Task name (sans 600) → chips (mono, quiet) → result pill (accent, the loudest element — it IS the payoff).
+<span class="eyebrow">Mobile</span>
+Grid collapses to one column; result block moves below the recipe, left-aligned; tick-row wraps.
+<span class="eyebrow">Classes</span>
+<code>.hs-example</code> <code>.hs-task</code> <code>.hs-recipe</code> <code>.hs-chip</code> <code>.hs-result</code> <code>.hs-next</code> <code>.hs-prog</code> <code>.hs-pct</code> <code>.hs-track</code> <code>.hs-fill</code>
+<span class="eyebrow">Interaction</span>
+On mount, animate each fill from 0 → its width (400ms, staggered 80ms) so users watch progress accrue — same bar they’ll see on every task row.
+</div>
+
+<!-- ================= B · PLAYFUL ================= -->
+<div class="frame" style="left:60px;top:960px">
+<span class="frame-tag">B · Playful — index-card stack</span>
+<button class="hm-close">✕</button>
+<span class="hm-eyebrow">Guide · Planner</span>
+<h1 class="hm-title">Plan work you can count</h1>
+<p class="hm-purpose">Units are countable pieces of a task — lectures, sheets, exams — never time. Finish one, tick one.</p>
+<ol class="hm-steps">
+<li>Add a course, then a task inside it.</li>
+<li>Give the task a unit label and a total.</li>
+<li>Log progress one unit at a time.</li>
+</ol>
+<div class="hm-sec"><span class="hm-eyebrow">Three ways students use units</span><hr></div>
+<div class="hp-stack">
+<div class="hp-card c1"><div class="hp-head"><span class="hp-task">Watch lectures</span><span class="hp-unit">unit · <b>Lecture</b> · 10 total</span></div>
+<div class="hp-row"><span class="hp-cell done">1</span><span class="hp-cell done">2</span><span class="hp-cell done">3</span><span class="hp-cell next">4</span><span class="hp-cell">5</span><span class="hp-cell">6</span><span class="hp-cell">7</span><span class="hp-cell">8</span><span class="hp-cell">9</span><span class="hp-cell">10</span></div>
+<div class="hp-caption">3 down, the glowing one is up next → <b>Next: Lecture 4 of 10</b></div>
+<div class="hs-prog" style="width:100%;margin-top:9px"><span class="hs-pct">30%</span><div class="hs-track"><div class="hs-fill" style="width:30%"></div></div></div></div>
+<div class="hp-card c2"><div class="hp-head"><span class="hp-task">Exercise sheets</span><span class="hp-unit">unit · <b>Sheet</b> · 14 total</span></div>
+<div class="hp-row"><span class="hp-cell done">1</span><span class="hp-cell done">2</span><span class="hp-cell done">3</span><span class="hp-cell done">4</span><span class="hp-cell done">5</span><span class="hp-cell done">6</span><span class="hp-cell next">7</span><span class="hp-cell">8</span><span class="hp-cell">9</span><span class="hp-cell">10</span><span class="hp-cell">11</span><span class="hp-cell">12</span><span class="hp-cell">13</span><span class="hp-cell">14</span></div>
+<div class="hp-caption">Halfway through the pile → <b>Next: Sheet 7 of 14</b></div>
+<div class="hs-prog" style="width:100%;margin-top:9px"><span class="hs-pct">43%</span><div class="hs-track"><div class="hs-fill" style="width:43%"></div></div></div></div>
+<div class="hp-card c3"><div class="hp-head"><span class="hp-task">Old exams</span><span class="hp-unit">unit · <b>Exam</b> · 5 total</span></div>
+<div class="hp-row"><span class="hp-cell done">1</span><span class="hp-cell next">2</span><span class="hp-cell">3</span><span class="hp-cell">4</span><span class="hp-cell">5</span></div>
+<div class="hp-caption">One solved, four to go → <b>Next: Exam 2 of 5</b></div>
+<div class="hs-prog" style="width:100%;margin-top:9px"><span class="hs-pct">20%</span><div class="hs-track"><div class="hs-fill" style="width:20%"></div></div></div></div>
+</div>
+<div class="hm-cta"><button class="hm-btn">Start tutorial →</button></div>
+</div>
+
+<div class="note" style="left:660px;top:960px">
+<h3>B · Playful / study-themed</h3>
+<span class="eyebrow">Layout</span>
+Each example is an “index card” with a tiny rotation (±0.6°), a colored top edge, and a row of numbered cells — like flashcards laid on a desk. Done cells are sage-filled, the <b>next</b> cell glows accent. Caption spells out the resulting display in plain words.
+<span class="eyebrow">Hierarchy</span>
+Serif task name → cell row (the visual explanation) → caption with the mono “Next: …” string → the app’s real progress bar, tying the teaching graphic back to what the task row actually shows.
+<span class="eyebrow">Mobile</span>
+Cells shrink to 18×22px and wrap to a second line for 14 units; rotations reset to 0 below 480px to save width.
+<span class="eyebrow">Classes</span>
+<code>.hp-card</code> <code>.hp-head</code> <code>.hp-unit</code> <code>.hp-row</code> <code>.hp-cell</code> (+<code>.done</code>/<code>.next</code>) <code>.hp-caption</code>
+<span class="eyebrow">Interaction</span>
+Cards lift 2px on hover (rotation eases to 0). Optional: clicking a cell in the example marks it done live — a 5-second sandbox that teaches the tick gesture before the tutorial.
+</div>
+
+<!-- ================= C · COMPACT ================= -->
+<div class="frame" style="left:60px;top:1940px">
+<span class="frame-tag">C · Very compact — ledger</span>
+<button class="hm-close">✕</button>
+<span class="hm-eyebrow">Guide · Planner</span>
+<h1 class="hm-title">Plan work you can count</h1>
+<p class="hm-purpose">Units are countable pieces of a task, not time. Set a label and a total; the Planner tells you what’s next.</p>
+<ol class="hm-steps">
+<li>Add a course, then a task inside it.</li>
+<li>Give the task a unit label and a total.</li>
+<li>Log progress one unit at a time.</li>
+</ol>
+<div class="hm-sec"><span class="hm-eyebrow">Examples</span><hr></div>
+<div class="hc-table">
+<div class="hc-head"><span>Task</span><span>Units</span><span>You’ll see</span></div>
+<div class="hc-row"><div class="hc-task"><span class="hs-dot" style="background:var(--accent)"></span>Watch lectures</div><div class="hc-units"><b>Lecture</b> · 10</div><span class="hc-next">Next: Lecture 4 of 10</span></div>
+<div class="hc-row"><div class="hc-task"><span class="hs-dot" style="background:var(--garden)"></span>Exercise sheets</div><div class="hc-units"><b>Sheet</b> · 14</div><span class="hc-next">Next: Sheet 7 of 14</span></div>
+<div class="hc-row"><div class="hc-task"><span class="hs-dot" style="background:var(--warn)"></span>Old exams</div><div class="hc-units"><b>Exam</b> · 5</div><span class="hc-next">Next: Exam 2 of 5</span></div>
+</div>
+<div class="hc-foot">A unit is anything you can finish and count — a lecture, a sheet, a past exam.</div>
+<div class="hm-cta"><button class="hm-btn">Start tutorial →</button></div>
+</div>
+
+<div class="note" style="left:660px;top:1940px">
+<h3>C · Very compact</h3>
+<span class="eyebrow">Layout</span>
+One bordered ledger, three columns: task · unit recipe · resulting “Next:” pill. Mono header row uses the app’s eyebrow style, so it reads as UI, not as a spreadsheet. One footnote line replaces per-example captions.
+<span class="eyebrow">Hierarchy</span>
+Rows are equal weight; the accent pill column carries the meaning. Whole section is ~140px tall — fits any guide without scrolling.
+<span class="eyebrow">Mobile</span>
+Below 440px: drop the header row; each row becomes two lines (task + recipe / pill), still ~1.5× denser than A.
+<span class="eyebrow">Classes</span>
+<code>.hc-table</code> <code>.hc-head</code> <code>.hc-row</code> <code>.hc-task</code> <code>.hc-units</code> <code>.hc-next</code> <code>.hc-foot</code>
+<span class="eyebrow">Interaction</span>
+Row hover uses the app’s <code>--hover</code> tint. Optional: hovering a row swaps the pill for that task’s progress bar from design A.
+</div>
+
+<!-- ================= RECOMMENDATION ================= -->
+<div class="rec" style="left:60px;top:2820px">
+<span class="hm-eyebrow" style="color:var(--accent)">Recommendation</span>
+<h2>Ship B for the Planner, C everywhere else</h2>
+<p><strong>B (index cards)</strong> is the best teacher for new users: the numbered-cell row makes “units are countable pieces” self-evident — you can literally see 3 done, 1 glowing next, 6 waiting — without reading a word. It also mirrors the exact gesture the tutorial teaches (tick one cell), so the modal and the app reinforce each other. The rotations and colored edges keep it friendly without leaving the app’s restrained dark style.</p>
+<p><strong>C (ledger)</strong> is the right default for other pages’ guides where examples are secondary — it’s dense, scannable, and trivially reusable as one component with a rows prop.</p>
+<p style="margin:0"><strong>A</strong> is the safe middle ground if you want a single component for all pages; its cause→effect split is clearer than B on very small screens.</p>
+</div>
+
+</body>
+</html>

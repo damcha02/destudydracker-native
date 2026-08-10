@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Study Tracker — A calmer way to run your semester</title>
+  <meta name="description" content="Study Tracker is a local-first desktop app that keeps your courses, exams, tasks, and focus sessions in one calm, organized place. Built with Tauri." />
+  <script>document.documentElement.className += ' js';</script>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237aa2e3' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 20A7 7 0 0 1 4 13c0-5 5-9 16-9 0 9-4 16-9 16z'/%3E%3Cpath d='M11 20c0-5 2-9 7-13'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <!-- Ambient background -->
+  <div class="ambient" aria-hidden="true">
+    <div class="orb orb-1" data-speed="0.06"></div>
+    <div class="orb orb-2" data-speed="0.09"></div>
+    <div class="orb orb-3" data-speed="0.04"></div>
+  </div>
+
+  <!-- ============================ NAV ============================ -->
+  <nav class="nav" id="nav">
+    <div class="wrap">
+      <a class="brand" href="#top" aria-label="Study Tracker home">
+        <span class="brand-mark">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 4 13c0-5 5-9 16-9 0 9-4 16-9 16z"/><path d="M11 20c0-5 2-9 7-13"/></svg>
+        </span>
+        <span class="brand-name">Study Tracker</span>
+      </a>
+      <div class="nav-links" id="navLinks">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#install">Install</a>
+        <a href="#download">Download</a>
+      </div>
+      <div class="nav-right">
+        <button class="icon-btn theme-toggle" id="themeToggle" aria-label="Toggle dark and light mode" title="Toggle theme">
+          <svg class="sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>
+          <svg class="moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.5 6.5 0 0 0 21 12.8z"/></svg>
+        </button>
+        <a class="icon-btn" href="https://github.com/damcha02/destudydracker" target="_blank" rel="noopener" aria-label="GitHub repository" title="GitHub">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1.5a10.5 10.5 0 0 0-3.32 20.46c.53.1.72-.23.72-.5v-1.8c-2.93.63-3.55-1.4-3.55-1.4-.48-1.22-1.17-1.55-1.17-1.55-.96-.65.07-.64.07-.64 1.06.08 1.62 1.1 1.62 1.1.94 1.62 2.47 1.15 3.07.88.1-.68.37-1.15.67-1.41-2.34-.27-4.8-1.17-4.8-5.2 0-1.15.41-2.09 1.09-2.83-.11-.27-.47-1.34.1-2.8 0 0 .89-.28 2.9 1.08a10 10 0 0 1 5.28 0c2-1.36 2.9-1.08 2.9-1.08.57 1.46.21 2.53.1 2.8.68.74 1.09 1.68 1.09 2.83 0 4.04-2.46 4.93-4.81 5.19.38.33.71.97.71 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/></svg>
+        </a>
+        <a class="btn btn-primary" href="https://github.com/damcha02/destudydracker/releases/latest" target="_blank" rel="noopener" style="padding:10px 18px;font-size:14px;">Download</a>
+        <button class="icon-btn nav-toggle" id="navToggle" aria-label="Open menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <span id="top"></span>
+
+  <!-- ============================ HERO ============================ -->
+  <header class="hero">
+    <div class="wrap">
+      <div class="hero-badge reveal">
+        <span class="dot"></span> LOCAL-FIRST · BUILT WITH TAURI
+      </div>
+      <h1 class="reveal">A calmer way to<br /><span class="grad">run your semester.</span></h1>
+      <p class="hero-sub reveal">Study Tracker keeps your courses, exams, tasks, and focus sessions in one quiet, organized desktop space — so you can spend less time managing your studies and more time doing them.</p>
+      <div class="hero-cta reveal">
+        <a class="btn btn-primary btn-lg" href="https://github.com/damcha02/destudydracker/releases/latest" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+          Download
+        </a>
+        <a class="btn btn-ghost btn-lg" href="#install">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+          How to install?
+        </a>
+      </div>
+      <div class="hero-meta reveal">
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg> Free &amp; open source</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 6v6c0 5 3.4 8 8 10 4.6-2 8-5 8-10V6z"/></svg> Your data stays on your machine</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg> Windows · macOS · Linux</span>
+      </div>
+
+      <div class="invite-card reveal" id="inviteCard" hidden>
+        <span class="eyebrow">Friend invite</span>
+        <h2 class="serif">You were invited to Study Tracker</h2>
+        <p>Download the app, open the Social tab, and add this player tag:</p>
+        <div class="invite-code-row">
+          <code id="inviteCode">----</code>
+          <button class="btn btn-ghost" id="copyInviteCode" type="button">Copy player tag</button>
+          <a class="btn btn-primary" href="#download">Download app</a>
+        </div>
+      </div>
+
+      <!-- App mockup. Replace the .app block with <img src="assets/screenshot.png"> to use a real screenshot. -->
+      <div class="mockup-stage reveal">
+        <div class="window" id="window">
+          <div class="win-bar">
+            <span class="win-dot r"></span><span class="win-dot y"></span><span class="win-dot g"></span>
+            <span class="win-title">Study Tracker</span>
+          </div>
+          <div class="app">
+            <div class="app-top">
+              <div class="app-brand">
+                <span class="m"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 4 13c0-5 5-9 16-9 0 9-4 16-9 16z"/><path d="M11 20c0-5 2-9 7-13"/></svg></span>
+                <span class="t">Study Tracker</span>
+              </div>
+              <div class="app-score"><span class="ring"></span><span class="v">78</span></div>
+            </div>
+            <div class="app-tabs">
+              <span class="tab">Dashboard</span>
+              <span class="tab on">Timer</span>
+              <span class="tab">Planner</span>
+              <span class="tab">Vault</span>
+            </div>
+            <div class="app-body">
+              <div class="app-card" style="display:flex;flex-direction:column;align-items:center;">
+                <span class="lbl" style="align-self:flex-start;">Deep Work · Analysis II</span>
+                <div class="timer-ring"><span class="time">38:12</span></div>
+                <span class="lbl" style="letter-spacing:.1em;">In session · 22m logged</span>
+              </div>
+              <div class="app-card app-stats">
+                <span class="lbl">Today</span>
+                <div class="stat-row"><span class="k"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Focused</span><span class="num">2h 45m</span></div>
+                <div class="stat-row"><span class="k"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c1 4 5 5 5 9a5 5 0 0 1-10 0c0-2 1-3 1.5-4 .8 1 1.5 1.2 2 1.2C10 6 11 4 12 2z"/></svg> Streak</span><span class="num">9 days</span></div>
+                <div style="margin-top:6px;">
+                  <div class="stat-row"><span class="k">Course health</span><span class="num" style="font-size:12px;color:var(--ink-4);">strong</span></div>
+                  <div class="barline"><i style="width:78%"></i></div>
+                </div>
+                <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:6px;">
+                  <span class="pill-tag" style="background:oklch(0.70 0.10 245 / .16);color:var(--accent);"><span class="cdot" style="background:var(--accent);"></span>Algorithms</span>
+                  <span class="pill-tag" style="background:oklch(0.80 0.13 70 / .16);color:var(--warn);"><span class="cdot" style="background:var(--warn);"></span>Physics exam · 6d</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================ WHY ============================ -->
+  <section class="values" id="why">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Why Study Tracker</span>
+        <h2 class="serif">Built to reduce friction, not add to it</h2>
+        <p>Most study tools are either a wall of features or a glorified to-do list. Study Tracker sits in between — structured enough to plan a whole semester, calm enough to actually use every day.</p>
+      </div>
+      <div class="value-grid">
+        <div class="value reveal">
+          <div class="vh"><span class="vi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><h3>One place for everything</h3></div>
+          <p>Courses, exams, tasks, and deadlines live together — no more scattered notes apps and spreadsheets.</p>
+        </div>
+        <div class="value reveal">
+          <div class="vh"><span class="vi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M12 5V3M9 3h6"/></svg></span><h3>Focused study sessions</h3></div>
+          <p>Pomodoro, Deep Work, or your own rhythm. Start a timer, log what you did, and watch the hours add up.</p>
+        </div>
+        <div class="value reveal">
+          <div class="vh"><span class="vi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13h6V4H4zM14 20h6v-9h-6zM14 7h6V4h-6zM4 20h6v-3H4z"/></svg></span><h3>Progress without clutter</h3></div>
+          <p>Clear health scores and trends tell you where you stand — without drowning you in dashboards.</p>
+        </div>
+        <div class="value reveal">
+          <div class="vh"><span class="vi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5z"/><path d="M2 12l10 5 10-5M2 17l10 5 10-5"/></svg></span><h3>Organized by semester</h3></div>
+          <p>Each term is its own clean slate. Roll forward, archive the past, and keep your headspace tidy.</p>
+        </div>
+        <div class="value reveal">
+          <div class="vh"><span class="vi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 4 13c0-5 5-9 16-9 0 9-4 16-9 16z"/><path d="M11 20c0-5 2-9 7-13"/></svg></span><h3>A calmer routine</h3></div>
+          <p>Gentle structure and soft visuals make planning feel less like a chore and more like a quiet ritual.</p>
+        </div>
+        <div class="value reveal">
+          <div class="vh"><span class="vi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg></span><h3>Your notes, your way</h3></div>
+          <p>Export sessions and notes into an Obsidian-style vault, or keep everything local — it's your workflow.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ FEATURES ============================ -->
+  <section id="features">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Features</span>
+        <h2 class="serif">Everything a semester needs</h2>
+        <p>Practical tools that work together — designed for students, refined for daily use.</p>
+      </div>
+      <div class="feat-grid">
+        <article class="card col-3 reveal">
+          <span class="ftag">Plan</span>
+          <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+          <h3>Semester &amp; course organization</h3>
+          <p>Spin up a new term, add your courses with their own colors, and keep every class neatly separated. Switching semesters is one click — no migration, no mess.</p>
+        </article>
+        <article class="card col-3 reveal">
+          <span class="ftag">Plan</span>
+          <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M7 14h5M7 17h8"/></svg></div>
+          <h3>Task &amp; exam planning</h3>
+          <p>Capture assignments and exams with priorities and due dates, then break them into study units you can actually schedule across the week.</p>
+        </article>
+        <article class="card col-2 reveal">
+          <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M12 5V3M9 3h6"/></svg></div>
+          <h3>Focus timer</h3>
+          <p>Pomodoro, Deep Work, Sprint, Exam, or a custom rhythm — with a reflection log for every session.</p>
+        </article>
+        <article class="card col-2 reveal">
+          <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13h6V4H4zM14 20h6v-9h-6zM14 7h6V4h-6zM4 20h6v-3H4z"/></svg></div>
+          <h3>Progress metrics</h3>
+          <p>Minutes focused, streaks, momentum, and course-health scores — the signal, not the noise.</p>
+        </article>
+        <article class="card col-2 reveal">
+          <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg></div>
+          <h3>Calendar &amp; timeline</h3>
+          <p>A month and week view with colored pills for tasks, exams, and deadlines — see the whole runway.</p>
+        </article>
+        <article class="card col-3 reveal">
+          <span class="ftag">Export</span>
+          <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 6v6c0 5 3.4 8 8 10 4.6-2 8-5 8-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
+          <h3>Vault &amp; notes export</h3>
+          <p>Send daily notes and session logs to an Obsidian-style vault, or keep them in plain local files. Your knowledge, in a format you own.</p>
+        </article>
+        <article class="card col-3 reveal">
+          <span class="ftag">Private</span>
+          <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M17 5l2 2M14 8l2 2"/></svg></div>
+          <h3>Local-first &amp; offline</h3>
+          <p>A real desktop app built with Tauri — fast, lightweight, and fully offline. Nothing syncs to a server unless you choose to export it.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ HOW TO USE ============================ -->
+  <section id="how">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">How it works</span>
+        <h2 class="serif">From empty to organized in five steps</h2>
+        <p>No tutorials, no setup wizards. Open the app and start where you are.</p>
+      </div>
+      <div class="steps">
+        <div class="step reveal"><div class="n">1</div><h3>Add your semesters</h3><p>Create the current term as your home base.</p></div>
+        <div class="step reveal"><div class="n">2</div><h3>Add courses &amp; tasks</h3><p>Drop in classes, assignments, and exam dates.</p></div>
+        <div class="step reveal"><div class="n">3</div><h3>Start a focus session</h3><p>Pick a timer, set a goal, and get to work.</p></div>
+        <div class="step reveal"><div class="n">4</div><h3>Review progress</h3><p>Check streaks, hours, and course health.</p></div>
+        <div class="step reveal"><div class="n">5</div><h3>Export your notes</h3><p>Send logs to your vault or keep them local.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ INSTALL ============================ -->
+  <section id="install">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">How to install</span>
+        <h2 class="serif">Up and running in a minute</h2>
+        <p>Choose your platform below. Study Tracker is new and unsigned, so your OS may show a one-time warning — here's exactly how to get past it safely.</p>
+      </div>
+      <div class="install-card reveal">
+        <div class="os-tabs" role="tablist">
+          <button class="os-tab on" role="tab" data-os="win" aria-selected="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.4 10.3 4.4v7.1H3zM10.3 12.5v7.1L3 18.6v-6.1zM11.4 4.2 21 3v8.5h-9.6zM21 12.5V21l-9.6-1.3v-7.2z"/></svg>
+            Windows
+          </button>
+          <button class="os-tab" role="tab" data-os="mac" aria-selected="false">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 2c.1 1.2-.4 2.3-1.1 3.1-.7.8-1.9 1.5-3 1.4-.1-1.1.4-2.3 1.1-3 .8-.9 2-1.5 3-1.5zM19.5 17c-.6 1.3-.9 1.9-1.6 3-1 1.6-2.5 3.6-4.3 3.6-1.6 0-2-1-4.2-1-2.1 0-2.6 1-4.2 1-1.8 0-3.2-1.8-4.2-3.4C-1 16.7-1.3 11 1.3 8.2 2.5 6.8 4.2 6 5.8 6c1.7 0 2.7 1 4.1 1 1.3 0 2.1-1 4.1-1 1.4 0 2.9.8 4 2.1-3.5 1.9-2.9 6.9 1.5 8.9z"/></svg>
+            macOS
+          </button>
+          <button class="os-tab" role="tab" data-os="linux" aria-selected="false">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-2 0-3 1.8-3 4 0 1.4.3 2.3.3 3.3 0 1.1-1.4 2.4-2.3 4.3-.8 1.7-1.7 3.4-1.7 4.8 0 1.6 1.2 2.3 2.6 2.6.3.6 1 1.1 2 1.4 1.4.4 3 .4 4.4 0 1-.3 1.7-.8 2-1.4 1.4-.3 2.6-1 2.6-2.6 0-1.4-.9-3.1-1.7-4.8-.9-1.9-2.3-3.2-2.3-4.3 0-1 .3-1.9.3-3.3 0-2.2-1-4-3-4zm-1.6 4.6c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9zm3.2 0c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9z"/></svg>
+            Linux
+          </button>
+        </div>
+
+        <!-- Windows -->
+        <div class="os-panel on" data-os="win">
+          <h3 class="serif">Windows</h3>
+          <p class="lead">Tested on Windows 10 and 11.</p>
+          <ol class="ol">
+            <li><span class="st">Download the <strong>Windows <code>.exe</code> installer</strong> from the latest GitHub release. Use <code>.msi</code> mainly for managed or admin deployments.</span></li>
+            <li><span class="st">Run the installer by double-clicking it.</span></li>
+            <li><span class="st">If <strong>Microsoft Defender SmartScreen</strong> appears, click <strong>More info</strong>.</span></li>
+            <li><span class="st">Then click <strong>Run anyway</strong> to continue the installation.</span></li>
+            <li><span class="st">Follow the prompts, then launch Study Tracker from the Start menu.</span></li>
+          </ol>
+          <div class="note">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+            <p><strong>Why does this happen?</strong> SmartScreen warns about apps it hasn't seen before. Study Tracker is new and not yet code-signed, so it gets flagged automatically — this is about reputation, not safety. The source is fully open on GitHub if you'd like to review it.</p>
+          </div>
+        </div>
+
+        <!-- macOS -->
+        <div class="os-panel" data-os="mac">
+          <h3 class="serif">macOS</h3>
+          <p class="lead">Works on supported Mac builds. Choose <code>aarch64.dmg</code> for Apple Silicon Macs and <code>x64.dmg</code> for Intel Macs.</p>
+          <ol class="ol">
+            <li><span class="st">Download the macOS <strong><code>.dmg</code></strong> file from the latest GitHub release.</span></li>
+            <li><span class="st">Open the <code>.dmg</code> and drag <strong>Study Tracker</strong> into your <strong>Applications</strong> folder.</span></li>
+            <li><span class="st">If macOS blocks it as being from an <strong>unidentified developer</strong>, open <strong>Applications</strong>, right-click the app, and choose <strong>Open</strong>.</span></li>
+            <li><span class="st">Confirm by clicking <strong>Open</strong> in the dialog. You only need to do this once.</span></li>
+            <li><span class="st">If macOS says the app is damaged, open Terminal and run <code>xattr -dr com.apple.quarantine "/Applications/Study Tracker.app"</code>, then run <code>open "/Applications/Study Tracker.app"</code>.</span></li>
+          </ol>
+          <div class="note">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+            <p><strong>Why does this happen?</strong> Study Tracker is currently not Apple-notarized. Gatekeeper may show either an unidentified-developer warning or a damaged-app warning for downloaded unsigned apps. Right-click → Open or removing the quarantine flag tells macOS you trust this copy.</p>
+          </div>
+        </div>
+
+        <!-- Linux -->
+        <div class="os-panel" data-os="linux">
+          <h3 class="serif">Linux</h3>
+          <p class="lead">Available as <code>.deb</code> and <code>.rpm</code> for common package families. Arch, Hyprland-heavy setups, and unsupported distributions should build from source for now.</p>
+          <div class="distro-picker" aria-label="Choose your Linux distribution">
+            <button class="distro-option on" type="button" data-distro="debian" aria-pressed="true">Ubuntu / Debian</button>
+            <button class="distro-option" type="button" data-distro="fedora" aria-pressed="false">Fedora / openSUSE</button>
+            <button class="distro-option" type="button" data-distro="arch" aria-pressed="false">Arch / Other</button>
+          </div>
+          <div class="distro-panels">
+            <div class="distro-panel on" data-distro="debian">
+              <strong>Download the <code>amd64.deb</code> file</strong>
+              <span>Best for Ubuntu, Debian, Linux Mint, Pop!_OS, Zorin, and similar distributions.</span>
+            </div>
+            <div class="distro-panel" data-distro="fedora">
+              <strong>Download the <code>x86_64.rpm</code> file</strong>
+              <span>Best for Fedora, RHEL-based distributions, and openSUSE.</span>
+            </div>
+            <div class="distro-panel" data-distro="arch">
+              <strong>Build from source</strong>
+              <span>Recommended for Arch, Manjaro, EndeavourOS, NixOS, Void, Gentoo, Hyprland-heavy setups, and unknown Linux distributions.</span>
+            </div>
+          </div>
+          <ol class="ol">
+            <li><span class="st">For Ubuntu/Debian or Fedora/openSUSE, download the recommended Linux file from the latest GitHub release.</span></li>
+            <li><span class="st"><strong>.deb:</strong> install with <code>sudo apt install ./Study.Tracker_*_amd64.deb</code>.</span></li>
+            <li><span class="st"><strong>.rpm:</strong> install with <code>sudo dnf install ./Study.Tracker-*.x86_64.rpm</code>.</span></li>
+            <li><span class="st"><strong>Arch / other:</strong> build from source with <code>git clone https://github.com/damcha02/destudydracker.git</code>, <code>cd destudydracker/desktop</code>, <code>npm install</code>, and <code>npm run tauri:build</code>. Start it with <code>./src-tauri/target/release/app</code>.</span></li>
+            <li><span class="st">To update a source build later, run <code>git pull</code>, <code>npm install</code>, and <code>npm run tauri:build</code>, then start the app again.</span></li>
+          </ol>
+          <div class="note">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+            <p><strong>Tip:</strong> if you are not on ARM, avoid files named <code>aarch64</code> or <code>arm64</code>. Choose <code>amd64</code>, <code>x86_64</code>, or <code>x64</code> for normal Intel/AMD PCs. AppImage builds are provided as a fallback, but source builds are recommended on Arch, Hyprland, and unsupported distributions.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ DOWNLOAD ============================ -->
+  <section class="download" id="download">
+    <div class="wrap">
+      <div class="cta reveal">
+        <span class="eyebrow">Get started</span>
+        <h2>Download Study Tracker</h2>
+        <p>Free, open source, and local-first. Grab the latest release and pick the file that matches your operating system.</p>
+        <a class="btn btn-primary btn-lg" href="https://github.com/damcha02/destudydracker/releases/latest" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+          Download for your platform
+        </a>
+        <p class="os-hint">WINDOWS · MACOS · LINUX — CHOOSE YOUR FILE ON THE RELEASES PAGE</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ FOOTER ============================ -->
+  <footer>
+    <div class="wrap">
+      <div class="foot">
+        <div class="foot-brand">
+          <a class="brand" href="#top">
+            <span class="brand-mark"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 4 13c0-5 5-9 16-9 0 9-4 16-9 16z"/><path d="M11 20c0-5 2-9 7-13"/></svg></span>
+            <span class="brand-name">Study Tracker</span>
+          </a>
+          <p>A calmer, local-first way to organize your semester — courses, exams, focus sessions, and progress in one quiet place.</p>
+        </div>
+        <div class="foot-cols">
+          <div class="foot-col">
+            <h4>Product</h4>
+            <a href="#features">Features</a>
+            <a href="#how">How it works</a>
+            <a href="#install">Install</a>
+            <a href="#download">Download</a>
+          </div>
+          <div class="foot-col">
+            <h4>Project</h4>
+            <a href="https://github.com/damcha02/destudydracker" target="_blank" rel="noopener">GitHub</a>
+            <a href="https://github.com/damcha02/destudydracker/releases/latest" target="_blank" rel="noopener">Releases</a>
+            <a href="https://github.com/damcha02/destudydracker/issues" target="_blank" rel="noopener">Report an issue</a>
+          </div>
+        </div>
+      </div>
+      <div class="foot-bottom">
+        <p>© <span id="year">2026</span> Study Tracker. Released under an open-source license.</p>
+        <span class="built">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
+          BUILT WITH TAURI
+        </span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>

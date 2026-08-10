@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN avatar_size_bytes INTEGER NOT NULL DEFAULT 0;

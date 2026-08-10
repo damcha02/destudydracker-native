@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  secret-scan:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }} # Only required for Organizations, not personal accounts.
+
+  release:
+    needs: secret-scan
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin --bundles app,dmg"
+            rustTargets: "aarch64-apple-darwin"
+          - platform: macos-latest
+            args: "--target x86_64-apple-darwin --bundles app,dmg"
+            rustTargets: "x86_64-apple-darwin"
+          - platform: ubuntu-22.04
+            args: "--bundles deb,rpm,appimage"
+            rustTargets: ""
+          - platform: windows-latest
+            args: "--bundles nsis,msi"
+            rustTargets: ""
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libfuse2
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rustTargets }}
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: desktop
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITE_SOCIAL_API_URL: "https://study-tracker-social.danil-poluyanov13.workers.dev"
+          STUDY_TRACKER_OFFICIAL_RELEASE: "1"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: "Study Tracker ${{ github.ref_name }}"
+          releaseBody: |
+            ## Which File Should I Download?
+
+            Windows users should download the `.exe` installer.  
+            If the `.exe` does not work for you, use the `.msi` installer instead.
+
+            macOS users:
+            - Apple Silicon Macs (M1, M2, M3, M4, M5): download the `aarch64.dmg`.
+            - Intel Macs: download the `x64.dmg` / `x86_64.dmg`.
+
+            Linux users:
+            - Debian, Ubuntu, Linux Mint, Pop!_OS, Zorin, and similar: download the `.deb`.
+            - Fedora, openSUSE, RHEL, and similar: download the `.rpm`.
+            - Arch, Manjaro, EndeavourOS, NixOS, Void, Gentoo, Hyprland-heavy setups, and unknown distros: build from source for now.
+
+            Build from source:
+
+            ```bash
+            git clone https://github.com/damcha02/destudydracker.git
+            cd destudydracker/desktop
+            npm install
+            npm run tauri:build
+            ./src-tauri/target/release/app
+            ```
+
+            Update a source build later:
+
+            ```bash
+            git pull
+            npm install
+            npm run tauri:build
+            ./src-tauri/target/release/app
+            ```
+
+            Note: AppImage builds are provided as a fallback, but they may not work reliably on some Wayland/Hyprland systems.
+
+            You can ignore `.sig` files. They are used internally by the app updater to verify downloads.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
