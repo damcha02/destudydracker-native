@@ -23,6 +23,8 @@ export component LinearProgress inherits Rectangle {
 export component RingProgress inherits Rectangle {
     in property <float> progress;
     in property <string> label;
+    in property <string> caption: "demo";
+    in property <color> accent: Theme.primary;
     private property <float> clamped: max(0.0, min(1.0, root.progress));
     private property <angle> angle: root.clamped * 360deg - 90deg;
     private property <float> end-x: 50.0 + 40.0 * Math.cos(root.angle);
@@ -52,7 +54,7 @@ export component RingProgress inherits Rectangle {
         height: parent.height;
         viewbox-width: 100;
         viewbox-height: 100;
-        stroke: Theme.primary;
+        stroke: root.accent;
         stroke-width: 10px;
         fill: transparent;
         stroke-line-cap: round;
@@ -73,7 +75,7 @@ export component RingProgress inherits Rectangle {
         height: parent.height;
         viewbox-width: 100;
         viewbox-height: 100;
-        stroke: Theme.primary;
+        stroke: root.accent;
         stroke-width: 10px;
         fill: transparent;
         commands: "M 50 10 A 40 40 0 1 1 49.9 10";
@@ -93,7 +95,7 @@ export component RingProgress inherits Rectangle {
     Text {
         width: parent.width;
         y: 68px;
-        text: root.width < 70px ? "" : "demo";
+        text: root.width < 70px ? "" : root.caption;
         horizontal-alignment: center;
         font-size: root.caption-size;
         color: Theme.text-secondary;

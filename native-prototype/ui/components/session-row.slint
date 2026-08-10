@@ -1,0 +1,21 @@
+import { Theme } from "../theme.slint";
+
+export component SessionRow inherits Rectangle {
+    in property <string> title;
+    in property <string> detail;
+    in property <int> minutes;
+    in property <int> confidence;
+
+    height: 86px;
+    border-radius: Theme.radius-md;
+    background: Theme.surface-inset;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    Rectangle { x: 0px; y: 12px; width: 3px; height: parent.height - 24px; border-radius: 2px; background: Theme.primary; }
+
+    Text { x: 16px; y: 13px; text: root.title; font-size: Theme.text-sm; font-weight: 800; color: Theme.text-primary; }
+    Text { x: 16px; y: 36px; width: parent.width - 96px; text: root.detail; font-size: 11px; color: Theme.text-secondary; overflow: elide; }
+    Text { x: parent.width - 76px; y: 13px; width: 60px; text: root.minutes + "m"; horizontal-alignment: right; font-size: Theme.text-md; font-weight: 800; color: Theme.primary-hover; }
+    Text { x: parent.width - 76px; y: 40px; width: 60px; text: root.confidence + "/5"; horizontal-alignment: right; font-size: 11px; color: Theme.text-muted; }
+}

@@ -2,396 +2,294 @@ import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { DemoButton, ButtonVariant } from "components/button.slint";
 import { DemoCard } from "components/card.slint";
-import { LinearProgress, RingProgress } from "components/progress.slint";
+import { LinearProgress } from "components/progress.slint";
+import { AppSidebar } from "components/sidebar.slint";
+import { PresetCard } from "components/preset-card.slint";
+import { SessionRow } from "components/session-row.slint";
+import { TimerDisplay } from "components/timer-display.slint";
 
-export struct ProgressExampleData {
+export struct TimerModeData {
     label: string,
-    progress: float,
-    percent: int,
+    detail: string,
+    selected: bool,
+    enabled: bool,
+    tone: int,
+    index: int,
 }
 
-export struct DemoRowData {
+export struct SessionNoteData {
     title: string,
     detail: string,
-    progress: float,
-    percent: int,
+    minutes: int,
+    confidence: int,
 }
 
-component ProgressTile inherits Rectangle {
-    in property <ProgressExampleData> entry;
+component MetricPill inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
 
-    height: 58px;
-    border-radius: Theme.radius-md;
-    background: Theme.card;
+    height: 72px;
+    border-radius: Theme.radius-lg;
+    background: Theme.surface-inset;
     border-width: 1px;
     border-color: Theme.border;
 
-    RingProgress {
-        x: 12px;
-        y: 6px;
-        width: 46px;
-        height: 46px;
-        progress: root.entry.progress;
-        label: root.entry.percent + "%";
-    }
-
-    Text {
-        x: 72px;
-        y: 9px;
-        text: root.entry.label;
-        font-size: Theme.text-md;
-        font-weight: 700;
-        color: Theme.text-primary;
-    }
-
-    LinearProgress {
-        x: 72px;
-        y: 34px;
-        width: parent.width - 92px;
-        progress: root.entry.progress;
-    }
+    Text { x: 16px; y: 13px; text: root.label; font-size: 11px; letter-spacing: 1.5px; color: Theme.text-muted; }
+    Text { x: 16px; y: 36px; text: root.value; font-size: Theme.text-lg; font-weight: 800; color: Theme.text-primary; }
 }
 
-component ScrollRow inherits Rectangle {
-    in property <DemoRowData> entry;
+component TimerModeTile inherits Rectangle {
+    in property <TimerModeData> entry;
+    callback selected(int);
 
-    height: 84px;
-    border-radius: Theme.radius-md;
-    background: Theme.card;
-    border-width: 1px;
-    border-color: Theme.border;
+    height: 64px;
 
-    Text {
-        x: Theme.spacing-md;
-        y: 12px;
-        text: root.entry.title;
-        font-size: Theme.text-md;
-        font-weight: 800;
-        color: Theme.text-primary;
-    }
-
-    Text {
-        x: Theme.spacing-md;
-        y: 34px;
-        width: parent.width - 2 * Theme.spacing-md;
-        text: root.entry.detail;
-        font-size: Theme.text-sm;
-        color: Theme.text-secondary;
-        overflow: elide;
-    }
-
-    LinearProgress {
-        x: Theme.spacing-md;
-        y: 61px;
-        width: parent.width - 84px;
-        progress: root.entry.progress;
-    }
-
-    Text {
-        x: parent.width - 58px;
-        y: 57px;
-        text: root.entry.percent + "%";
-        font-size: Theme.text-sm;
-        font-weight: 700;
-        color: Theme.text-secondary;
+    PresetCard {
+        width: 100%;
+        height: 100%;
+        label: root.entry.label;
+        detail: root.entry.detail;
+        selected: root.entry.selected;
+        enabled: root.entry.enabled;
+        clicked => { root.selected(root.entry.index); }
     }
 }
 
 export component MainWindow inherits Window {
     in property <string> app-title;
     in property <string> status-text;
+    in property <string> timer-text;
+    in property <string> status-label;
+    in property <string> context-title;
+    in property <string> context-detail;
+    in property <string> mode-label;
+    in property <string> mode-detail;
     in property <int> selected-mode;
-    in property <string> selected-mode-label;
-    in property <float> demo-progress;
-    in property <string> demo-progress-label;
-    in property <bool> controls-enabled;
-    in property <int> activation-count;
-    in property <[ProgressExampleData]> progress-examples;
-    in property <[DemoRowData]> scroll-rows;
+    in property <int> phase-tone;
+    in property <bool> running;
+    in property <bool> completed;
+    in property <float> timer-progress;
+    in property <string> remaining-label;
+    in property <string> elapsed-label;
+    in property <string> total-label;
+    in property <[TimerModeData]> modes;
+    in property <[SessionNoteData]> session-notes;
 
-    callback activate-primary();
-    callback toggle-enabled();
+    callback toggle-timer();
+    callback reset-timer();
     callback select-mode(int);
-    callback set-progress(int);
-    callback increase-progress();
+
+    private property <color> timer-accent: root.phase-tone == 2 ? Theme.warning : root.phase-tone == 3 ? Theme.accent : Theme.primary;
+    private property <length> shell-padding: root.width < 980px ? 18px : 28px;
+    private property <length> sidebar-width: root.width < 980px ? 0px : 220px;
+    private property <length> content-x: root.shell-padding + root.sidebar-width + (root.sidebar-width > 0px ? 22px : 0px);
+    private property <length> rail-width: root.width < 1040px ? 0px : 318px;
+    private property <length> main-width: root.width - root.content-x - root.shell-padding - root.rail-width - (root.rail-width > 0px ? 22px : 0px);
+    private property <length> timer-size: min(300px, max(236px, root.main-width - 120px));
 
     title: root.app-title;
-    width: 1180px;
-    height: 780px;
+    width: 1220px;
+    height: 820px;
     background: Theme.background;
 
-    Rectangle {
-        width: parent.width;
-        height: parent.height;
-        background: Theme.background;
+    forward-focus: shortcut-scope;
 
-        Rectangle {
-            x: parent.width - 420px;
-            y: -180px;
-            width: 520px;
-            height: 520px;
-            border-radius: 260px;
-            background: #173c43;
-            opacity: 0.52;
+    shortcut-scope := FocusScope {
+        width: 100%;
+        height: 100%;
+        focus-on-click: true;
+
+        key-pressed(event) => {
+            if event.text == Key.Space {
+                root.toggle-timer();
+                accept
+            } else if event.text == "r" || event.text == "R" {
+                root.reset-timer();
+                accept
+            } else { reject }
         }
 
         Rectangle {
-            x: Theme.spacing-lg;
-            y: Theme.spacing-lg;
-            width: parent.width - 2 * Theme.spacing-lg;
-            height: parent.height - 2 * Theme.spacing-lg;
-            border-radius: Theme.radius-lg;
-            background: Theme.surface;
-            border-width: 1px;
-            border-color: Theme.border;
+            width: 100%;
+            height: 100%;
+            background: Theme.background;
 
-            Text {
-                x: 30px;
-                y: 24px;
-                text: root.app-title;
-                font-size: Theme.text-xl;
-                font-weight: 800;
-                color: Theme.text-primary;
-            }
+        Rectangle { x: parent.width - 420px; y: -170px; width: 560px; height: 420px; border-radius: 260px; background: #263f67; opacity: 0.32; }
+        Rectangle { x: 180px; y: parent.height - 170px; width: 360px; height: 260px; border-radius: 180px; background: #23452f; opacity: 0.18; }
 
-            Text {
-                x: 32px;
-                y: 64px;
-                text: root.status-text;
-                font-size: Theme.text-md;
-                color: Theme.text-secondary;
-            }
+        if root.sidebar-width > 0px: AppSidebar {
+            x: root.shell-padding;
+            y: root.shell-padding;
+            width: root.sidebar-width;
+            height: parent.height - 2 * root.shell-padding;
+        }
 
-            DemoCard {
-                x: 28px;
-                y: 106px;
-                width: 390px;
-                height: 306px;
-                title: "Custom buttons";
-                subtitle: "DemoState controls are separate from the component-only disabled example.";
-                emphasized: true;
+        ScrollView {
+            x: root.content-x;
+            y: root.shell-padding;
+            width: root.main-width;
+            height: parent.height - 2 * root.shell-padding;
+            viewport-width: self.width;
+            viewport-height: 704px;
+            vertical-scrollbar-policy: root.height < 760px ? always-on : as-needed;
+            horizontal-scrollbar-policy: always-off;
 
-                HorizontalLayout {
-                    x: Theme.spacing-md;
+            Rectangle {
+                width: parent.viewport-width;
+                height: 704px;
+                background: transparent;
+
+                Text { x: 0px; y: 4px; text: "Focus timer"; font-size: 30px; font-weight: 700; color: Theme.text-primary; }
+                Text { x: 1px; y: 44px; width: parent.width - 2px; text: "Pick a rhythm, press start, and let the rest fade away."; font-size: Theme.text-md; color: Theme.text-secondary; }
+
+                DemoCard {
+                    x: 0px;
                     y: 92px;
-                    width: parent.width - 2 * Theme.spacing-md;
-                    height: 42px;
-                    spacing: Theme.spacing-sm;
+                    width: parent.width;
+                    height: 612px;
+                    title: "Start a focus block";
+                    subtitle: "Keep the default view simple. Link course and reflection only when you need it.";
+                    emphasized: true;
 
-                    DemoButton {
-                        text: "Primary";
-                        helper-text: "adds activation";
-                        enabled: root.controls-enabled;
-                        clicked => { root.activate-primary(); }
-                    }
+                    Rectangle { x: 0px; y: 74px; width: parent.width; height: 1px; background: Theme.border; }
 
-                    DemoButton {
-                        text: "Subtle +10%";
-                        helper-text: "updates progress";
-                        variant: ButtonVariant.secondary;
-                        enabled: root.controls-enabled;
-                        clicked => { root.increase-progress(); }
-                    }
-                }
-
-                HorizontalLayout {
-                    x: Theme.spacing-md;
-                    y: 148px;
-                    width: parent.width - 2 * Theme.spacing-md;
-                    height: 42px;
-                    spacing: Theme.spacing-sm;
-
-                    DemoButton {
-                        text: root.controls-enabled ? "Disable demo" : "Enable demo";
-                        helper-text: "toggle stays active";
-                        variant: ButtonVariant.secondary;
-                        clicked => { root.toggle-enabled(); }
-                    }
-
-                    DemoButton {
-                        text: "Always disabled";
-                        helper-text: "component example";
-                        enabled: false;
-                    }
-                }
-
-                Rectangle {
-                    x: Theme.spacing-md;
-                    y: 204px;
-                    width: parent.width - 2 * Theme.spacing-md;
-                    height: 24px;
-                    border-radius: 12px;
-                    background: root.controls-enabled ? #17342f : #34262a;
-                    border-width: 1px;
-                    border-color: root.controls-enabled ? Theme.primary : #d17a7a;
-
-                    animate background, border-color { duration: Theme.transition-fast; easing: ease-out; }
-
-                    Text {
-                        width: parent.width;
-                        height: parent.height;
-                        text: root.controls-enabled ? "DemoState: enabled - governed controls are active" : "DemoState: disabled - governed controls are inactive";
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        font-size: Theme.text-sm;
-                        font-weight: 700;
-                        color: root.controls-enabled ? Theme.primary-hover : #ffd0d0;
-                    }
-                }
-
-                Text {
-                    x: Theme.spacing-md;
-                    y: 242px;
-                    text: "Primary activations: " + root.activation-count;
-                    font-size: Theme.text-md;
-                    font-weight: 700;
-                    color: Theme.text-primary;
-                }
-
-                Text {
-                    x: Theme.spacing-md;
-                    y: 270px;
-                    text: "Current mode: " + root.selected-mode-label + " | Progress: " + root.demo-progress-label;
-                    font-size: Theme.text-sm;
-                    color: Theme.text-secondary;
-                }
-            }
-
-            DemoCard {
-                x: 440px;
-                y: 106px;
-                width: 342px;
-                height: 306px;
-                title: "Rust-owned state";
-                subtitle: "UI events call Rust commands, then the adapter refreshes Slint properties.";
-
-                RingProgress {
-                    x: 28px;
-                    y: 84px;
-                    progress: root.demo-progress;
-                    label: root.demo-progress-label;
-                }
-
-                LinearProgress {
-                    x: 162px;
-                    y: 118px;
-                    width: 146px;
-                    progress: root.demo-progress;
-                }
-
-                VerticalLayout {
-                    x: 162px;
-                    y: 152px;
-                    width: 146px;
-                    height: 112px;
-                    spacing: 8px;
-
-                    DemoButton { text: "25%"; height: 32px; variant: ButtonVariant.secondary; enabled: root.controls-enabled; clicked => { root.set-progress(25); } }
-                    DemoButton { text: "65%"; height: 32px; variant: ButtonVariant.secondary; enabled: root.controls-enabled; clicked => { root.set-progress(65); } }
-                    DemoButton { text: "90%"; height: 32px; variant: ButtonVariant.secondary; enabled: root.controls-enabled; clicked => { root.set-progress(90); } }
-                }
-
-                Text {
-                    x: 28px;
-                    y: 270px;
-                    width: parent.width - 56px;
-                    text: root.controls-enabled ? "Progress buttons are governed by DemoState." : "Progress buttons are disabled until DemoState is enabled.";
-                    font-size: Theme.text-sm;
-                    color: root.controls-enabled ? Theme.text-secondary : #ffd0d0;
-                    horizontal-alignment: center;
-                }
-            }
-
-            DemoCard {
-                x: 804px;
-                y: 106px;
-                width: parent.width - 832px;
-                height: 306px;
-                title: "Image / icon path";
-                subtitle: "Small local SVG asset rendered at multiple sizes. The second copy tests colorize tinting.";
-                emphasized: true;
-
-                Image {
-                    x: 28px;
-                    y: 96px;
-                    width: 82px;
-                    height: 82px;
-                    source: @image-url("../assets/seedling.svg");
-                    image-fit: contain;
-                }
-
-                Image {
-                    x: 132px;
-                    y: 104px;
-                    width: 64px;
-                    height: 64px;
-                    source: @image-url("../assets/seedling.svg");
-                    image-fit: contain;
-                    colorize: Theme.accent;
-                }
-
-                Text {
-                    x: 28px;
-                    y: 204px;
-                    width: parent.width - 56px;
-                    text: "SVG stayed local to native-prototype. No icon framework added.";
-                    wrap: word-wrap;
-                    font-size: Theme.text-sm;
-                    color: Theme.text-secondary;
-                }
-            }
-
-            DemoCard {
-                x: 28px;
-                y: 422px;
-                width: 512px;
-                height: parent.height - 454px;
-                title: "Progress indicators";
-                subtitle: "Linear and ring components share a continuous progress API.";
-
-                VerticalLayout {
-                    x: Theme.spacing-md;
-                    y: 82px;
-                    width: parent.width - 2 * Theme.spacing-md;
-                    spacing: Theme.spacing-sm;
-
-                    for entry in root.progress-examples: ProgressTile {
-                        entry: entry;
-                    }
-                }
-            }
-
-            DemoCard {
-                x: 562px;
-                y: 422px;
-                width: parent.width - 590px;
-                height: parent.height - 454px;
-                title: "Scrollable cards";
-                subtitle: "Bounded ScrollView with clipped repeated rows.";
-                emphasized: true;
-
-                ScrollView {
-                    x: Theme.spacing-md;
-                    y: 82px;
-                    width: parent.width - 2 * Theme.spacing-md;
-                    height: parent.height - 104px;
-                    viewport-width: self.width - 12px;
-                    viewport-height: 14 * 94px;
-                    vertical-scrollbar-policy: always-on;
-                    horizontal-scrollbar-policy: always-off;
-
-                    VerticalLayout {
-                        x: 0px;
-                        y: 0px;
-                        width: parent.viewport-width;
+                    HorizontalLayout {
+                        x: Theme.spacing-md;
+                        y: 94px;
+                        width: parent.width - 2 * Theme.spacing-md;
+                        height: 64px;
                         spacing: 10px;
 
-                        for row in root.scroll-rows: ScrollRow {
-                            entry: row;
+                        for entry in root.modes: TimerModeTile {
+                            entry: entry;
+                            selected(index) => {
+                                root.select-mode(index);
+                                start-button.focus();
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        x: Theme.spacing-md;
+                        y: 178px;
+                        width: parent.width - 2 * Theme.spacing-md;
+                        height: 70px;
+                        border-radius: Theme.radius-lg;
+                        background: Theme.surface-inset;
+                        border-width: 1px;
+                        border-color: Theme.border;
+
+                        Text { x: 18px; y: 12px; text: root.context-title; font-size: Theme.text-md; font-weight: 800; color: Theme.text-primary; }
+                        Text { x: 18px; y: 38px; width: parent.width - 36px; text: root.context-detail; font-size: Theme.text-sm; color: Theme.text-secondary; overflow: elide; }
+                    }
+
+                    Rectangle {
+                        x: 0px;
+                        y: 248px;
+                        width: parent.width;
+                        height: 300px;
+                        background: transparent;
+
+                        TimerDisplay {
+                            x: (parent.width - root.timer-size) / 2;
+                            y: 0px;
+                            width: root.timer-size;
+                            height: root.timer-size;
+                            timer-text: root.timer-text;
+                            status-label: root.status-label;
+                            mode-label: root.mode-label;
+                            context-title: root.completed ? "Session complete" : root.context-title;
+                            progress: root.timer-progress;
+                            accent: root.timer-accent;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        x: Theme.spacing-md;
+                        y: 548px;
+                        width: parent.width - 2 * Theme.spacing-md;
+                        height: 52px;
+                        spacing: 12px;
+                        alignment: center;
+
+                        start-button := DemoButton {
+                            width: 190px;
+                            height: 52px;
+                            text: root.running ? "Pause" : root.completed ? "Start again" : root.status-label == "Paused" ? "Resume" : "Start";
+                            helper-text: "Space shortcut";
+                            clicked => { root.toggle-timer(); }
+                        }
+                        DemoButton {
+                            width: 110px;
+                            height: 52px;
+                            text: "Reset";
+                            helper-text: "R shortcut";
+                            variant: ButtonVariant.secondary;
+                            clicked => { root.reset-timer(); }
                         }
                     }
                 }
             }
         }
+
+        if root.rail-width > 0px: Rectangle {
+            x: root.content-x + root.main-width + 22px;
+            y: root.shell-padding;
+            width: root.rail-width;
+            height: parent.height - 2 * root.shell-padding;
+            background: transparent;
+
+            DemoCard {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: 238px;
+                title: "Session status";
+                subtitle: root.status-text;
+
+                VerticalLayout {
+                    x: Theme.spacing-md;
+                    y: 84px;
+                    width: parent.width - 2 * Theme.spacing-md;
+                    spacing: 10px;
+
+                    MetricPill { label: "REMAINING"; value: root.remaining-label; }
+                    MetricPill { label: "ELAPSED / TOTAL"; value: root.elapsed-label + " / " + root.total-label; }
+                }
+            }
+
+            DemoCard {
+                x: 0px;
+                y: 260px;
+                width: parent.width;
+                height: parent.height - 260px;
+                title: "Your focus log";
+                subtitle: "Recent sessions shown as representative local data.";
+                emphasized: true;
+
+                VerticalLayout {
+                    x: Theme.spacing-md;
+                    y: 86px;
+                    width: parent.width - 2 * Theme.spacing-md;
+                    spacing: 10px;
+
+                    for note in root.session-notes: SessionRow {
+                        title: note.title;
+                        detail: note.detail;
+                        minutes: note.minutes;
+                        confidence: note.confidence;
+                    }
+                }
+
+                LinearProgress {
+                    x: Theme.spacing-md;
+                    y: parent.height - 42px;
+                    width: parent.width - 2 * Theme.spacing-md;
+                    progress: 0.68;
+                }
+                Text { x: Theme.spacing-md; y: parent.height - 24px; text: "Daily goal progress"; font-size: 11px; color: Theme.text-muted; }
+            }
+        }
+    }
     }
 }

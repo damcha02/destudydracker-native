@@ -1,0 +1,75 @@
+import { Theme } from "../theme.slint";
+import { RingProgress } from "progress.slint";
+
+export component TimerDisplay inherits Rectangle {
+    in property <string> timer-text;
+    in property <string> status-label;
+    in property <string> mode-label;
+    in property <string> context-title;
+    in property <float> progress;
+    in property <color> accent: Theme.primary;
+
+    width: 360px;
+    height: 360px;
+    background: transparent;
+
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        border-radius: parent.width / 2;
+        background: Theme.surface;
+        border-width: 1px;
+        border-color: Theme.border;
+    }
+
+    RingProgress {
+        width: parent.width;
+        height: parent.height;
+        progress: root.progress;
+        label: "";
+        caption: "";
+        accent: root.accent;
+    }
+
+    Text {
+        y: parent.height / 2 - 52px;
+        width: parent.width;
+        text: root.timer-text;
+        horizontal-alignment: center;
+        font-size: parent.width < 300px ? 46px : 66px;
+        font-weight: 600;
+        letter-spacing: -3px;
+        color: Theme.text-primary;
+    }
+
+    Text {
+        y: parent.height / 2 + 28px;
+        width: parent.width;
+        text: root.status-label;
+        horizontal-alignment: center;
+        font-size: Theme.text-sm;
+        letter-spacing: 2px;
+        color: Theme.text-muted;
+    }
+
+    Text {
+        y: parent.height / 2 - 98px;
+        width: parent.width;
+        text: root.mode-label;
+        horizontal-alignment: center;
+        font-size: Theme.text-sm;
+        font-weight: 800;
+        color: root.accent;
+    }
+
+    Text {
+        y: parent.height / 2 + 58px;
+        width: parent.width;
+        text: root.context-title;
+        horizontal-alignment: center;
+        font-size: 12px;
+        color: Theme.text-secondary;
+    }
+}

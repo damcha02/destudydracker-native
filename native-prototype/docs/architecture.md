@@ -83,3 +83,21 @@ The ring progress component keeps all trigonometry and path arc details private.
 Animations remain event-driven and finite. Button color transitions and progress width/path endpoint changes animate only when state changes, hover changes, or a user interaction updates model-owned demo state. Stage 3 does not use timers, perpetual animation iteration, `animation-tick()`, or background redraw loops.
 
 The demo state remains in `src/app_model.rs`. UI events call callbacks in `main.rs`, which applies plain Rust commands and refreshes Slint properties from the model snapshot. No production Study Tracker timer, dashboard, persistence, social, tray, updater, or Cloudflare logic is included.
+
+## Stage 4 Timer Screen
+
+Stage 4 uses the production Study Tracker only as visual and behavioral reference. The inspected files were:
+
+- `desktop/src/App.tsx`, especially the timer screen around the `timer-grid`, `timer-main-card`, preset cards, timer face, action row, and session log.
+- `desktop/src/App.css`, especially the timer card, preset, face, action, and responsive rules around the timer selectors.
+- `desktop/src/index.css`, for the dark theme tokens, typography families, radii, surfaces, borders, and accent colors.
+- `desktop/src/components/TimerClockDigits.tsx`, `desktop/src/hooks/useTimerTick.ts`, `desktop/src/hooks/useTimerProgressRing.ts`, `desktop/src/lib/timerDisplay.ts`, and `desktop/src/lib/timerTransitions.ts`, for the production timer display/update shape.
+- `design/timer.jsx`, for the standalone design reference with preset chips, a 252px ring, `MM:SS` mono clock, status text, and recent-session rail.
+
+The native prototype reproduces one representative timer/focus screen only. It does not port persistence, notification audio, social sync, tray integration, updater behavior, vault/Obsidian features, statistics, games, maps, or the production React/CSS architecture.
+
+`src/app_model.rs` owns the authoritative timer state in plain Rust. `TimerState` stores the selected mode, configured duration, stopped remaining time, status, and the `Instant` at which the current running segment began. Running remaining time is derived from `Instant::now()` and `saturating_duration_since`; the model never assumes that periodic callbacks are punctual.
+
+`src/main.rs` remains the thin Slint adapter. It maps Slint callbacks to `AppCommand::{Start, Pause, Reset, SetMode, Refresh}` and pushes a snapshot of derived display properties into the Slint window.
+
+The Stage 4 UI update cadence is 100 ms while the timer is running. This is roughly 10 Hz: frequent enough for the large ring to move smoothly for a productivity timer, but far below a 60 FPS animation loop. The adapter stops the Slint `Timer` whenever the model is ready, paused, or completed, so paused/idle state has no intentional periodic timer callback. Slint hover, pressed, focus, and finite transition animations remain presentation-local.

@@ -1,0 +1,84 @@
+import { Theme } from "../theme.slint";
+
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <string> icon;
+    in property <bool> active: false;
+
+    height: 42px;
+    border-radius: Theme.radius-md;
+    background: root.active ? #2b3d53 : transparent;
+    border-width: root.active ? 1px : 0px;
+    border-color: root.active ? Theme.border-strong : transparent;
+
+    Text {
+        x: 12px;
+        y: 8px;
+        text: root.icon;
+        font-size: 15px;
+        color: root.active ? Theme.primary-hover : Theme.text-muted;
+    }
+
+    Text {
+        x: 40px;
+        y: 10px;
+        text: root.label;
+        font-size: Theme.text-sm;
+        font-weight: root.active ? 800 : 600;
+        color: root.active ? Theme.text-primary : Theme.text-secondary;
+    }
+}
+
+export component AppSidebar inherits Rectangle {
+    width: 220px;
+    border-radius: Theme.radius-xl;
+    background: #151e28;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    Text {
+        x: 22px;
+        y: 22px;
+        text: "Study";
+        font-size: 24px;
+        font-weight: 800;
+        color: Theme.text-primary;
+    }
+
+    Text {
+        x: 23px;
+        y: 50px;
+        text: "Tracker";
+        font-size: Theme.text-sm;
+        letter-spacing: 2px;
+        color: Theme.text-muted;
+    }
+
+    VerticalLayout {
+        x: 14px;
+        y: 104px;
+        width: parent.width - 28px;
+        spacing: 8px;
+
+        NavItem { icon: "◇"; label: "Dashboard"; }
+        NavItem { icon: "□"; label: "Planner"; }
+        NavItem { icon: "◉"; label: "Timer"; active: true; }
+        NavItem { icon: "▣"; label: "Vault"; }
+        NavItem { icon: "○"; label: "Break"; }
+    }
+
+    Rectangle {
+        x: 18px;
+        y: parent.height - 126px;
+        width: parent.width - 36px;
+        height: 92px;
+        border-radius: Theme.radius-lg;
+        background: Theme.surface-inset;
+        border-width: 1px;
+        border-color: Theme.border;
+
+        Text { x: 14px; y: 13px; text: "Today"; font-size: Theme.text-sm; color: Theme.text-muted; }
+        Text { x: 14px; y: 34px; text: "2h 45m"; font-size: 22px; font-weight: 800; color: Theme.text-primary; }
+        Text { x: 14px; y: 65px; text: "Goal 4h · streak 6"; font-size: Theme.text-sm; color: Theme.text-secondary; }
+    }
+}
