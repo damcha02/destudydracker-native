@@ -2,100 +2,109 @@
 pub struct AppModel {
     title: String,
     status: String,
-    text_samples: Vec<TextSample>,
-    wrapping_text: String,
-    single_line_input: String,
-    multiline_input: String,
-    notes: Vec<String>,
+    demo_state: DemoState,
+    progress_examples: Vec<ProgressExample>,
+    scroll_rows: Vec<DemoRow>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TextSample {
+pub struct DemoState {
+    selected_mode: DemoMode,
+    progress_percent: u8,
+    controls_enabled: bool,
+    activation_count: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DemoMode {
+    Focus,
+    Review,
+    Rest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProgressExample {
     label: String,
-    value: String,
-    weight: FontWeight,
-    size: TextSize,
+    progress_percent: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FontWeight {
-    Normal,
-    SemiBold,
-    Bold,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TextSize {
-    Body,
-    Large,
-    Display,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DemoRow {
+    title: String,
+    detail: String,
+    progress_percent: u8,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppCommand {
     MarkPresentationReady,
-    UpdateSingleLine(String),
-    UpdateMultiline(String),
+    SetProgress(u16),
+    IncreaseProgress(u16),
+    ToggleEnabled,
+    SelectMode(DemoMode),
+    RecordActivation,
 }
 
 impl AppModel {
-    pub fn stage_two_text_input_preview() -> Self {
+    pub fn stage_three_widget_preview() -> Self {
         Self {
             title: "Study Tracker Native Prototype".to_string(),
-            status: "Stage 2: text, layout, and input feasibility".to_string(),
-            text_samples: vec![
-                TextSample::new(
-                    "Latin / bold",
-                    "Study Tracker - Focus Session",
-                    FontWeight::Bold,
-                    TextSize::Display,
-                ),
-                TextSample::new(
-                    "European Unicode / normal",
-                    "Größe · Prüfung · Zürich · naïve · café",
-                    FontWeight::Normal,
-                    TextSize::Body,
-                ),
-                TextSample::new(
-                    "Japanese / semibold",
-                    "日本語の勉強を始めましょう",
-                    FontWeight::SemiBold,
-                    TextSize::Large,
-                ),
-                TextSample::new(
-                    "Mixed script + math / bold",
-                    "Quantum Mechanics - 第4章 - σ² = 2.35 × 10⁻⁴",
-                    FontWeight::Bold,
-                    TextSize::Large,
-                ),
-                TextSample::new(
-                    "Emoji fallback / normal",
-                    "📚 ⏱️ ✅ 🧪 🚀",
-                    FontWeight::Normal,
-                    TextSize::Display,
-                ),
+            status: "Stage 3: widgets and interaction system".to_string(),
+            demo_state: DemoState {
+                selected_mode: DemoMode::Focus,
+                progress_percent: 65,
+                controls_enabled: true,
+                activation_count: 0,
+            },
+            progress_examples: vec![
+                ProgressExample::new("Warmup", 25),
+                ProgressExample::new("Deep work", 65),
+                ProgressExample::new("Almost done", 90),
             ],
-            wrapping_text: "Wrapping test: Study Tracker needs long notes that mix English, 日本語, symbols, and math. This paragraph intentionally includes Größe, naïve café, 第4章, σ² = 2.35 × 10⁻⁴, and emoji 📚 ✅ 🚀 so resizing can reveal clipping, fallback, shaping, and line-break behavior without using browser layout.".to_string(),
-            single_line_input: "Edit me: café 日本語 σ² 📚".to_string(),
-            multiline_input: "Multiline edit test\n日本語の入力候補をここで確認\nResize the window and try selection, copy, paste, arrows, Home/End, and Ctrl+A.".to_string(),
-            notes: vec![
-                "Use mouse, Tab, and Shift+Tab to move focus between fields.".to_string(),
-                "Clipboard and IME behavior are runtime/environment checks, not model logic.".to_string(),
-                "No timer, persistence, network, tray, updater, or production feature code is present.".to_string(),
-            ],
+            scroll_rows: (1..=14)
+                .map(|index| {
+                    DemoRow::new(
+                        format!("Demo card {index:02}"),
+                        "Scrollable bounded content row for clipping, wheel/touchpad, and resize checks.",
+                        ((index * 7 + 18) % 100) as u16,
+                    )
+                })
+                .collect(),
         }
     }
 
     pub fn apply(&mut self, command: AppCommand) {
         match command {
             AppCommand::MarkPresentationReady => {
-                self.status = "Stage 2 model state loaded through Rust adapter".to_string();
+                self.status = "Stage 3 model state loaded through Rust adapter".to_string();
             }
-            AppCommand::UpdateSingleLine(text) => {
-                self.single_line_input = text;
+            AppCommand::SetProgress(progress) => {
+                if self.demo_state.controls_enabled {
+                    self.demo_state.progress_percent = progress.min(100) as u8;
+                }
             }
-            AppCommand::UpdateMultiline(text) => {
-                self.multiline_input = text;
+            AppCommand::IncreaseProgress(amount) => {
+                if self.demo_state.controls_enabled {
+                    self.demo_state.progress_percent = self
+                        .demo_state
+                        .progress_percent
+                        .saturating_add(amount.min(100) as u8)
+                        .min(100);
+                }
+            }
+            AppCommand::ToggleEnabled => {
+                self.demo_state.controls_enabled = !self.demo_state.controls_enabled;
+            }
+            AppCommand::SelectMode(mode) => {
+                if self.demo_state.controls_enabled {
+                    self.demo_state.selected_mode = mode;
+                }
+            }
+            AppCommand::RecordActivation => {
+                if self.demo_state.controls_enabled {
+                    self.demo_state.activation_count =
+                        self.demo_state.activation_count.saturating_add(1);
+                }
             }
         }
     }
@@ -108,39 +117,56 @@ impl AppModel {
         &self.status
     }
 
-    pub fn text_samples(&self) -> &[TextSample] {
-        &self.text_samples
+    pub fn demo_state(&self) -> &DemoState {
+        &self.demo_state
     }
 
-    pub fn wrapping_text(&self) -> &str {
-        &self.wrapping_text
+    pub fn progress_examples(&self) -> &[ProgressExample] {
+        &self.progress_examples
     }
 
-    pub fn single_line_input(&self) -> &str {
-        &self.single_line_input
-    }
-
-    pub fn multiline_input(&self) -> &str {
-        &self.multiline_input
-    }
-
-    pub fn notes(&self) -> &[String] {
-        &self.notes
+    pub fn scroll_rows(&self) -> &[DemoRow] {
+        &self.scroll_rows
     }
 }
 
-impl TextSample {
-    pub fn new(
-        label: impl Into<String>,
-        value: impl Into<String>,
-        weight: FontWeight,
-        size: TextSize,
-    ) -> Self {
+impl DemoState {
+    pub fn selected_mode(&self) -> DemoMode {
+        self.selected_mode
+    }
+
+    pub fn progress_percent(&self) -> u8 {
+        self.progress_percent
+    }
+
+    pub fn progress_fraction(&self) -> f32 {
+        f32::from(self.progress_percent) / 100.0
+    }
+
+    pub fn controls_enabled(&self) -> bool {
+        self.controls_enabled
+    }
+
+    pub fn activation_count(&self) -> u32 {
+        self.activation_count
+    }
+}
+
+impl DemoMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DemoMode::Focus => "Focus",
+            DemoMode::Review => "Review",
+            DemoMode::Rest => "Rest",
+        }
+    }
+}
+
+impl ProgressExample {
+    pub fn new(label: impl Into<String>, progress_percent: u16) -> Self {
         Self {
             label: label.into(),
-            value: value.into(),
-            weight,
-            size,
+            progress_percent: progress_percent.min(100) as u8,
         }
     }
 
@@ -148,73 +174,107 @@ impl TextSample {
         &self.label
     }
 
-    pub fn value(&self) -> &str {
-        &self.value
+    pub fn progress_percent(&self) -> u8 {
+        self.progress_percent
     }
 
-    pub fn weight(&self) -> FontWeight {
-        self.weight
+    pub fn progress_fraction(&self) -> f32 {
+        f32::from(self.progress_percent) / 100.0
+    }
+}
+
+impl DemoRow {
+    pub fn new(title: impl Into<String>, detail: impl Into<String>, progress_percent: u16) -> Self {
+        Self {
+            title: title.into(),
+            detail: detail.into(),
+            progress_percent: progress_percent.min(100) as u8,
+        }
     }
 
-    pub fn size(&self) -> TextSize {
-        self.size
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    pub fn detail(&self) -> &str {
+        &self.detail
+    }
+
+    pub fn progress_percent(&self) -> u8 {
+        self.progress_percent
+    }
+
+    pub fn progress_fraction(&self) -> f32 {
+        f32::from(self.progress_percent) / 100.0
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{AppCommand, AppModel, FontWeight, TextSize};
+    use super::{AppCommand, AppModel, DemoMode, DemoRow, ProgressExample};
 
     #[test]
     fn command_updates_status_without_ui_dependencies() {
-        let mut model = AppModel::stage_two_text_input_preview();
+        let mut model = AppModel::stage_three_widget_preview();
 
-        assert_eq!(
-            model.status(),
-            "Stage 2: text, layout, and input feasibility"
-        );
+        assert_eq!(model.status(), "Stage 3: widgets and interaction system");
 
         model.apply(AppCommand::MarkPresentationReady);
 
         assert_eq!(
             model.status(),
-            "Stage 2 model state loaded through Rust adapter"
+            "Stage 3 model state loaded through Rust adapter"
         );
     }
 
     #[test]
-    fn stores_unicode_samples_as_plain_rust_strings() {
-        let model = AppModel::stage_two_text_input_preview();
+    fn valid_state_transitions_update_demo_state() {
+        let mut model = AppModel::stage_three_widget_preview();
 
-        assert!(model
-            .text_samples()
-            .iter()
-            .any(|sample| sample.value().contains("日本語")));
-        assert!(model
-            .text_samples()
-            .iter()
-            .any(|sample| sample.value().contains("📚")));
-        assert!(model
-            .text_samples()
-            .iter()
-            .any(|sample| sample.value().contains("σ²")));
-        assert!(model
-            .text_samples()
-            .iter()
-            .any(|sample| sample.weight() == FontWeight::SemiBold
-                && sample.size() == TextSize::Large));
+        model.apply(AppCommand::SelectMode(DemoMode::Review));
+        model.apply(AppCommand::SetProgress(25));
+        model.apply(AppCommand::RecordActivation);
+
+        assert_eq!(model.demo_state().selected_mode(), DemoMode::Review);
+        assert_eq!(model.demo_state().progress_percent(), 25);
+        assert_eq!(model.demo_state().activation_count(), 1);
     }
 
     #[test]
-    fn text_edit_commands_update_model_state() {
-        let mut model = AppModel::stage_two_text_input_preview();
+    fn progress_values_are_clamped() {
+        let mut model = AppModel::stage_three_widget_preview();
+        let example = ProgressExample::new("overflow", 250);
+        let row = DemoRow::new("row", "detail", 250);
 
-        model.apply(AppCommand::UpdateSingleLine(
-            "typed 日本語 café".to_string(),
-        ));
-        model.apply(AppCommand::UpdateMultiline("line 1\nline 2 ✅".to_string()));
+        model.apply(AppCommand::SetProgress(250));
+        model.apply(AppCommand::IncreaseProgress(250));
 
-        assert_eq!(model.single_line_input(), "typed 日本語 café");
-        assert_eq!(model.multiline_input(), "line 1\nline 2 ✅");
+        assert_eq!(model.demo_state().progress_percent(), 100);
+        assert_eq!(example.progress_percent(), 100);
+        assert_eq!(row.progress_percent(), 100);
+    }
+
+    #[test]
+    fn disabled_state_blocks_activation_count() {
+        let mut model = AppModel::stage_three_widget_preview();
+
+        model.apply(AppCommand::ToggleEnabled);
+        model.apply(AppCommand::RecordActivation);
+
+        assert!(!model.demo_state().controls_enabled());
+        assert_eq!(model.demo_state().activation_count(), 0);
+    }
+
+    #[test]
+    fn disabled_state_blocks_governed_commands() {
+        let mut model = AppModel::stage_three_widget_preview();
+
+        model.apply(AppCommand::ToggleEnabled);
+        model.apply(AppCommand::SelectMode(DemoMode::Review));
+        model.apply(AppCommand::SetProgress(25));
+        model.apply(AppCommand::IncreaseProgress(10));
+
+        assert_eq!(model.demo_state().selected_mode(), DemoMode::Focus);
+        assert_eq!(model.demo_state().progress_percent(), 65);
     }
 }

@@ -1,0 +1,101 @@
+import { Theme } from "../theme.slint";
+
+export component LinearProgress inherits Rectangle {
+    in property <float> progress;
+    private property <float> clamped: max(0.0, min(1.0, root.progress));
+
+    height: 16px;
+    border-radius: 8px;
+    background: #22323d;
+    border-width: 1px;
+    border-color: Theme.border;
+    clip: true;
+
+    Rectangle {
+        height: 100%;
+        width: root.width * root.clamped;
+        border-radius: 8px;
+        background: Theme.primary;
+        animate width { duration: Theme.transition-normal; easing: ease-out; }
+    }
+}
+
+export component RingProgress inherits Rectangle {
+    in property <float> progress;
+    in property <string> label;
+    private property <float> clamped: max(0.0, min(1.0, root.progress));
+    private property <angle> angle: root.clamped * 360deg - 90deg;
+    private property <float> end-x: 50.0 + 40.0 * Math.cos(root.angle);
+    private property <float> end-y: 50.0 + 40.0 * Math.sin(root.angle);
+    private property <bool> large-arc: root.clamped > 0.5;
+    private property <length> label-size: root.width < 70px ? 10px : 20px;
+    private property <length> caption-size: root.width < 70px ? 0px : Theme.text-sm;
+
+    width: 118px;
+    height: 118px;
+    background: transparent;
+
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        stroke: #263947;
+        stroke-width: 10px;
+        fill: transparent;
+        commands: "M 50 10 A 40 40 0 1 1 49.9 10";
+        stroke-line-cap: round;
+    }
+
+    if root.clamped > 0.0 && root.clamped < 0.999: Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        stroke: Theme.primary;
+        stroke-width: 10px;
+        fill: transparent;
+        stroke-line-cap: round;
+
+        MoveTo { x: 50.0; y: 10.0; }
+        ArcTo {
+            radius-x: 40.0;
+            radius-y: 40.0;
+            x: root.end-x;
+            y: root.end-y;
+            large-arc: root.large-arc;
+            sweep: true;
+        }
+    }
+
+    if root.clamped >= 0.999: Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        stroke: Theme.primary;
+        stroke-width: 10px;
+        fill: transparent;
+        commands: "M 50 10 A 40 40 0 1 1 49.9 10";
+        stroke-line-cap: round;
+    }
+
+    Text {
+        width: parent.width;
+        y: root.width < 70px ? 17px : 43px;
+        text: root.label;
+        horizontal-alignment: center;
+        font-size: root.label-size;
+        font-weight: 800;
+        color: Theme.text-primary;
+    }
+
+    Text {
+        width: parent.width;
+        y: 68px;
+        text: root.width < 70px ? "" : "demo";
+        horizontal-alignment: center;
+        font-size: root.caption-size;
+        color: Theme.text-secondary;
+    }
+}

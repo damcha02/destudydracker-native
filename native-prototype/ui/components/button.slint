@@ -1,0 +1,124 @@
+import { Theme } from "../theme.slint";
+
+export enum ButtonVariant { primary, secondary }
+
+export component DemoButton inherits FocusScope {
+    in property <string> text;
+    in property <ButtonVariant> variant: ButtonVariant.primary;
+    in property <string> helper-text;
+    callback clicked;
+
+    private property <bool> is-primary: root.variant == ButtonVariant.primary;
+    private property <color> enabled-background: root.is-primary ? Theme.primary : Theme.card-raised;
+    private property <color> hover-background: root.is-primary ? Theme.primary-hover : #254150;
+    private property <color> pressed-background: root.is-primary ? Theme.primary-pressed : #0f1a22;
+    private property <color> enabled-border: root.is-primary ? #9ee8db : Theme.border-strong;
+    private property <color> hover-border: root.is-primary ? #c9fff7 : Theme.primary-hover;
+    private property <color> pressed-border: root.is-primary ? #2e786d : Theme.accent;
+
+    min-width: 122px;
+    min-height: 42px;
+    focus-on-click: true;
+    focus-on-tab-navigation: root.enabled;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if root.enabled { root.clicked(); }
+    }
+
+    key-pressed(event) => {
+        if root.enabled && (event.text == Key.Return || event.text == Key.Space) {
+            root.clicked();
+            accept
+        } else {
+            reject
+        }
+    }
+
+    focus-ring := Rectangle {
+        x: -4px;
+        y: -4px;
+        width: parent.width + 8px;
+        height: parent.height + 8px;
+        border-radius: Theme.radius-sm + 4px;
+        border-width: 2px;
+        border-color: Theme.accent;
+        background: transparent;
+        opacity: root.enabled && root.has-focus ? 1.0 : 0.0;
+
+        animate opacity { duration: Theme.transition-fast; easing: ease-out; }
+    }
+
+    background := Rectangle {
+        x: area.pressed && root.enabled ? 1px : 0px;
+        y: area.pressed && root.enabled ? 2px : 0px;
+        width: 100%;
+        height: 100%;
+        border-radius: Theme.radius-sm;
+        border-width: root.has-focus && root.enabled ? 2px : 1px;
+        border-color: !root.enabled
+            ? #62707a
+            : area.pressed
+                ? root.pressed-border
+                : area.has-hover
+                    ? root.hover-border
+                    : root.enabled-border;
+        background: !root.enabled
+            ? #2d3942
+            : area.pressed
+                ? root.pressed-background
+                : area.has-hover
+                    ? root.hover-background
+                    : root.enabled-background;
+        opacity: root.enabled ? 1.0 : 0.78;
+
+        animate x, y, background, border-color, opacity { duration: Theme.transition-fast; easing: ease-out; }
+    }
+
+    Rectangle {
+        x: background.x;
+        y: background.y;
+        width: background.width;
+        height: background.height;
+        border-radius: Theme.radius-sm;
+        background: root.enabled ? transparent : #0b1117;
+        opacity: root.enabled ? 0.0 : 0.24;
+
+        animate opacity { duration: Theme.transition-fast; easing: ease-out; }
+    }
+
+    Text {
+        x: background.x;
+        y: root.helper-text == "" ? background.y : background.y - 6px;
+        width: parent.width;
+        height: root.helper-text == "" ? parent.height : parent.height - 8px;
+        text: root.text;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        font-size: Theme.text-md;
+        font-weight: 700;
+        color: !root.enabled ? #c2cbd0 : root.is-primary ? #07110f : Theme.text-primary;
+        opacity: root.enabled ? 1.0 : 0.82;
+    }
+
+    Text {
+        x: background.x;
+        y: parent.height - 17px + background.y;
+        width: parent.width;
+        height: 14px;
+        text: root.helper-text;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        font-size: 10px;
+        font-weight: 600;
+        color: root.enabled ? (root.is-primary ? #214740 : Theme.text-secondary) : #aeb9bf;
+        opacity: root.helper-text == "" ? 0.0 : 1.0;
+    }
+
+    area := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

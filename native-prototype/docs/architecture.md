@@ -68,3 +68,18 @@ Only platforms actually built or launched in a given environment should be consi
 ## Likely Stage 2 Investigation
 
 Stage 2 would likely compare real idle memory and CPU behavior against the current Tauri/WebView application, evaluate startup time and binary size tradeoffs, test representative text/layout complexity, and decide whether Slint should be compared against iced or a custom renderer before any production feature migration begins.
+
+## Stage 3 Widget Layer
+
+Stage 3 adds a small reusable presentation layer under `ui/components/`:
+
+- `button.slint` contains the custom button shell. It owns only visual/input behavior and exposes a simple `clicked` callback.
+- `card.slint` contains a reusable padded panel surface with tokenized colors and corners.
+- `progress.slint` contains linear and ring progress indicators. Both accept continuous progress values in the `0.0..1.0` range.
+- `theme.slint` centralizes colors, radii, spacing, typography sizes, and finite transition durations.
+
+The ring progress component keeps all trigonometry and path arc details private. Callers pass only `progress` and display text. Internally it uses Slint `Path`, `MoveTo`, `ArcTo`, and `Math.sin`/`Math.cos`. A separate full-circle branch handles the SVG arc edge case at 100% progress, where an arc start and end point would otherwise coincide.
+
+Animations remain event-driven and finite. Button color transitions and progress width/path endpoint changes animate only when state changes, hover changes, or a user interaction updates model-owned demo state. Stage 3 does not use timers, perpetual animation iteration, `animation-tick()`, or background redraw loops.
+
+The demo state remains in `src/app_model.rs`. UI events call callbacks in `main.rs`, which applies plain Rust commands and refreshes Slint properties from the model snapshot. No production Study Tracker timer, dashboard, persistence, social, tray, updater, or Cloudflare logic is included.

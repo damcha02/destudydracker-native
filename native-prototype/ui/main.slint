@@ -1,72 +1,129 @@
-import { LineEdit, TextEdit } from "std-widgets.slint";
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { DemoButton, ButtonVariant } from "components/button.slint";
+import { DemoCard } from "components/card.slint";
+import { LinearProgress, RingProgress } from "components/progress.slint";
 
-export struct TextSampleData {
+export struct ProgressExampleData {
     label: string,
-    value: string,
-    weight: int,
-    size: length,
+    progress: float,
+    percent: int,
 }
 
-component SampleRow inherits Rectangle {
-    in property <TextSampleData> sample;
+export struct DemoRowData {
+    title: string,
+    detail: string,
+    progress: float,
+    percent: int,
+}
 
-    height: 64px;
-    border-radius: 14px;
-    background: #13202a;
+component ProgressTile inherits Rectangle {
+    in property <ProgressExampleData> entry;
+
+    height: 58px;
+    border-radius: Theme.radius-md;
+    background: Theme.card;
     border-width: 1px;
-    border-color: #263947;
+    border-color: Theme.border;
 
-    Text {
-        x: 16px;
-        y: 10px;
-        text: root.sample.label;
-        font-size: 12px;
-        font-weight: 600;
-        color: #8ea4b1;
+    RingProgress {
+        x: 12px;
+        y: 6px;
+        width: 46px;
+        height: 46px;
+        progress: root.entry.progress;
+        label: root.entry.percent + "%";
     }
 
     Text {
-        x: 16px;
-        y: 27px;
-        width: parent.width - 32px;
-        height: 32px;
-        text: root.sample.value;
-        font-size: root.sample.size;
-        font-weight: root.sample.weight;
-        color: #f6fbf8;
-        wrap: word-wrap;
+        x: 72px;
+        y: 9px;
+        text: root.entry.label;
+        font-size: Theme.text-md;
+        font-weight: 700;
+        color: Theme.text-primary;
+    }
+
+    LinearProgress {
+        x: 72px;
+        y: 34px;
+        width: parent.width - 92px;
+        progress: root.entry.progress;
     }
 }
 
-component SectionLabel inherits Text {
-    in property <string> label;
-    text: root.label;
-    font-size: 13px;
-    font-weight: 700;
-    color: #77d0bf;
+component ScrollRow inherits Rectangle {
+    in property <DemoRowData> entry;
+
+    height: 84px;
+    border-radius: Theme.radius-md;
+    background: Theme.card;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    Text {
+        x: Theme.spacing-md;
+        y: 12px;
+        text: root.entry.title;
+        font-size: Theme.text-md;
+        font-weight: 800;
+        color: Theme.text-primary;
+    }
+
+    Text {
+        x: Theme.spacing-md;
+        y: 34px;
+        width: parent.width - 2 * Theme.spacing-md;
+        text: root.entry.detail;
+        font-size: Theme.text-sm;
+        color: Theme.text-secondary;
+        overflow: elide;
+    }
+
+    LinearProgress {
+        x: Theme.spacing-md;
+        y: 61px;
+        width: parent.width - 84px;
+        progress: root.entry.progress;
+    }
+
+    Text {
+        x: parent.width - 58px;
+        y: 57px;
+        text: root.entry.percent + "%";
+        font-size: Theme.text-sm;
+        font-weight: 700;
+        color: Theme.text-secondary;
+    }
 }
 
 export component MainWindow inherits Window {
     in property <string> app-title;
     in property <string> status-text;
-    in property <[TextSampleData]> text-samples;
-    in property <[string]> notes;
-    in property <string> wrapping-text;
-    in-out property <string> single-line-text;
-    in-out property <string> multiline-text;
+    in property <int> selected-mode;
+    in property <string> selected-mode-label;
+    in property <float> demo-progress;
+    in property <string> demo-progress-label;
+    in property <bool> controls-enabled;
+    in property <int> activation-count;
+    in property <[ProgressExampleData]> progress-examples;
+    in property <[DemoRowData]> scroll-rows;
 
-    callback single-line-edited(string);
-    callback multiline-edited(string);
+    callback activate-primary();
+    callback toggle-enabled();
+    callback select-mode(int);
+    callback set-progress(int);
+    callback increase-progress();
 
     title: root.app-title;
-    width: 1160px;
-    height: 760px;
-    background: #0b1117;
+    width: 1180px;
+    height: 780px;
+    background: Theme.background;
 
     Rectangle {
         width: parent.width;
         height: parent.height;
-        background: #0b1117;
+        background: Theme.background;
 
         Rectangle {
             x: parent.width - 420px;
@@ -75,199 +132,263 @@ export component MainWindow inherits Window {
             height: 520px;
             border-radius: 260px;
             background: #173c43;
-            opacity: 0.58;
+            opacity: 0.52;
         }
 
         Rectangle {
-            x: 28px;
-            y: 26px;
-            width: parent.width - 56px;
-            height: parent.height - 52px;
-            border-radius: 24px;
-            background: #101922;
+            x: Theme.spacing-lg;
+            y: Theme.spacing-lg;
+            width: parent.width - 2 * Theme.spacing-lg;
+            height: parent.height - 2 * Theme.spacing-lg;
+            border-radius: Theme.radius-lg;
+            background: Theme.surface;
             border-width: 1px;
-            border-color: #223440;
+            border-color: Theme.border;
+
+            Text {
+                x: 30px;
+                y: 24px;
+                text: root.app-title;
+                font-size: Theme.text-xl;
+                font-weight: 800;
+                color: Theme.text-primary;
+            }
 
             Text {
                 x: 32px;
-                y: 26px;
-                text: root.app-title;
-                font-size: 30px;
-                font-weight: 800;
-                color: #f8fbf4;
-            }
-
-            Text {
-                x: 34px;
-                y: 68px;
+                y: 64px;
                 text: root.status-text;
-                font-size: 15px;
-                color: #9db2bb;
+                font-size: Theme.text-md;
+                color: Theme.text-secondary;
             }
 
-            Rectangle {
+            DemoCard {
                 x: 28px;
-                y: 108px;
-                width: max(520px, (parent.width - 84px) * 0.54);
-                height: parent.height - 148px;
-                border-radius: 18px;
-                background: #0f1820;
-                border-width: 1px;
-                border-color: #263947;
+                y: 106px;
+                width: 390px;
+                height: 306px;
+                title: "Custom buttons";
+                subtitle: "DemoState controls are separate from the component-only disabled example.";
+                emphasized: true;
 
-                SectionLabel {
-                    x: 18px;
-                    y: 16px;
-                    label: "Static text samples";
-                }
+                HorizontalLayout {
+                    x: Theme.spacing-md;
+                    y: 92px;
+                    width: parent.width - 2 * Theme.spacing-md;
+                    height: 42px;
+                    spacing: Theme.spacing-sm;
 
-                VerticalLayout {
-                    x: 18px;
-                    y: 42px;
-                    width: parent.width - 36px;
-                    spacing: 8px;
+                    DemoButton {
+                        text: "Primary";
+                        helper-text: "adds activation";
+                        enabled: root.controls-enabled;
+                        clicked => { root.activate-primary(); }
+                    }
 
-                    for sample in root.text-samples: SampleRow {
-                        sample: sample;
+                    DemoButton {
+                        text: "Subtle +10%";
+                        helper-text: "updates progress";
+                        variant: ButtonVariant.secondary;
+                        enabled: root.controls-enabled;
+                        clicked => { root.increase-progress(); }
                     }
                 }
 
-                SectionLabel {
-                    x: 18px;
-                    y: 392px;
-                    label: "Wrapping region";
+                HorizontalLayout {
+                    x: Theme.spacing-md;
+                    y: 148px;
+                    width: parent.width - 2 * Theme.spacing-md;
+                    height: 42px;
+                    spacing: Theme.spacing-sm;
+
+                    DemoButton {
+                        text: root.controls-enabled ? "Disable demo" : "Enable demo";
+                        helper-text: "toggle stays active";
+                        variant: ButtonVariant.secondary;
+                        clicked => { root.toggle-enabled(); }
+                    }
+
+                    DemoButton {
+                        text: "Always disabled";
+                        helper-text: "component example";
+                        enabled: false;
+                    }
                 }
 
                 Rectangle {
-                    x: 18px;
-                    y: 420px;
-                    width: parent.width - 36px;
-                    height: parent.height - 446px;
-                    border-radius: 14px;
-                    background: #172531;
+                    x: Theme.spacing-md;
+                    y: 204px;
+                    width: parent.width - 2 * Theme.spacing-md;
+                    height: 24px;
+                    border-radius: 12px;
+                    background: root.controls-enabled ? #17342f : #34262a;
                     border-width: 1px;
-                    border-color: #334957;
+                    border-color: root.controls-enabled ? Theme.primary : #d17a7a;
+
+                    animate background, border-color { duration: Theme.transition-fast; easing: ease-out; }
 
                     Text {
-                        x: 16px;
-                        y: 14px;
-                        width: parent.width - 32px;
-                        height: parent.height - 28px;
-                        text: root.wrapping-text;
-                        wrap: word-wrap;
-                        font-size: 14px;
-                        font-weight: 400;
-                        color: #dce9eb;
+                        width: parent.width;
+                        height: parent.height;
+                        text: root.controls-enabled ? "DemoState: enabled - governed controls are active" : "DemoState: disabled - governed controls are inactive";
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        font-size: Theme.text-sm;
+                        font-weight: 700;
+                        color: root.controls-enabled ? Theme.primary-hover : #ffd0d0;
+                    }
+                }
+
+                Text {
+                    x: Theme.spacing-md;
+                    y: 242px;
+                    text: "Primary activations: " + root.activation-count;
+                    font-size: Theme.text-md;
+                    font-weight: 700;
+                    color: Theme.text-primary;
+                }
+
+                Text {
+                    x: Theme.spacing-md;
+                    y: 270px;
+                    text: "Current mode: " + root.selected-mode-label + " | Progress: " + root.demo-progress-label;
+                    font-size: Theme.text-sm;
+                    color: Theme.text-secondary;
+                }
+            }
+
+            DemoCard {
+                x: 440px;
+                y: 106px;
+                width: 342px;
+                height: 306px;
+                title: "Rust-owned state";
+                subtitle: "UI events call Rust commands, then the adapter refreshes Slint properties.";
+
+                RingProgress {
+                    x: 28px;
+                    y: 84px;
+                    progress: root.demo-progress;
+                    label: root.demo-progress-label;
+                }
+
+                LinearProgress {
+                    x: 162px;
+                    y: 118px;
+                    width: 146px;
+                    progress: root.demo-progress;
+                }
+
+                VerticalLayout {
+                    x: 162px;
+                    y: 152px;
+                    width: 146px;
+                    height: 112px;
+                    spacing: 8px;
+
+                    DemoButton { text: "25%"; height: 32px; variant: ButtonVariant.secondary; enabled: root.controls-enabled; clicked => { root.set-progress(25); } }
+                    DemoButton { text: "65%"; height: 32px; variant: ButtonVariant.secondary; enabled: root.controls-enabled; clicked => { root.set-progress(65); } }
+                    DemoButton { text: "90%"; height: 32px; variant: ButtonVariant.secondary; enabled: root.controls-enabled; clicked => { root.set-progress(90); } }
+                }
+
+                Text {
+                    x: 28px;
+                    y: 270px;
+                    width: parent.width - 56px;
+                    text: root.controls-enabled ? "Progress buttons are governed by DemoState." : "Progress buttons are disabled until DemoState is enabled.";
+                    font-size: Theme.text-sm;
+                    color: root.controls-enabled ? Theme.text-secondary : #ffd0d0;
+                    horizontal-alignment: center;
+                }
+            }
+
+            DemoCard {
+                x: 804px;
+                y: 106px;
+                width: parent.width - 832px;
+                height: 306px;
+                title: "Image / icon path";
+                subtitle: "Small local SVG asset rendered at multiple sizes. The second copy tests colorize tinting.";
+                emphasized: true;
+
+                Image {
+                    x: 28px;
+                    y: 96px;
+                    width: 82px;
+                    height: 82px;
+                    source: @image-url("../assets/seedling.svg");
+                    image-fit: contain;
+                }
+
+                Image {
+                    x: 132px;
+                    y: 104px;
+                    width: 64px;
+                    height: 64px;
+                    source: @image-url("../assets/seedling.svg");
+                    image-fit: contain;
+                    colorize: Theme.accent;
+                }
+
+                Text {
+                    x: 28px;
+                    y: 204px;
+                    width: parent.width - 56px;
+                    text: "SVG stayed local to native-prototype. No icon framework added.";
+                    wrap: word-wrap;
+                    font-size: Theme.text-sm;
+                    color: Theme.text-secondary;
+                }
+            }
+
+            DemoCard {
+                x: 28px;
+                y: 422px;
+                width: 512px;
+                height: parent.height - 454px;
+                title: "Progress indicators";
+                subtitle: "Linear and ring components share a continuous progress API.";
+
+                VerticalLayout {
+                    x: Theme.spacing-md;
+                    y: 82px;
+                    width: parent.width - 2 * Theme.spacing-md;
+                    spacing: Theme.spacing-sm;
+
+                    for entry in root.progress-examples: ProgressTile {
+                        entry: entry;
                     }
                 }
             }
 
-            Rectangle {
-                x: max(596px, (parent.width - 84px) * 0.54 + 44px);
-                y: 108px;
-                width: parent.width - self.x - 28px;
-                height: parent.height - 148px;
-                border-radius: 18px;
-                background: #0f1820;
-                border-width: 1px;
-                border-color: #263947;
+            DemoCard {
+                x: 562px;
+                y: 422px;
+                width: parent.width - 590px;
+                height: parent.height - 454px;
+                title: "Scrollable cards";
+                subtitle: "Bounded ScrollView with clipped repeated rows.";
+                emphasized: true;
 
-                SectionLabel {
-                    x: 18px;
-                    y: 16px;
-                    label: "Single-line editable input";
-                }
+                ScrollView {
+                    x: Theme.spacing-md;
+                    y: 82px;
+                    width: parent.width - 2 * Theme.spacing-md;
+                    height: parent.height - 104px;
+                    viewport-width: self.width - 12px;
+                    viewport-height: 14 * 94px;
+                    vertical-scrollbar-policy: always-on;
+                    horizontal-scrollbar-policy: always-off;
 
-                Rectangle {
-                    x: 18px;
-                    y: 42px;
-                    width: parent.width - 36px;
-                    height: 52px;
-                    border-radius: 12px;
-                    background: single.has-focus ? #223646 : #172531;
-                    border-width: single.has-focus ? 2px : 1px;
-                    border-color: single.has-focus ? #77d0bf : #334957;
+                    VerticalLayout {
+                        x: 0px;
+                        y: 0px;
+                        width: parent.viewport-width;
+                        spacing: 10px;
 
-                    single := LineEdit {
-                        x: 12px;
-                        y: 7px;
-                        width: parent.width - 24px;
-                        height: parent.height - 14px;
-                        text <=> root.single-line-text;
-                        font-size: 17px;
-                        edited(text) => {
-                            root.single-line-edited(text);
+                        for row in root.scroll-rows: ScrollRow {
+                            entry: row;
                         }
-                    }
-                }
-
-                SectionLabel {
-                    x: 18px;
-                    y: 122px;
-                    label: "Multiline editable input";
-                }
-
-                Rectangle {
-                    x: 18px;
-                    y: 148px;
-                    width: parent.width - 36px;
-                    height: max(230px, parent.height - 386px);
-                    border-radius: 12px;
-                    background: multi.has-focus ? #223646 : #172531;
-                    border-width: multi.has-focus ? 2px : 1px;
-                    border-color: multi.has-focus ? #77d0bf : #334957;
-
-                    multi := TextEdit {
-                        x: 8px;
-                        y: 8px;
-                        width: parent.width - 16px;
-                        height: parent.height - 16px;
-                        text <=> root.multiline-text;
-                        wrap: word-wrap;
-                        font-size: 16px;
-                        edited(text) => {
-                            root.multiline-edited(text);
-                        }
-                    }
-                }
-
-                SectionLabel {
-                    x: 18px;
-                    y: parent.height - 206px;
-                    label: "Focusable clipboard target";
-                }
-
-                Rectangle {
-                    x: 18px;
-                    y: parent.height - 180px;
-                    width: parent.width - 36px;
-                    height: 52px;
-                    border-radius: 12px;
-                    background: paste-target.has-focus ? #223646 : #172531;
-                    border-width: paste-target.has-focus ? 2px : 1px;
-                    border-color: paste-target.has-focus ? #f4c95d : #334957;
-
-                    paste-target := LineEdit {
-                        x: 12px;
-                        y: 7px;
-                        width: parent.width - 24px;
-                        height: parent.height - 14px;
-                        placeholder-text: "Paste here: clipboard / emoji / 日本語";
-                        font-size: 16px;
-                    }
-                }
-
-                VerticalLayout {
-                    x: 20px;
-                    y: parent.height - 106px;
-                    width: parent.width - 40px;
-                    spacing: 6px;
-
-                    for note in root.notes: Text {
-                        text: note;
-                        wrap: word-wrap;
-                        font-size: 12px;
-                        color: #8ea4b1;
                     }
                 }
             }

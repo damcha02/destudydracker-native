@@ -1,0 +1,33 @@
+import { Theme } from "../theme.slint";
+
+export component DemoCard inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <bool> emphasized: false;
+
+    border-radius: Theme.radius-md;
+    background: emphasized ? Theme.card-raised : Theme.card;
+    border-width: 1px;
+    border-color: emphasized ? Theme.border-strong : Theme.border;
+
+    Text {
+        x: Theme.spacing-md;
+        y: Theme.spacing-md;
+        text: root.title;
+        font-size: Theme.text-lg;
+        font-weight: 700;
+        color: Theme.text-primary;
+    }
+
+    Text {
+        x: Theme.spacing-md;
+        y: 42px;
+        width: root.width - 2 * Theme.spacing-md;
+        text: root.subtitle;
+        wrap: word-wrap;
+        font-size: Theme.text-sm;
+        color: Theme.text-secondary;
+    }
+
+    @children
+}
