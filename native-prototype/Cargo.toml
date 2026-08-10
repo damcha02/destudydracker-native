@@ -1,0 +1,13 @@
+[package]
+name = "study-tracker-native-prototype"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77.2"
+build = "build.rs"
+publish = false
+
+[dependencies]
+slint = { version = "1.17.1", default-features = false, features = ["compat-1-2", "std", "accessibility", "backend-winit", "renderer-femtovg"] }
+
+[build-dependencies]
+slint-build = "1.17.1"
