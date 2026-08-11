@@ -6,7 +6,12 @@ rust-version = "1.77.2"
 build = "build.rs"
 publish = false
 
+[workspace]
+members = ["crates/study-tracker-core"]
+resolver = "2"
+
 [dependencies]
+study-tracker-core = { path = "crates/study-tracker-core" }
 slint = { version = "1.17.1", default-features = false, features = ["compat-1-2", "std", "accessibility", "backend-winit", "renderer-femtovg"] }
 
 [build-dependencies]

@@ -4547,11 +4547,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "study-tracker-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "study-tracker-native-prototype"
 version = "0.1.0"
 dependencies = [
  "slint",
  "slint-build",
+ "study-tracker-core",
 ]
 
 [[package]]
