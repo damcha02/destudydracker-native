@@ -188,8 +188,9 @@ Required manual checks:
 Implemented/found:
 
 - Custom `DemoButton` and `PresetCard` components already support focus-on-tab-navigation, visible focus rings, Enter activation, Space activation, accessible labels, enabled state, and default accessible actions.
-- Stage 9 adds Timer/Text-spike toggle buttons and a focus-target button to the tab sequence.
-- Disabled action button is disabled and should be skipped by tab navigation.
+- Stage 9 adds Timer/Text-spike toggle buttons plus enabled `Test focus action` and `Test named action` accessibility test buttons to the tab sequence.
+- The enabled accessibility test buttons update nearby visible `Last activated: ...` status text when activated, so Enter/Space activation is testable.
+- `Disabled example` is intentionally disabled and should be skipped by tab navigation.
 - Global timer shortcuts are suppressed while the Stage 9 text fields have focus.
 
 Runtime status:

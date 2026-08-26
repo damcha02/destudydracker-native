@@ -84,6 +84,7 @@ export component MainWindow inherits Window {
     private property <string> single-line-sample: "Study Tracker - 日本語 note - cafe - sigma σ²";
     private property <string> mixed-line-sample: "Quantum Mechanics — 第4章 — σ² = 2.35 × 10⁻⁴";
     private property <string> multiline-sample: "Focus notes:\n日本語の勉強を始めましょう\nGröße, Prüfung, Zürich, naïve, café\nEmoji check: 📚 ✅ 🧪 🚀 ⏱️ ❤️ 👍 👨‍💻";
+    private property <string> accessibility-action-status: "Last activated: none";
     private property <color> timer-accent: root.phase-tone == 2 ? Theme.warning : root.phase-tone == 3 ? Theme.accent : Theme.primary;
     private property <length> shell-padding: root.width < 980px ? 18px : 28px;
     private property <length> sidebar-width: root.width < 980px ? 0px : 220px;
@@ -135,13 +136,13 @@ export component MainWindow inherits Window {
             width: root.main-width;
             height: parent.height - 2 * root.shell-padding;
             viewport-width: self.width;
-            viewport-height: root.show-text-spike ? 1050px : 704px;
+            viewport-height: root.show-text-spike ? 1110px : 704px;
             vertical-scrollbar-policy: root.height < 760px ? always-on : as-needed;
             horizontal-scrollbar-policy: always-off;
 
             Rectangle {
                 width: parent.viewport-width;
-                height: root.show-text-spike ? 1050px : 704px;
+                height: root.show-text-spike ? 1110px : 704px;
                 background: transparent;
 
                 Text { x: 0px; y: 4px; text: root.show-text-spike ? "Text, IME, emoji, accessibility" : "Focus timer"; font-size: 30px; font-weight: 700; color: Theme.text-primary; }
@@ -264,7 +265,7 @@ export component MainWindow inherits Window {
                     x: 0px;
                     y: 142px;
                     width: parent.width;
-                    height: 908px;
+                    height: 968px;
                     title: "Stage 9 text inspection";
                     subtitle: "Use Tab/Shift+Tab through fields. Space/R timer shortcuts are suppressed while text fields are focused.";
                     emphasized: true;
@@ -312,22 +313,57 @@ export component MainWindow inherits Window {
                         x: Theme.spacing-md;
                         y: 650px;
                         width: parent.width - 2 * Theme.spacing-md;
-                        height: 150px;
+                        height: 118px;
                         text <=> root.multiline-sample;
                         accessible-label: "Stage 9 multiline study notes field";
                         changed has-focus => { root.text-input-focused = self.has-focus; }
                     }
 
-                    Text { x: Theme.spacing-md; y: 826px; text: "Keyboard and accessibility controls"; font-size: Theme.text-lg; font-weight: 800; color: Theme.text-primary; }
+                    Text { x: Theme.spacing-md; y: 790px; text: "Keyboard and accessibility controls"; font-size: Theme.text-lg; font-weight: 800; color: Theme.text-primary; }
+                    Text { x: Theme.spacing-md; y: 816px; width: parent.width - 2 * Theme.spacing-md; text: "Normal controls are enabled and activatable. The disabled example is intentionally skipped."; font-size: Theme.text-sm; color: Theme.text-secondary; }
+                    Rectangle {
+                        x: Theme.spacing-md;
+                        y: 842px;
+                        width: parent.width - 2 * Theme.spacing-md;
+                        height: 38px;
+                        border-radius: Theme.radius-sm;
+                        background: Theme.surface-inset;
+                        border-width: 1px;
+                        border-color: Theme.border;
+
+                        Text { x: 14px; y: 9px; width: parent.width - 28px; text: root.accessibility-action-status; font-size: Theme.text-sm; color: Theme.accent; }
+                    }
                     HorizontalLayout {
                         x: Theme.spacing-md;
-                        y: 858px;
+                        y: 896px;
                         width: parent.width - 2 * Theme.spacing-md;
                         height: 42px;
                         spacing: 10px;
 
-                        DemoButton { width: 150px; height: 42px; text: "Focus target"; helper-text: "Enter/Space"; clicked => {} }
-                        DemoButton { width: 160px; height: 42px; text: "Disabled action"; helper-text: "skipped"; enabled: false; variant: ButtonVariant.secondary; clicked => {} }
+                        DemoButton {
+                            width: 190px;
+                            height: 42px;
+                            text: "Test focus action";
+                            helper-text: "Enter/Space";
+                            clicked => { root.accessibility-action-status = "Last activated: Test focus action"; }
+                        }
+                        DemoButton {
+                            width: 190px;
+                            height: 42px;
+                            text: "Test named action";
+                            helper-text: "normal enabled";
+                            variant: ButtonVariant.secondary;
+                            clicked => { root.accessibility-action-status = "Last activated: Test named action"; }
+                        }
+                        DemoButton {
+                            width: 230px;
+                            height: 42px;
+                            text: "Disabled example";
+                            helper-text: "intentionally disabled";
+                            enabled: false;
+                            variant: ButtonVariant.secondary;
+                            clicked => { root.accessibility-action-status = "Disabled example should not activate"; }
+                        }
                     }
                 }
             }
