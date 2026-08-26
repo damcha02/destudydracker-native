@@ -102,8 +102,9 @@ fn sync_refresh_timer(window: &MainWindow, model: Rc<RefCell<AppModel>>, refresh
 
 fn apply_model_to_window(window: &MainWindow, model: &AppModel, now: Instant) {
     let timer = model.timer();
-    let remaining = timer.remaining(now);
-    let elapsed = timer.elapsed(now);
+    let clock = model.clock(now);
+    let remaining = timer.remaining(clock);
+    let elapsed = timer.elapsed(clock);
     let duration = timer.duration();
     let selected_mode = timer.selected_mode();
     let selected = &model.modes()[selected_mode];
@@ -111,7 +112,7 @@ fn apply_model_to_window(window: &MainWindow, model: &AppModel, now: Instant) {
     window.set_app_title(model.title().into());
     window.set_status_text(model.status().into());
     window.set_timer_text(format_clock(remaining).into());
-    window.set_status_label(timer.status().as_str().into());
+    window.set_status_label(timer.status_label().into());
     window.set_context_title("General focus".into());
     window.set_context_detail("Analysis II problem set · Next: exercise 7".into());
     window.set_selected_mode(selected_mode as i32);
@@ -120,7 +121,7 @@ fn apply_model_to_window(window: &MainWindow, model: &AppModel, now: Instant) {
     window.set_phase_tone(selected.tone().accent_index());
     window.set_running(timer.is_running());
     window.set_completed(timer.status() == TimerStatus::Completed);
-    window.set_timer_progress(timer.progress_fraction(now));
+    window.set_timer_progress(timer.progress_fraction(clock));
     window.set_remaining_label(format_duration_label(remaining).into());
     window.set_elapsed_label(format_duration_label(elapsed).into());
     window.set_total_label(format_duration_label(duration).into());
