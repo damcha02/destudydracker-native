@@ -1,4 +1,4 @@
-import { ScrollView } from "std-widgets.slint";
+import { LineEdit, ScrollView, TextEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { DemoButton, ButtonVariant } from "components/button.slint";
 import { DemoCard } from "components/card.slint";
@@ -79,6 +79,11 @@ export component MainWindow inherits Window {
     callback reset-timer();
     callback select-mode(int);
 
+    private property <bool> show-text-spike: true;
+    private property <bool> text-input-focused: false;
+    private property <string> single-line-sample: "Study Tracker - 日本語 note - cafe - sigma σ²";
+    private property <string> mixed-line-sample: "Quantum Mechanics — 第4章 — σ² = 2.35 × 10⁻⁴";
+    private property <string> multiline-sample: "Focus notes:\n日本語の勉強を始めましょう\nGröße, Prüfung, Zürich, naïve, café\nEmoji check: 📚 ✅ 🧪 🚀 ⏱️ ❤️ 👍 👨‍💻";
     private property <color> timer-accent: root.phase-tone == 2 ? Theme.warning : root.phase-tone == 3 ? Theme.accent : Theme.primary;
     private property <length> shell-padding: root.width < 980px ? 18px : 28px;
     private property <length> sidebar-width: root.width < 980px ? 0px : 220px;
@@ -100,10 +105,10 @@ export component MainWindow inherits Window {
         focus-on-click: true;
 
         key-pressed(event) => {
-            if event.text == Key.Space {
+            if !root.text-input-focused && event.text == Key.Space {
                 root.toggle-timer();
                 accept
-            } else if event.text == "r" || event.text == "R" {
+            } else if !root.text-input-focused && (event.text == "r" || event.text == "R") {
                 root.reset-timer();
                 accept
             } else { reject }
@@ -130,23 +135,48 @@ export component MainWindow inherits Window {
             width: root.main-width;
             height: parent.height - 2 * root.shell-padding;
             viewport-width: self.width;
-            viewport-height: 704px;
+            viewport-height: root.show-text-spike ? 1050px : 704px;
             vertical-scrollbar-policy: root.height < 760px ? always-on : as-needed;
             horizontal-scrollbar-policy: always-off;
 
             Rectangle {
                 width: parent.viewport-width;
-                height: 704px;
+                height: root.show-text-spike ? 1050px : 704px;
                 background: transparent;
 
-                Text { x: 0px; y: 4px; text: "Focus timer"; font-size: 30px; font-weight: 700; color: Theme.text-primary; }
-                Text { x: 1px; y: 44px; width: parent.width - 2px; text: "Pick a rhythm, press start, and let the rest fade away."; font-size: Theme.text-md; color: Theme.text-secondary; }
+                Text { x: 0px; y: 4px; text: root.show-text-spike ? "Text, IME, emoji, accessibility" : "Focus timer"; font-size: 30px; font-weight: 700; color: Theme.text-primary; }
+                Text { x: 1px; y: 44px; width: parent.width - 2px; text: root.show-text-spike ? "Stage 9 inspection surface for production-quality text and input risks." : "Pick a rhythm, press start, and let the rest fade away."; font-size: Theme.text-md; color: Theme.text-secondary; }
 
-                DemoCard {
+                HorizontalLayout {
                     x: 0px;
-                    y: 92px;
+                    y: 82px;
+                    width: min(430px, parent.width);
+                    height: 42px;
+                    spacing: 10px;
+
+                    DemoButton {
+                        width: 120px;
+                        height: 42px;
+                        text: "Timer";
+                        helper-text: "";
+                        variant: root.show-text-spike ? ButtonVariant.secondary : ButtonVariant.primary;
+                        clicked => { root.show-text-spike = false; }
+                    }
+                    DemoButton {
+                        width: 170px;
+                        height: 42px;
+                        text: "Text spike";
+                        helper-text: "";
+                        variant: root.show-text-spike ? ButtonVariant.primary : ButtonVariant.secondary;
+                        clicked => { root.show-text-spike = true; }
+                    }
+                }
+
+                if !root.show-text-spike: DemoCard {
+                    x: 0px;
+                    y: 142px;
                     width: parent.width;
-                    height: 612px;
+                    height: 562px;
                     title: "Start a focus block";
                     subtitle: "Keep the default view simple. Link course and reflection only when you need it.";
                     emphasized: true;
@@ -206,7 +236,7 @@ export component MainWindow inherits Window {
 
                     HorizontalLayout {
                         x: Theme.spacing-md;
-                        y: 548px;
+                        y: 500px;
                         width: parent.width - 2 * Theme.spacing-md;
                         height: 52px;
                         spacing: 12px;
@@ -229,10 +259,81 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
+
+                if root.show-text-spike: DemoCard {
+                    x: 0px;
+                    y: 142px;
+                    width: parent.width;
+                    height: 908px;
+                    title: "Stage 9 text inspection";
+                    subtitle: "Use Tab/Shift+Tab through fields. Space/R timer shortcuts are suppressed while text fields are focused.";
+                    emphasized: true;
+
+                    Rectangle { x: 0px; y: 76px; width: parent.width; height: 1px; background: Theme.border; }
+
+                    Text { x: Theme.spacing-md; y: 96px; text: "Static text and fallback"; font-size: Theme.text-lg; font-weight: 800; color: Theme.text-primary; }
+                    Text { x: Theme.spacing-md; y: 128px; width: parent.width - 2 * Theme.spacing-md; text: "Study Tracker — Focus Session"; font-size: Theme.text-md; color: Theme.text-primary; }
+                    Text { x: Theme.spacing-md; y: 154px; width: parent.width - 2 * Theme.spacing-md; text: "Größe · Prüfung · Zürich · naïve · café"; font-size: Theme.text-md; color: Theme.text-primary; }
+                    Text { x: Theme.spacing-md; y: 180px; width: parent.width - 2 * Theme.spacing-md; text: "日本語の勉強を始めましょう"; font-size: Theme.text-md; color: Theme.text-primary; }
+                    Text { x: Theme.spacing-md; y: 206px; width: parent.width - 2 * Theme.spacing-md; text: "Quantum Mechanics — 第4章 — σ² = 2.35 × 10⁻⁴"; font-size: Theme.text-md; color: Theme.text-primary; }
+                    Text { x: Theme.spacing-md; y: 232px; width: parent.width - 2 * Theme.spacing-md; text: "Combining marks: café, ä, ñ; symbols: ≤ ≥ ∑ ∫ →"; font-size: Theme.text-md; color: Theme.text-primary; }
+
+                    Text { x: Theme.spacing-md; y: 276px; text: "Emoji and color-font fallback"; font-size: Theme.text-lg; font-weight: 800; color: Theme.text-primary; }
+                    Text { x: Theme.spacing-md; y: 310px; width: parent.width - 2 * Theme.spacing-md; text: "📚 ✅ 🧪 🚀 ⏱️ ❤️ 👍 👨‍💻"; font-size: 32px; color: Theme.text-primary; }
+                    Text { x: Theme.spacing-md; y: 356px; width: parent.width - 2 * Theme.spacing-md; text: "Check stopwatch ⏱️, variation selectors, and joined developer emoji for tofu or monochrome fallback."; font-size: Theme.text-sm; color: Theme.text-secondary; }
+
+                    Text { x: Theme.spacing-md; y: 406px; text: "Single-line editing"; font-size: Theme.text-lg; font-weight: 800; color: Theme.text-primary; }
+                    Text { x: Theme.spacing-md; y: 438px; text: "Course/session title"; font-size: Theme.text-sm; color: Theme.text-secondary; }
+                    single-line-field := LineEdit {
+                        x: Theme.spacing-md;
+                        y: 462px;
+                        width: parent.width - 2 * Theme.spacing-md;
+                        height: 40px;
+                        text <=> root.single-line-sample;
+                        placeholder-text: "Type Latin, Japanese IME text, accents, and emoji";
+                        accessible-label: "Stage 9 single-line mixed text field";
+                        changed has-focus => { root.text-input-focused = self.has-focus; }
+                    }
+
+                    Text { x: Theme.spacing-md; y: 526px; text: "Mixed-language line"; font-size: Theme.text-sm; color: Theme.text-secondary; }
+                    mixed-line-field := LineEdit {
+                        x: Theme.spacing-md;
+                        y: 550px;
+                        width: parent.width - 2 * Theme.spacing-md;
+                        height: 40px;
+                        text <=> root.mixed-line-sample;
+                        placeholder-text: "Quantum Mechanics — 第4章 — σ² = 2.35 × 10⁻⁴";
+                        accessible-label: "Stage 9 mixed language line edit";
+                        changed has-focus => { root.text-input-focused = self.has-focus; }
+                    }
+
+                    Text { x: Theme.spacing-md; y: 614px; text: "Multiline editing"; font-size: Theme.text-lg; font-weight: 800; color: Theme.text-primary; }
+                    multiline-field := TextEdit {
+                        x: Theme.spacing-md;
+                        y: 650px;
+                        width: parent.width - 2 * Theme.spacing-md;
+                        height: 150px;
+                        text <=> root.multiline-sample;
+                        accessible-label: "Stage 9 multiline study notes field";
+                        changed has-focus => { root.text-input-focused = self.has-focus; }
+                    }
+
+                    Text { x: Theme.spacing-md; y: 826px; text: "Keyboard and accessibility controls"; font-size: Theme.text-lg; font-weight: 800; color: Theme.text-primary; }
+                    HorizontalLayout {
+                        x: Theme.spacing-md;
+                        y: 858px;
+                        width: parent.width - 2 * Theme.spacing-md;
+                        height: 42px;
+                        spacing: 10px;
+
+                        DemoButton { width: 150px; height: 42px; text: "Focus target"; helper-text: "Enter/Space"; clicked => {} }
+                        DemoButton { width: 160px; height: 42px; text: "Disabled action"; helper-text: "skipped"; enabled: false; variant: ButtonVariant.secondary; clicked => {} }
+                    }
+                }
             }
         }
 
-        if root.rail-width > 0px: Rectangle {
+        if root.rail-width > 0px && !root.show-text-spike: Rectangle {
             x: root.content-x + root.main-width + 22px;
             y: root.shell-padding;
             width: root.rail-width;

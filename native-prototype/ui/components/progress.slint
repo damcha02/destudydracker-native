@@ -10,6 +10,11 @@ export component LinearProgress inherits Rectangle {
     border-width: 1px;
     border-color: Theme.border;
     clip: true;
+    accessible-role: progress-indicator;
+    accessible-label: "Progress";
+    accessible-value: root.clamped;
+    accessible-value-minimum: 0.0;
+    accessible-value-maximum: 1.0;
 
     Rectangle {
         height: 100%;
@@ -36,6 +41,11 @@ export component RingProgress inherits Rectangle {
     width: 118px;
     height: 118px;
     background: transparent;
+    accessible-role: progress-indicator;
+    accessible-label: root.label == "" ? root.caption : root.label;
+    accessible-value: root.clamped;
+    accessible-value-minimum: 0.0;
+    accessible-value-maximum: 1.0;
 
     Path {
         width: parent.width;
