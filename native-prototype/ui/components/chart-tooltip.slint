@@ -1,0 +1,26 @@
+import { Theme } from "../theme.slint";
+
+// Compact two-part tooltip ("Sat 19 Sep" + "2h 35m"). Sizes itself to its text so callers can
+// clamp its position inside a chart.
+export component ChartTooltip inherits Rectangle {
+    in property <string> title;
+    in property <string> value;
+    in property <color> accent: Theme.primary;
+
+    width: lay.preferred-width;
+    height: lay.preferred-height;
+    border-radius: 9px;
+    background: Theme.tooltip-background;
+    border-width: 1px;
+    border-color: root.accent;
+
+    lay := HorizontalLayout {
+        padding-left: 11px;
+        padding-right: 11px;
+        padding-top: 6px;
+        padding-bottom: 6px;
+        spacing: 9px;
+        Text { text: root.title; font-size: Theme.text-sm; color: Theme.text-secondary; vertical-alignment: center; }
+        Text { text: root.value; font-size: Theme.text-sm; font-weight: 800; color: Theme.text-primary; vertical-alignment: center; }
+    }
+}

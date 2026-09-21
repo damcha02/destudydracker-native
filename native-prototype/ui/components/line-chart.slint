@@ -1,0 +1,161 @@
+import { Theme } from "../theme.slint";
+import { AxisMarkData } from "../dashboard-types.slint";
+import { ChartTooltip } from "chart-tooltip.slint";
+
+// Line/area chart. `line-commands` / `area-commands` are SVG-style path strings in
+// pixel coordinates prepared in Rust for the current plot size (`plot-resized` reports it, since
+// Slint's Path scales its viewbox uniformly); selection markers are placed
+// with the 0..1 `selected-x` / `selected-y` fractions. Hover or Left/Right/Home/End move the
+// selection through Rust (`hover`, `step`).
+export component LineChart inherits FocusScope {
+    in property <string> line-commands;
+    in property <string> area-commands;
+    in property <[AxisMarkData]> y-ticks;
+    in property <[AxisMarkData]> x-marks;
+    in property <int> point-count;
+    in property <bool> has-selection;
+    in property <float> selected-x;
+    in property <float> selected-y;
+    in property <string> selected-title;
+    in property <string> selected-value;
+    in property <string> accessible-summary;
+    in property <string> empty-text: "No study sessions in this range";
+    in property <color> accent: Theme.primary;
+    callback hover(float);
+    callback step(int);
+    // Reports the plot size in pixels so Rust can emit path commands in real coordinates.
+    callback plot-resized(float, float);
+
+    private property <length> axis-width: 38px;
+    private property <length> tip-band: 34px;
+    private property <length> label-band: 26px;
+    private property <length> plot-height: max(24px, root.height - root.tip-band - root.label-band);
+    private property <length> plot-width: max(10px, root.width - root.axis-width - 10px);
+    private property <length> marker-x: root.selected-x * root.plot-width;
+    private property <length> marker-y: root.selected-y * root.plot-height;
+
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: slider;
+    accessible-label: "Study history chart";
+    accessible-description: root.accessible-summary;
+    accessible-value: root.has-selection ? root.selected-title + ", " + root.selected-value : "no data";
+    accessible-value-minimum: 0;
+    accessible-value-maximum: max(0, root.point-count - 1);
+    accessible-value-step: 1;
+    accessible-action-increment => { root.step(1); }
+    accessible-action-decrement => { root.step(-1); }
+
+    key-pressed(event) => {
+        if event.text == Key.LeftArrow { root.step(event.modifiers.shift ? -7 : -1); accept }
+        else if event.text == Key.RightArrow { root.step(event.modifiers.shift ? 7 : 1); accept }
+        else if event.text == Key.Home { root.step(-1000000); accept }
+        else if event.text == Key.End { root.step(1000000); accept }
+        else { reject }
+    }
+
+    Rectangle {
+        x: root.axis-width - 4px;
+        y: root.tip-band - 3px;
+        width: root.plot-width + 8px;
+        height: root.plot-height + 6px;
+        border-radius: 8px;
+        border-width: 2px;
+        border-color: Theme.accent;
+        opacity: root.has-focus ? 0.9 : 0.0;
+        animate opacity { duration: Theme.transition-fast; }
+    }
+
+    for tick in root.y-ticks: Rectangle {
+        y: root.tip-band + tick.position * root.plot-height;
+        width: root.width;
+        height: 0px;
+
+        Rectangle { x: root.axis-width; y: 0px; width: root.plot-width; height: 1px; background: Theme.grid-line; }
+        Text { x: 0px; y: -7px; width: root.axis-width - 8px; text: tick.label; horizontal-alignment: right; font-size: 10px; color: Theme.text-muted; }
+    }
+
+    for mark[i] in root.x-marks: Text {
+        x: root.axis-width + max(0px, min(root.plot-width - 56px, mark.position * root.plot-width - 28px));
+        y: root.tip-band + root.plot-height + 8px;
+        width: 56px;
+        text: mark.label;
+        horizontal-alignment: i == 0 ? left : (i == root.x-marks.length - 1 ? right : center);
+        font-size: 10px;
+        color: Theme.text-muted;
+    }
+
+    plot := Rectangle {
+        x: root.axis-width;
+        y: root.tip-band;
+        width: root.plot-width;
+        height: root.plot-height;
+
+        init => { root.plot-resized(self.width / 1px, self.height / 1px); }
+        changed width => { root.plot-resized(self.width / 1px, self.height / 1px); }
+        changed height => { root.plot-resized(self.width / 1px, self.height / 1px); }
+
+        Path {
+            width: parent.width;
+            height: parent.height;
+            viewbox-width: self.width / 1px;
+            viewbox-height: self.height / 1px;
+            commands: root.area-commands;
+            fill: @linear-gradient(180deg, #8fb4ff40 0%, #8fb4ff05 100%);
+        }
+        Path {
+            width: parent.width;
+            height: parent.height;
+            viewbox-width: self.width / 1px;
+            viewbox-height: self.height / 1px;
+            commands: root.line-commands;
+            stroke: root.accent;
+            stroke-width: 2px;
+            stroke-line-join: round;
+            stroke-line-cap: round;
+        }
+
+        if root.has-selection: Rectangle {
+            x: root.marker-x - 0.5px;
+            y: 0px;
+            width: 1px;
+            height: parent.height;
+            background: Theme.text-muted;
+            opacity: 0.55;
+        }
+        if root.has-selection: Rectangle {
+            x: root.marker-x - 6px;
+            y: root.marker-y - 6px;
+            width: 12px;
+            height: 12px;
+            border-radius: 6px;
+            background: Theme.background;
+            border-width: 2.5px;
+            border-color: root.accent;
+        }
+
+        if root.point-count == 0: Text {
+            width: parent.width;
+            height: parent.height;
+            text: root.empty-text;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            font-size: Theme.text-sm;
+            color: Theme.text-muted;
+        }
+
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.hover(self.mouse-x / self.width); }
+            changed mouse-x => { if self.has-hover || self.pressed { root.hover(self.mouse-x / self.width); } }
+        }
+    }
+
+    if root.has-selection: ChartTooltip {
+        title: root.selected-title;
+        value: root.selected-value;
+        accent: root.accent;
+        x: max(root.axis-width, min(root.width - self.width, root.axis-width + root.marker-x - self.width / 2));
+        y: 0px;
+    }
+}

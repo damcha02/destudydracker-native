@@ -1,0 +1,42 @@
+// Plain data shapes the Rust presentation model (src/dashboard.rs) sends to the dashboard view.
+// They carry prepared values only; no statistics are computed in Slint.
+
+export struct SummaryCardData {
+    label: string,
+    value: string,
+    detail: string,
+    tone: int,
+}
+
+export struct WeeklyBarData {
+    day: string,
+    detail: string,
+    value: string,
+    fraction: float,
+    tone: int,
+    is-today: bool,
+}
+
+export struct AxisMarkData {
+    position: float,
+    label: string,
+}
+
+export struct CourseRowData {
+    name: string,
+    detail: string,
+    minutes-label: string,
+    percent: int,
+    fraction: float,
+    start: float,
+    health: int,
+    tone: int,
+}
+
+export struct SessionRowData {
+    course: string,
+    kind: string,
+    when: string,
+    duration: string,
+    tone: int,
+}

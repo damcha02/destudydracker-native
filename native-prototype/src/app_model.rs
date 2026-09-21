@@ -1,14 +1,21 @@
+use crate::dashboard::{DashboardScenario, DashboardSnapshot};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use study_tracker_core::timer::{
     ClockObservation, CompletionReason, TimerCommand, TimerConfig, TimerContext, TimerEvent,
     TimerMode, TimerPhase, TimerState as CoreTimerState,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+const DEFAULT_HISTORY_POINTS: usize = 30;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AppModel {
     title: String,
     status: String,
     timer: AppTimer,
+    dashboard: DashboardSnapshot,
+    dashboard_scenario: DashboardScenario,
+    dashboard_points: usize,
+    plot_size: (f32, f32),
     modes: Vec<TimerModeConfig>,
     session_notes: Vec<SessionNote>,
     clock_origin: Instant,
@@ -57,7 +64,7 @@ pub struct SessionNote {
     confidence: u8,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AppCommand {
     MarkPresentationReady,
     Start(Instant),
@@ -65,6 +72,13 @@ pub enum AppCommand {
     Reset,
     SetMode(usize),
     Refresh(Instant),
+    SetDashboardPoints(usize),
+    SetDashboardScenario(DashboardScenario),
+    SelectWeekday(usize),
+    StepWeekday(i32),
+    SelectHistoryFraction(f32),
+    StepHistory(i32),
+    ResizeHistoryPlot(f32, f32),
 }
 
 impl AppModel {
@@ -112,6 +126,10 @@ impl AppModel {
             title: "Study Tracker Native Prototype".to_string(),
             status: "Stage 8: Slint adapter driving renderer-independent timer core".to_string(),
             timer: AppTimer::new(selected_mode, &modes[selected_mode]),
+            dashboard: DashboardSnapshot::build(DashboardScenario::Typical, DEFAULT_HISTORY_POINTS),
+            dashboard_scenario: DashboardScenario::Typical,
+            dashboard_points: DEFAULT_HISTORY_POINTS,
+            plot_size: (600.0, 300.0),
             modes,
             session_notes: vec![
                 SessionNote::new(
@@ -167,6 +185,24 @@ impl AppModel {
                 }
             }
             AppCommand::Refresh(now) => self.apply_timer_command(TimerCommand::ObserveTime, now),
+            AppCommand::SetDashboardPoints(count) => {
+                self.dashboard_points = count;
+                self.rebuild_dashboard();
+            }
+            AppCommand::SetDashboardScenario(scenario) => {
+                self.dashboard_scenario = scenario;
+                self.rebuild_dashboard();
+            }
+            AppCommand::SelectWeekday(index) => self.dashboard.weekly.select(index),
+            AppCommand::StepWeekday(delta) => self.dashboard.weekly.step(delta),
+            AppCommand::SelectHistoryFraction(fraction) => {
+                self.dashboard.history.select_fraction(fraction)
+            }
+            AppCommand::StepHistory(delta) => self.dashboard.history.step(delta),
+            AppCommand::ResizeHistoryPlot(width, height) => {
+                self.plot_size = (width, height);
+                self.dashboard.history.set_plot_size(width, height);
+            }
         }
     }
 
@@ -188,6 +224,22 @@ impl AppModel {
 
     pub fn session_notes(&self) -> &[SessionNote] {
         &self.session_notes
+    }
+
+    pub fn dashboard(&self) -> &DashboardSnapshot {
+        &self.dashboard
+    }
+
+    pub fn dashboard_points(&self) -> usize {
+        self.dashboard_points
+    }
+
+    fn rebuild_dashboard(&mut self) {
+        self.dashboard = DashboardSnapshot::build(self.dashboard_scenario, self.dashboard_points);
+        // Rebuilt charts must keep the plot size Slint last reported.
+        self.dashboard
+            .history
+            .set_plot_size(self.plot_size.0, self.plot_size.1);
     }
 
     pub fn clock(&self, now: Instant) -> ClockObservation {
@@ -418,6 +470,7 @@ fn system_unix_millis() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::{format_clock, AppCommand, AppModel, TimerStatus};
+    use crate::dashboard::DashboardScenario;
     use std::time::{Duration, Instant};
 
     fn model_at(now: Instant) -> AppModel {
@@ -575,5 +628,32 @@ mod tests {
     fn clock_format_is_zero_padded() {
         assert_eq!(format_clock(Duration::from_secs(9)), "00:09");
         assert_eq!(format_clock(Duration::from_secs(125)), "02:05");
+    }
+
+    #[test]
+    fn dashboard_commands_rebuild_and_select_without_touching_the_timer() {
+        let mut model = AppModel::stage_four_timer_preview();
+        let timer_before = model.timer().clone();
+
+        model.apply(AppCommand::SetDashboardPoints(1_000));
+        assert_eq!(model.dashboard().history.points.len(), 1_000);
+        assert_eq!(model.dashboard_points(), 1_000);
+
+        model.apply(AppCommand::SelectHistoryFraction(0.0));
+        assert_eq!(model.dashboard().history.selected, Some(0));
+        model.apply(AppCommand::StepHistory(2));
+        assert_eq!(model.dashboard().history.selected, Some(2));
+
+        model.apply(AppCommand::SelectWeekday(1));
+        model.apply(AppCommand::StepWeekday(-5));
+        assert_eq!(model.dashboard().weekly.selected, 0);
+
+        model.apply(AppCommand::SetDashboardScenario(DashboardScenario::Empty));
+        assert!(model.dashboard().history.points.is_empty());
+        model.apply(AppCommand::SelectHistoryFraction(0.5));
+        model.apply(AppCommand::StepHistory(1));
+        assert_eq!(model.dashboard().history.selected, None);
+
+        assert_eq!(model.timer(), &timer_before);
     }
 }

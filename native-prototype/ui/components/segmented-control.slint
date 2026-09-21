@@ -1,0 +1,54 @@
+import { Theme } from "../theme.slint";
+
+// Compact row of mutually exclusive options (range / data-set pickers).
+export component SegmentedControl inherits Rectangle {
+    in property <[string]> options;
+    in property <int> current;
+    in property <string> accessible-name;
+    callback picked(int);
+
+    height: 32px;
+    border-radius: 10px;
+    background: Theme.surface-inset;
+    border-width: 1px;
+    border-color: Theme.border;
+    accessible-role: tab-list;
+    accessible-label: root.accessible-name;
+
+    HorizontalLayout {
+        padding: 3px;
+        spacing: 2px;
+        for option[i] in root.options: seg := FocusScope {
+            focus-on-click: true;
+            focus-on-tab-navigation: true;
+            accessible-role: tab;
+            accessible-label: option;
+            accessible-checked: i == root.current;
+            accessible-action-default => { root.picked(i); }
+            key-pressed(event) => {
+                if event.text == Key.Return || event.text == Key.Space { root.picked(i); accept } else { reject }
+            }
+
+            Rectangle {
+                border-radius: 8px;
+                background: i == root.current ? Theme.primary : (touch.has-hover ? Theme.card-raised : transparent);
+                border-width: seg.has-focus ? 2px : 0px;
+                border-color: Theme.accent;
+                animate background { duration: Theme.transition-fast; }
+
+                Text {
+                    text: option;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    font-size: 12px;
+                    font-weight: i == root.current ? 800 : 600;
+                    color: i == root.current ? #10202e : Theme.text-secondary;
+                }
+            }
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.picked(i); }
+            }
+        }
+    }
+}

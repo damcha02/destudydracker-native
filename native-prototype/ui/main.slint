@@ -7,6 +7,10 @@ import { AppSidebar } from "components/sidebar.slint";
 import { PresetCard } from "components/preset-card.slint";
 import { SessionRow } from "components/session-row.slint";
 import { TimerDisplay } from "components/timer-display.slint";
+import { DashboardView } from "dashboard.slint";
+import { SummaryCardData, WeeklyBarData, AxisMarkData, CourseRowData, SessionRowData } from "dashboard-types.slint";
+
+export { SummaryCardData, WeeklyBarData, AxisMarkData, CourseRowData, SessionRowData } from "dashboard-types.slint";
 
 export struct TimerModeData {
     label: string,
@@ -55,6 +59,18 @@ component TimerModeTile inherits Rectangle {
     }
 }
 
+// Shared Timer / Text spike / Dashboard switch (0 = timer, 1 = text spike, 2 = dashboard).
+component ViewSwitcher inherits HorizontalLayout {
+    in property <int> current;
+    callback picked(int);
+
+    spacing: 10px;
+
+    DemoButton { width: 120px; height: 42px; text: "Timer"; helper-text: ""; variant: root.current == 0 ? ButtonVariant.primary : ButtonVariant.secondary; clicked => { root.picked(0); } }
+    DemoButton { width: 170px; height: 42px; text: "Text spike"; helper-text: ""; variant: root.current == 1 ? ButtonVariant.primary : ButtonVariant.secondary; clicked => { root.picked(1); } }
+    DemoButton { width: 170px; height: 42px; text: "Dashboard"; helper-text: ""; variant: root.current == 2 ? ButtonVariant.primary : ButtonVariant.secondary; clicked => { root.picked(2); } }
+}
+
 export component MainWindow inherits Window {
     in property <string> app-title;
     in property <string> status-text;
@@ -74,12 +90,46 @@ export component MainWindow inherits Window {
     in property <string> total-label;
     in property <[TimerModeData]> modes;
     in property <[SessionNoteData]> session-notes;
+    in property <[SummaryCardData]> dashboard-cards;
+    in property <[WeeklyBarData]> weekly-bars;
+    in property <[AxisMarkData]> weekly-ticks;
+    in property <int> weekly-selected;
+    in property <string> weekly-subtitle;
+    in property <string> weekly-summary;
+    in property <string> weekly-selected-text;
+    in property <string> history-line;
+    in property <string> history-area;
+    in property <[AxisMarkData]> history-y-ticks;
+    in property <[AxisMarkData]> history-x-marks;
+    in property <int> history-count;
+    in property <bool> history-has-selection;
+    in property <float> history-selected-x;
+    in property <float> history-selected-y;
+    in property <string> history-selected-title;
+    in property <string> history-selected-value;
+    in property <string> history-subtitle;
+    in property <string> history-summary;
+    in property <int> history-range-index;
+    in property <[CourseRowData]> dashboard-courses;
+    in property <string> courses-subtitle;
+    in property <string> courses-total-label;
+    in property <[SessionRowData]> dashboard-sessions;
+    in property <string> sessions-subtitle;
+    in property <int> scenario-index;
 
     callback toggle-timer();
     callback reset-timer();
     callback select-mode(int);
+    callback weekly-select(int);
+    callback weekly-step(int);
+    callback history-hover(float);
+    callback history-step(int);
+    callback history-plot-resized(float, float);
+    callback set-history-range(int);
+    callback set-scenario(int);
 
-    private property <bool> show-text-spike: true;
+    in-out property <bool> show-text-spike: true;
+    in-out property <bool> show-dashboard: false;
     private property <bool> text-input-focused: false;
     private property <string> single-line-sample: "Study Tracker - 日本語 note - cafe - sigma σ²";
     private property <string> mixed-line-sample: "Quantum Mechanics — 第4章 — σ² = 2.35 × 10⁻⁴";
@@ -94,8 +144,11 @@ export component MainWindow inherits Window {
     private property <length> timer-size: min(300px, max(236px, root.main-width - 120px));
 
     title: root.app-title;
-    width: 1220px;
-    height: 820px;
+    // Preferred (not fixed) size so the window is resizable; Stage 10 needs this for responsive checks.
+    preferred-width: 1220px;
+    preferred-height: 820px;
+    min-width: 460px;
+    min-height: 340px;
     background: Theme.background;
 
     forward-focus: shortcut-scope;
@@ -106,7 +159,8 @@ export component MainWindow inherits Window {
         focus-on-click: true;
 
         key-pressed(event) => {
-            if !root.text-input-focused && event.text == Key.Space {
+            if root.show-dashboard { reject }
+            else if !root.text-input-focused && event.text == Key.Space {
                 root.toggle-timer();
                 accept
             } else if !root.text-input-focused && (event.text == "r" || event.text == "R") {
@@ -124,13 +178,15 @@ export component MainWindow inherits Window {
         Rectangle { x: 180px; y: parent.height - 170px; width: 360px; height: 260px; border-radius: 180px; background: #23452f; opacity: 0.18; }
 
         if root.sidebar-width > 0px: AppSidebar {
+            today-value: root.dashboard-cards[0].value;
+            today-detail: "Streak " + root.dashboard-cards[2].value;
             x: root.shell-padding;
             y: root.shell-padding;
             width: root.sidebar-width;
             height: parent.height - 2 * root.shell-padding;
         }
 
-        ScrollView {
+        if !root.show-dashboard: ScrollView {
             x: root.content-x;
             y: root.shell-padding;
             width: root.main-width;
@@ -148,29 +204,13 @@ export component MainWindow inherits Window {
                 Text { x: 0px; y: 4px; text: root.show-text-spike ? "Text, IME, emoji, accessibility" : "Focus timer"; font-size: 30px; font-weight: 700; color: Theme.text-primary; }
                 Text { x: 1px; y: 44px; width: parent.width - 2px; text: root.show-text-spike ? "Stage 9 inspection surface for production-quality text and input risks." : "Pick a rhythm, press start, and let the rest fade away."; font-size: Theme.text-md; color: Theme.text-secondary; }
 
-                HorizontalLayout {
+                ViewSwitcher {
                     x: 0px;
                     y: 82px;
-                    width: min(430px, parent.width);
+                    width: min(640px, parent.width);
                     height: 42px;
-                    spacing: 10px;
-
-                    DemoButton {
-                        width: 120px;
-                        height: 42px;
-                        text: "Timer";
-                        helper-text: "";
-                        variant: root.show-text-spike ? ButtonVariant.secondary : ButtonVariant.primary;
-                        clicked => { root.show-text-spike = false; }
-                    }
-                    DemoButton {
-                        width: 170px;
-                        height: 42px;
-                        text: "Text spike";
-                        helper-text: "";
-                        variant: root.show-text-spike ? ButtonVariant.primary : ButtonVariant.secondary;
-                        clicked => { root.show-text-spike = true; }
-                    }
+                    current: root.show-text-spike ? 1 : 0;
+                    picked(view) => { root.show-text-spike = view == 1; root.show-dashboard = view == 2; }
                 }
 
                 if !root.show-text-spike: DemoCard {
@@ -366,10 +406,70 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
+
             }
         }
 
-        if root.rail-width > 0px && !root.show-text-spike: Rectangle {
+        if root.show-dashboard: Rectangle {
+            x: root.content-x;
+            y: root.shell-padding;
+            width: root.width - root.content-x - root.shell-padding;
+            height: parent.height - 2 * root.shell-padding;
+            background: transparent;
+
+            Text { x: 0px; y: 4px; text: "Dashboard and statistics"; font-size: 30px; font-weight: 700; color: Theme.text-primary; }
+            Text { x: 1px; y: 44px; width: parent.width - 2px; text: "Native charts, data-dense cards and scrolling lists drawn from Rust-prepared data."; font-size: Theme.text-md; color: Theme.text-secondary; overflow: elide; }
+            ViewSwitcher {
+                x: 0px;
+                y: 82px;
+                width: min(640px, parent.width);
+                height: 42px;
+                current: 2;
+                picked(view) => { root.show-text-spike = view == 1; root.show-dashboard = view == 2; }
+            }
+
+            DashboardView {
+                x: 0px;
+                y: 142px;
+                width: parent.width;
+                height: parent.height - 142px;
+                cards: root.dashboard-cards;
+                weekly-bars: root.weekly-bars;
+                weekly-ticks: root.weekly-ticks;
+                weekly-selected: root.weekly-selected;
+                weekly-subtitle: root.weekly-subtitle;
+                weekly-summary: root.weekly-summary;
+                weekly-selected-text: root.weekly-selected-text;
+                history-line: root.history-line;
+                history-area: root.history-area;
+                history-y-ticks: root.history-y-ticks;
+                history-x-marks: root.history-x-marks;
+                history-count: root.history-count;
+                history-has-selection: root.history-has-selection;
+                history-selected-x: root.history-selected-x;
+                history-selected-y: root.history-selected-y;
+                history-selected-title: root.history-selected-title;
+                history-selected-value: root.history-selected-value;
+                history-subtitle: root.history-subtitle;
+                history-summary: root.history-summary;
+                range-index: root.history-range-index;
+                courses: root.dashboard-courses;
+                courses-subtitle: root.courses-subtitle;
+                courses-total-label: root.courses-total-label;
+                sessions: root.dashboard-sessions;
+                sessions-subtitle: root.sessions-subtitle;
+                scenario-index: root.scenario-index;
+                weekly-select(index) => { root.weekly-select(index); }
+                weekly-step(delta) => { root.weekly-step(delta); }
+                history-hover(fraction) => { root.history-hover(fraction); }
+                history-step(delta) => { root.history-step(delta); }
+                plot-resized(w, h) => { root.history-plot-resized(w, h); }
+                set-range(index) => { root.set-history-range(index); }
+                set-scenario(index) => { root.set-scenario(index); }
+            }
+        }
+
+        if root.rail-width > 0px && !root.show-text-spike && !root.show-dashboard: Rectangle {
             x: root.content-x + root.main-width + 22px;
             y: root.shell-padding;
             width: root.rail-width;

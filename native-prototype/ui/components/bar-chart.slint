@@ -1,0 +1,129 @@
+import { Theme } from "../theme.slint";
+import { WeeklyBarData, AxisMarkData } from "../dashboard-types.slint";
+import { ChartTooltip } from "chart-tooltip.slint";
+
+// Bar chart whose geometry is entirely data-driven: each bar's height is `fraction` of the plot
+// height, gridlines come from `y-ticks`. Hover or arrow keys change `selected`; the selected
+// bar's detail is always shown in the tooltip band, so nothing depends on hover alone.
+export component BarChart inherits FocusScope {
+    in property <[WeeklyBarData]> bars;
+    in property <[AxisMarkData]> y-ticks;
+    in property <int> selected;
+    in property <string> accessible-summary;
+    callback select(int);
+    callback step(int);
+
+    private property <length> axis-width: 34px;
+    private property <length> tip-band: 34px;
+    private property <length> label-band: 24px;
+    private property <length> plot-height: max(24px, root.height - root.tip-band - root.label-band);
+    private property <length> plot-width: max(10px, root.width - root.axis-width);
+    private property <length> column-width: root.plot-width / max(1, root.bars.length);
+    private property <WeeklyBarData> current: root.bars[root.selected];
+    private property <length> selected-bar-height: max(3px, root.current.fraction * root.plot-height);
+
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: slider;
+    accessible-label: "Weekly study time chart";
+    accessible-description: root.accessible-summary;
+    accessible-value: root.current.detail;
+    accessible-value-minimum: 0;
+    accessible-value-maximum: max(0, root.bars.length - 1);
+    accessible-value-step: 1;
+    accessible-action-increment => { root.step(1); }
+    accessible-action-decrement => { root.step(-1); }
+
+    key-pressed(event) => {
+        if event.text == Key.LeftArrow { root.step(-1); accept }
+        else if event.text == Key.RightArrow { root.step(1); accept }
+        else if event.text == Key.Home { root.step(-100); accept }
+        else if event.text == Key.End { root.step(100); accept }
+        else { reject }
+    }
+
+    Rectangle {
+        x: root.axis-width - 4px;
+        y: root.tip-band - 3px;
+        width: root.plot-width + 4px;
+        height: root.plot-height + 6px;
+        border-radius: 8px;
+        border-width: 2px;
+        border-color: Theme.accent;
+        opacity: root.has-focus ? 0.9 : 0.0;
+        animate opacity { duration: Theme.transition-fast; }
+    }
+
+    for tick in root.y-ticks: Rectangle {
+        y: root.tip-band + tick.position * root.plot-height;
+        width: root.width;
+        height: 0px;
+
+        Rectangle { x: root.axis-width; y: 0px; width: root.plot-width; height: 1px; background: Theme.grid-line; }
+        Text { x: 0px; y: -7px; width: root.axis-width - 8px; text: tick.label; horizontal-alignment: right; font-size: 10px; color: Theme.text-muted; }
+    }
+
+    plot := Rectangle {
+        x: root.axis-width;
+        y: root.tip-band;
+        width: root.plot-width;
+        height: root.plot-height;
+
+        for bar[i] in root.bars: column := Rectangle {
+            private property <bool> active: i == root.selected;
+            private property <length> bar-width: min(54px, max(6px, root.column-width - 10px));
+            x: i * root.column-width;
+            width: root.column-width;
+            height: parent.height;
+            accessible-role: button;
+            accessible-label: bar.detail;
+            accessible-action-default => { root.select(i); }
+
+            Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: 0px;
+                width: column.bar-width + 6px;
+                height: parent.height;
+                border-radius: 8px;
+                background: Theme.tone(bar.tone);
+                opacity: column.active ? 0.13 : (touch.has-hover ? 0.07 : 0.0);
+                animate opacity { duration: Theme.transition-fast; easing: ease-out; }
+            }
+            Rectangle {
+                x: (parent.width - self.width) / 2;
+                width: column.bar-width;
+                height: max(3px, bar.fraction * plot.height);
+                y: parent.height - self.height;
+                border-radius: min(7px, self.height / 2);
+                background: bar.fraction <= 0 ? Theme.border-strong : Theme.tone(bar.tone);
+                opacity: column.active ? 1.0 : 0.72;
+                animate height, opacity { duration: Theme.transition-normal; easing: ease-out; }
+            }
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.select(i); }
+                changed has-hover => { if self.has-hover { root.select(i); } }
+            }
+        }
+    }
+
+    for bar[i] in root.bars: Text {
+        x: root.axis-width + i * root.column-width;
+        y: root.tip-band + root.plot-height + 6px;
+        width: root.column-width;
+        text: bar.day;
+        horizontal-alignment: center;
+        font-size: Theme.text-sm;
+        font-weight: i == root.selected ? 800 : 500;
+        color: i == root.selected ? Theme.text-primary : Theme.text-secondary;
+    }
+
+    if root.bars.length > 0: tip := ChartTooltip {
+        title: root.current.day;
+        value: root.current.value;
+        accent: Theme.tone(root.current.tone);
+        x: max(root.axis-width, min(root.width - self.width, root.axis-width + (root.selected + 0.5) * root.column-width - self.width / 2));
+        y: 0px;
+        animate x { duration: Theme.transition-normal; easing: ease-out; }
+    }
+}

@@ -30,6 +30,10 @@ component NavItem inherits Rectangle {
 }
 
 export component AppSidebar inherits Rectangle {
+    // Fed from the Stage 10 dashboard data so the sidebar never disagrees with the dashboard cards.
+    in property <string> today-value;
+    in property <string> today-detail;
+
     width: 220px;
     border-radius: Theme.radius-xl;
     background: #151e28;
@@ -78,7 +82,7 @@ export component AppSidebar inherits Rectangle {
         border-color: Theme.border;
 
         Text { x: 14px; y: 13px; text: "Today"; font-size: Theme.text-sm; color: Theme.text-muted; }
-        Text { x: 14px; y: 34px; text: "2h 45m"; font-size: 22px; font-weight: 800; color: Theme.text-primary; }
-        Text { x: 14px; y: 65px; text: "Goal 4h · streak 6"; font-size: Theme.text-sm; color: Theme.text-secondary; }
+        Text { x: 14px; y: 34px; text: root.today-value; font-size: 22px; font-weight: 800; color: Theme.text-primary; }
+        Text { x: 14px; y: 65px; text: root.today-detail; overflow: elide; width: parent.width - 28px; font-size: Theme.text-sm; color: Theme.text-secondary; }
     }
 }

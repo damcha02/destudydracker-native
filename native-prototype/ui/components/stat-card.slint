@@ -1,0 +1,26 @@
+import { Theme } from "../theme.slint";
+import { SummaryCardData } from "../dashboard-types.slint";
+
+export component StatCard inherits Rectangle {
+    in property <SummaryCardData> entry;
+
+    min-height: 96px;
+    border-radius: Theme.radius-lg;
+    background: Theme.card;
+    border-width: 1px;
+    border-color: Theme.border;
+    accessible-role: groupbox;
+    accessible-label: root.entry.label + ": " + root.entry.value + ", " + root.entry.detail;
+
+    Rectangle {
+        x: 18px;
+        y: 20px;
+        width: 22px;
+        height: 3px;
+        border-radius: 2px;
+        background: Theme.tone(root.entry.tone);
+    }
+    Text { x: 18px; y: 30px; text: root.entry.label; font-size: 10px; font-weight: 700; letter-spacing: 1.6px; color: Theme.text-muted; }
+    Text { x: 18px; y: 46px; width: parent.width - 36px; text: root.entry.value; font-size: 28px; font-weight: 800; color: Theme.text-primary; overflow: elide; }
+    Text { x: 18px; y: parent.height - 26px; width: parent.width - 36px; text: root.entry.detail; font-size: Theme.text-sm; color: Theme.text-secondary; overflow: elide; }
+}

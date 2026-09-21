@@ -15,6 +15,14 @@ export global Theme {
     out property <color> border: #3b4a5a;
     out property <color> border-strong: #53677d;
     out property <color> disabled: #4a5662;
+    out property <color> violet: #dca0ff;
+    out property <color> tooltip-background: #0f1720;
+    out property <color> grid-line: #2c3a49;
+
+    // Categorical accent used by cards, bars, courses and sessions (Rust sends the index).
+    public pure function tone(index: int) -> color {
+        return index == 1 ? Theme.accent : index == 2 ? Theme.warning : index == 3 ? Theme.violet : Theme.primary;
+    }
 
     out property <length> radius-sm: 10px;
     out property <length> radius-md: 14px;

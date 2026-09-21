@@ -1,0 +1,247 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { DemoCard } from "components/card.slint";
+import { StatCard } from "components/stat-card.slint";
+import { BarChart } from "components/bar-chart.slint";
+import { LineChart } from "components/line-chart.slint";
+import { CourseBreakdown } from "components/course-breakdown.slint";
+import { SessionList } from "components/session-list.slint";
+import { SegmentedControl } from "components/segmented-control.slint";
+import { SummaryCardData, WeeklyBarData, AxisMarkData, CourseRowData, SessionRowData } from "dashboard-types.slint";
+
+// Stage 10 dashboard. Receives fully prepared data from src/dashboard.rs and only lays it out.
+// Responsive rules (desktop only): >= 980px two-column chart/list rows, otherwise stacked;
+// < 620px summary cards become a 2x2 grid. The whole view scrolls vertically for short windows.
+export component DashboardView inherits Rectangle {
+    in property <[SummaryCardData]> cards;
+
+    in property <[WeeklyBarData]> weekly-bars;
+    in property <[AxisMarkData]> weekly-ticks;
+    in property <int> weekly-selected;
+    in property <string> weekly-subtitle;
+    in property <string> weekly-summary;
+    in property <string> weekly-selected-text;
+
+    in property <string> history-line;
+    in property <string> history-area;
+    in property <[AxisMarkData]> history-y-ticks;
+    in property <[AxisMarkData]> history-x-marks;
+    in property <int> history-count;
+    in property <bool> history-has-selection;
+    in property <float> history-selected-x;
+    in property <float> history-selected-y;
+    in property <string> history-selected-title;
+    in property <string> history-selected-value;
+    in property <string> history-subtitle;
+    in property <string> history-summary;
+    in property <int> range-index;
+
+    in property <[CourseRowData]> courses;
+    in property <string> courses-subtitle;
+    in property <string> courses-total-label;
+    in property <[SessionRowData]> sessions;
+    in property <string> sessions-subtitle;
+    in property <int> scenario-index;
+
+    callback weekly-select(int);
+    callback weekly-step(int);
+    callback history-hover(float);
+    callback history-step(int);
+    callback plot-resized(float, float);
+    callback set-range(int);
+    callback set-scenario(int);
+
+    private property <length> gap: 18px;
+    private property <length> content-width: max(280px, root.width - 14px);
+    private property <bool> wide: root.content-width >= 820px;
+    private property <bool> narrow: root.content-width < 620px;
+    private property <length> cards-height: root.narrow ? 220px : 104px;
+    private property <length> row1-y: root.cards-height + root.gap;
+    private property <length> weekly-height: 380px;
+    private property <length> history-height: 396px;
+    private property <length> row1-height: root.wide ? max(root.weekly-height, root.history-height) : root.weekly-height + root.gap + root.history-height;
+    private property <length> row2-y: root.row1-y + root.row1-height + root.gap;
+    private property <length> lower-height: 424px;
+    private property <length> row2-height: root.wide ? root.lower-height : 2 * root.lower-height + root.gap;
+    private property <length> row3-y: root.row2-y + root.row2-height + root.gap;
+    private property <length> total-height: root.row3-y + 124px + 8px;
+    private property <length> weekly-width: root.wide ? (root.content-width - root.gap) * 0.4 : root.content-width;
+    private property <length> history-width: root.wide ? root.content-width - root.weekly-width - root.gap : root.content-width;
+    private property <length> history-y: root.wide ? root.row1-y : root.row1-y + root.weekly-height + root.gap;
+    private property <length> courses-width: root.wide ? (root.content-width - root.gap) * 0.5 : root.content-width;
+    private property <length> sessions-width: root.wide ? root.content-width - root.courses-width - root.gap : root.content-width;
+    private property <length> sessions-x: root.wide ? root.courses-width + root.gap : 0px;
+    private property <length> sessions-y: root.wide ? root.row2-y : root.row2-y + root.lower-height + root.gap;
+
+    ScrollView {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: self.width;
+        viewport-height: root.total-height;
+        horizontal-scrollbar-policy: always-off;
+
+        for card[i] in root.cards: StatCard {
+            entry: card;
+            x: root.narrow ? (i - 2 * floor(i / 2)) * ((root.content-width - 12px) / 2 + 12px) : i * ((root.content-width - 36px) / 4 + 12px);
+            y: root.narrow ? floor(i / 2) * 116px : 0px;
+            width: root.narrow ? (root.content-width - 12px) / 2 : (root.content-width - 36px) / 4;
+            height: 104px;
+        }
+
+        DemoCard {
+            x: 0px;
+            y: root.row1-y;
+            width: root.weekly-width;
+            height: root.weekly-height;
+            title: "Weekly focus";
+            subtitle: root.weekly-subtitle;
+            emphasized: true;
+
+            BarChart {
+                x: 12px;
+                y: 72px;
+                width: parent.width - 24px;
+                height: parent.height - 72px - 50px;
+                bars: root.weekly-bars;
+                y-ticks: root.weekly-ticks;
+                selected: root.weekly-selected;
+                accessible-summary: root.weekly-summary;
+                select(index) => { root.weekly-select(index); }
+                step(delta) => { root.weekly-step(delta); }
+            }
+            Text {
+                x: 16px;
+                y: parent.height - 40px;
+                width: parent.width - 32px;
+                text: root.weekly-selected-text;
+                font-size: Theme.text-sm;
+                font-weight: 700;
+                color: Theme.text-primary;
+                overflow: elide;
+            }
+            Text {
+                x: 16px;
+                y: parent.height - 22px;
+                width: parent.width - 32px;
+                text: "Hover, click, or use ← → when focused";
+                font-size: 10px;
+                color: Theme.text-muted;
+            }
+        }
+
+        DemoCard {
+            x: root.wide ? root.weekly-width + root.gap : 0px;
+            y: root.history-y;
+            width: root.history-width;
+            height: root.history-height;
+            title: "Study history";
+            subtitle: root.history-subtitle;
+            emphasized: true;
+
+            SegmentedControl {
+                x: parent.width - self.width - 16px;
+                y: 14px;
+                width: 176px;
+                options: ["30", "365", "1000"];
+                current: root.range-index;
+                accessible-name: "History range in days";
+                picked(index) => { root.set-range(index); }
+            }
+            LineChart {
+                x: 12px;
+                y: 72px;
+                width: parent.width - 24px;
+                height: parent.height - 72px - 50px;
+                line-commands: root.history-line;
+                area-commands: root.history-area;
+                y-ticks: root.history-y-ticks;
+                x-marks: root.history-x-marks;
+                point-count: root.history-count;
+                has-selection: root.history-has-selection;
+                selected-x: root.history-selected-x;
+                selected-y: root.history-selected-y;
+                selected-title: root.history-selected-title;
+                selected-value: root.history-selected-value;
+                accessible-summary: root.history-summary;
+                hover(fraction) => { root.history-hover(fraction); }
+                step(delta) => { root.history-step(delta); }
+                plot-resized(w, h) => { root.plot-resized(w, h); }
+            }
+            Text {
+                x: 16px;
+                y: parent.height - 40px;
+                width: parent.width - 32px;
+                text: root.history-has-selection ? "Selected: " + root.history-selected-title + " — " + root.history-selected-value : "Nothing to select";
+                font-size: Theme.text-sm;
+                font-weight: 700;
+                color: Theme.text-primary;
+                overflow: elide;
+            }
+            Text {
+                x: 16px;
+                y: parent.height - 22px;
+                width: parent.width - 32px;
+                text: root.history-summary;
+                font-size: 10px;
+                color: Theme.text-muted;
+                overflow: elide;
+            }
+        }
+
+        DemoCard {
+            x: 0px;
+            y: root.row2-y;
+            width: root.courses-width;
+            height: root.lower-height;
+            title: "Course breakdown";
+            subtitle: root.courses-subtitle;
+            emphasized: true;
+
+            CourseBreakdown {
+                x: 16px;
+                y: 78px;
+                width: parent.width - 32px;
+                height: parent.height - 78px - 16px;
+                courses: root.courses;
+                total-label: root.courses-total-label;
+            }
+        }
+
+        DemoCard {
+            x: root.sessions-x;
+            y: root.sessions-y;
+            width: root.sessions-width;
+            height: root.lower-height;
+            title: "Recent sessions";
+            subtitle: root.sessions-subtitle;
+            emphasized: true;
+
+            SessionList {
+                x: 16px;
+                y: 74px;
+                width: parent.width - 32px;
+                height: parent.height - 74px - 12px;
+                sessions: root.sessions;
+            }
+        }
+
+        DemoCard {
+            x: 0px;
+            y: root.row3-y;
+            width: root.content-width;
+            height: 124px;
+            title: "Data set (Stage 10 edge-case controls)";
+            subtitle: "Swap the deterministic mock data to exercise empty, single-point, zero, flat and outlier shapes.";
+
+            SegmentedControl {
+                x: 16px;
+                y: 76px;
+                width: min(parent.width - 32px, 520px);
+                options: ["Typical", "Empty", "1 point", "Zeros", "Same", "Outlier"];
+                current: root.scenario-index;
+                accessible-name: "Mock data scenario";
+                picked(index) => { root.set-scenario(index); }
+            }
+        }
+    }
+}

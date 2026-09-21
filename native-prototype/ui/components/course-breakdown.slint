@@ -1,0 +1,69 @@
+import { Theme } from "../theme.slint";
+import { CourseRowData } from "../dashboard-types.slint";
+
+component CourseRow inherits Rectangle {
+    in property <CourseRowData> entry;
+
+    height: 62px;
+    accessible-role: groupbox;
+    accessible-label: root.entry.name + ": " + root.entry.minutes-label + ", " + root.entry.percent + " percent of study time, health " + root.entry.health + " percent";
+
+    Rectangle { x: 0px; y: 8px; width: 10px; height: 10px; border-radius: 5px; background: Theme.tone(root.entry.tone); }
+    Text { x: 20px; y: 3px; width: parent.width - 20px - 92px; text: root.entry.name; font-size: 13px; font-weight: 700; color: Theme.text-primary; overflow: elide; }
+    Text { x: 20px; y: 23px; width: parent.width - 20px - 92px; text: root.entry.detail; font-size: 11px; color: Theme.text-secondary; overflow: elide; }
+    Text { x: parent.width - 84px; y: 3px; width: 84px; text: root.entry.minutes-label; horizontal-alignment: right; font-size: 13px; font-weight: 700; color: Theme.text-primary; }
+    Text { x: parent.width - 84px; y: 23px; width: 84px; text: root.entry.percent + "% · health " + root.entry.health; horizontal-alignment: right; font-size: 11px; color: Theme.text-muted; }
+    Rectangle {
+        x: 20px;
+        y: 47px;
+        width: parent.width - 20px;
+        height: 5px;
+        border-radius: 3px;
+        background: Theme.surface-inset;
+        clip: true;
+        Rectangle { width: parent.width * root.entry.health / 100; height: 100%; border-radius: 3px; background: Theme.tone(root.entry.tone); opacity: 0.85; }
+    }
+}
+
+// Stacked share bar + one row per course (the rows double as the legend).
+export component CourseBreakdown inherits Rectangle {
+    in property <[CourseRowData]> courses;
+    in property <string> total-label;
+    in property <string> empty-text: "No courses tracked yet";
+
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: 12px;
+        border-radius: 6px;
+        background: Theme.surface-inset;
+        clip: true;
+        accessible-role: image;
+        accessible-label: "Share of " + root.total-label + " by course";
+
+        for course in root.courses: Rectangle {
+            x: course.start * parent.width;
+            width: max(0px, course.fraction * parent.width - 2px);
+            height: parent.height;
+            background: Theme.tone(course.tone);
+        }
+    }
+
+    if root.courses.length == 0: Text {
+        y: 26px;
+        width: parent.width;
+        text: root.empty-text;
+        font-size: Theme.text-sm;
+        color: Theme.text-muted;
+    }
+
+    VerticalLayout {
+        y: 26px;
+        width: parent.width;
+        height: parent.height - 26px;
+        spacing: 6px;
+        alignment: start;
+        for course in root.courses: CourseRow { entry: course; }
+    }
+}
