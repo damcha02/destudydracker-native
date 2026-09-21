@@ -1,0 +1,20 @@
+// Plain data shapes the Rust map model (src/map, src/map_adapter.rs) sends to the map lab view.
+
+export struct MapRegionData {
+    // SVG-style path commands in world units (x 0..1000, y 0..500). Rebuilt only when the data set changes.
+    commands: string,
+    tone: int,
+}
+
+export struct MapLabelData {
+    text: string,
+    x: length,
+    y: length,
+    width: length,
+}
+
+export struct MapMarkerData {
+    x: length,
+    y: length,
+    tone: int,
+}

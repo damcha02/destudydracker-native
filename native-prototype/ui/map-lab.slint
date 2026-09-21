@@ -1,0 +1,300 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { DemoCard } from "components/card.slint";
+import { SegmentedControl } from "components/segmented-control.slint";
+import { MapRegionData, MapLabelData, MapMarkerData } from "map-types.slint";
+
+// Continent colours (Europe, Americas, Africa, Asia, Oceania); stress data sets reuse them by index.
+global MapPalette {
+    public pure function region-color(tone: int) -> color {
+        return tone == 1 ? #4f9a72 : tone == 2 ? #c29a4d : tone == 3 ? #8a6cb8 : tone == 4 ? #b8627c : #5a82c2;
+    }
+}
+
+component MapButton inherits Rectangle {
+    in property <string> text;
+    in property <string> label;
+    callback clicked();
+
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: touch.pressed ? Theme.primary-pressed : (touch.has-hover ? Theme.card-raised : Theme.card);
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+
+    Text { text: root.text; font-size: 16px; font-weight: 800; color: Theme.text-primary; horizontal-alignment: center; vertical-alignment: center; }
+    touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+// Stage 11 map lab. All geometry arrives prepared from Rust; pan/zoom move and scale ONE layer
+// (`layer-x/y/scale`), so the path strings are parsed once per data set, not per frame.
+export component MapLabView inherits Rectangle {
+    in property <[MapRegionData]> regions;
+    in property <string> hover-commands;
+    in property <string> selected-commands;
+    in property <[MapLabelData]> labels;
+    in property <[MapMarkerData]> markers;
+    in property <length> layer-x;
+    in property <length> layer-y;
+    in property <float> layer-scale: 1;
+    in property <string> hover-text;
+    in property <string> selected-text;
+    in property <string> stats-text;
+    in property <string> perf-text;
+    in property <string> zoom-text;
+    in property <int> level-index;
+    in property <string> level-name;
+
+    callback viewport-resized(float, float);
+    callback press();
+    callback drag(float, float);
+    callback release(float, float);
+    callback hover(float, float);
+    callback leave();
+    callback wheel(float, float, float);
+    callback zoom-step(int);
+    callback reset-view();
+    callback step-selection(int);
+    callback focus-selected();
+    callback pan-key(float, float);
+    callback set-level(int);
+    callback cycle-level(int);
+
+    private property <length> gap: 18px;
+    private property <length> content-width: max(300px, root.width - 14px);
+    private property <length> map-card-height: max(330px, min(640px, (root.content-width - 32px) * 0.5 + 200px));
+    private property <length> map-height: root.map-card-height - 200px;
+    private property <bool> wide-controls: root.content-width >= 760px;
+    private property <length> stress-y: root.map-card-height + root.gap;
+    private property <length> stress-height: 214px;
+
+    ScrollView {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: self.width;
+        viewport-height: root.stress-y + root.stress-height + 8px;
+        horizontal-scrollbar-policy: always-off;
+
+        DemoCard {
+            x: 0px;
+            y: 0px;
+            width: root.content-width;
+            height: root.map-card-height;
+            title: "World map";
+            subtitle: root.level-name + " · drag to pan · wheel to zoom · click a country";
+            emphasized: true;
+
+            map-focus := FocusScope {
+                x: 16px;
+                y: 72px;
+                width: parent.width - 32px;
+                height: root.map-height;
+                focus-on-click: true;
+                focus-on-tab-navigation: true;
+                accessible-role: image;
+                accessible-label: "Interactive world map. " + root.stats-text + ". Selected: " + root.selected-text;
+                accessible-description: "Arrow keys pan, plus and minus zoom, zero resets the view, Page Up and Page Down select the previous or next country, Enter zooms to the selection, bracket keys cycle the stress data set.";
+
+                key-pressed(event) => {
+                    if event.text == Key.LeftArrow { root.pan-key(-60, 0); accept }
+                    else if event.text == Key.RightArrow { root.pan-key(60, 0); accept }
+                    else if event.text == Key.UpArrow { root.pan-key(0, -60); accept }
+                    else if event.text == Key.DownArrow { root.pan-key(0, 60); accept }
+                    else if event.text == "+" || event.text == "=" { root.zoom-step(1); accept }
+                    else if event.text == "-" { root.zoom-step(-1); accept }
+                    else if event.text == "0" { root.reset-view(); accept }
+                    else if event.text == Key.PageDown { root.step-selection(1); accept }
+                    else if event.text == Key.PageUp { root.step-selection(-1); accept }
+                    else if event.text == Key.Return { root.focus-selected(); accept }
+                    else if event.text == "]" { root.cycle-level(1); accept }
+                    else if event.text == "[" { root.cycle-level(-1); accept }
+                    else { reject }
+                }
+
+                viewport := Rectangle {
+                    background: #12202c;
+                    border-radius: 12px;
+                    border-width: map-focus.has-focus ? 2px : 1px;
+                    border-color: map-focus.has-focus ? Theme.accent : Theme.border;
+                    clip: true;
+
+                    init => { root.viewport-resized(self.width / 1px, self.height / 1px); }
+                    changed width => { root.viewport-resized(self.width / 1px, self.height / 1px); }
+                    changed height => { root.viewport-resized(self.width / 1px, self.height / 1px); }
+
+                    // The 1000x500 world layer. Scaling is about its centre, so Rust supplies the top-left
+                    // that puts world (500, 250) at the right screen position.
+                    Rectangle {
+                        x: root.layer-x;
+                        y: root.layer-y;
+                        width: 1000px;
+                        height: 500px;
+                        transform-scale: root.layer-scale;
+
+                        for region in root.regions: Path {
+                            width: 1000px;
+                            height: 500px;
+                            viewbox-width: 1000;
+                            viewbox-height: 500;
+                            commands: region.commands;
+                            fill: MapPalette.region-color(region.tone);
+                            fill-rule: FillRule.evenodd;
+                            stroke: #0d1720;
+                            stroke-width: 0.7px / root.layer-scale;
+                            stroke-line-join: round;
+                        }
+                        Path {
+                            width: 1000px;
+                            height: 500px;
+                            viewbox-width: 1000;
+                            viewbox-height: 500;
+                            commands: root.hover-commands;
+                            fill: #ffffff33;
+                            fill-rule: FillRule.evenodd;
+                            stroke: #dfe9f7;
+                            stroke-width: 1.3px / root.layer-scale;
+                            stroke-line-join: round;
+                        }
+                        Path {
+                            width: 1000px;
+                            height: 500px;
+                            viewbox-width: 1000;
+                            viewbox-height: 500;
+                            commands: root.selected-commands;
+                            fill: #f2c46a66;
+                            fill-rule: FillRule.evenodd;
+                            stroke: #f2c46a;
+                            stroke-width: 2px / root.layer-scale;
+                            stroke-line-join: round;
+                        }
+                    }
+
+                    // Screen-space overlays: fixed-size markers and labels stay crisp at every zoom.
+                    for marker in root.markers: Rectangle {
+                        x: marker.x - 4px;
+                        y: marker.y - 4px;
+                        width: 8px;
+                        height: 8px;
+                        border-radius: 4px;
+                        background: MapPalette.region-color(marker.tone);
+                        border-width: 1.5px;
+                        border-color: #eaf1fa;
+                    }
+                    for label in root.labels: Rectangle {
+                        x: label.x;
+                        y: label.y;
+                        width: label.width;
+                        height: 16px;
+                        border-radius: 5px;
+                        background: #0d172199;
+                        Text { text: label.text; font-size: 10.5px; color: #eef4fb; horizontal-alignment: center; vertical-alignment: center; overflow: elide; }
+                    }
+
+                    touch := TouchArea {
+                        mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.grab;
+                        pointer-event(event) => {
+                            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                                map-focus.focus();
+                                root.press();
+                            } else if event.button == PointerEventButton.left && event.kind == PointerEventKind.up {
+                                root.release(self.mouse-x / 1px, self.mouse-y / 1px);
+                            } else if event.kind == PointerEventKind.move {
+                                if self.pressed {
+                                    root.drag((self.mouse-x - self.pressed-x) / 1px, (self.mouse-y - self.pressed-y) / 1px);
+                                } else {
+                                    root.hover(self.mouse-x / 1px, self.mouse-y / 1px);
+                                }
+                            }
+                        }
+                        scroll-event(event) => {
+                            root.wheel(event.delta-y / 1px, self.mouse-x / 1px, self.mouse-y / 1px);
+                            accept
+                        }
+                        changed has-hover => { if !self.has-hover { root.leave(); } }
+                    }
+
+                    Rectangle {
+                        x: parent.width - 34px * 3 - 8px * 3;
+                        y: 8px;
+                        width: 34px * 3 + 16px;
+                        height: 34px;
+                        MapButton { x: 0px; text: "+"; label: "Zoom in"; clicked => { root.zoom-step(1); } }
+                        MapButton { x: 42px; text: "−"; label: "Zoom out"; clicked => { root.zoom-step(-1); } }
+                        MapButton { x: 84px; text: "⌂"; label: "Reset view"; clicked => { root.reset-view(); } }
+                    }
+                }
+            }
+
+            Text {
+                x: 20px;
+                y: parent.height - 108px;
+                width: parent.width - 40px;
+                text: "Hover: " + root.hover-text;
+                font-size: Theme.text-sm;
+                color: Theme.text-secondary;
+                overflow: elide;
+            }
+            Text {
+                x: 20px;
+                y: parent.height - 84px;
+                width: parent.width - 40px;
+                height: 40px;
+                text: "Selected: " + root.selected-text;
+                wrap: word-wrap;
+                font-size: Theme.text-sm;
+                font-weight: 700;
+                color: Theme.text-primary;
+            }
+            Rectangle {
+                x: 16px;
+                y: parent.height - 38px;
+                width: parent.width - 32px;
+                height: 1px;
+                background: Theme.grid-line;
+            }
+            Text {
+                x: 20px;
+                y: parent.height - 30px;
+                width: parent.width - 40px;
+                text: root.zoom-text + " · " + root.perf-text;
+                font-size: 10.5px;
+                color: Theme.text-muted;
+                overflow: elide;
+            }
+        }
+
+        DemoCard {
+            x: 0px;
+            y: root.stress-y;
+            width: root.content-width;
+            height: root.stress-height;
+            title: "Geometry stress and edge cases";
+            subtitle: root.stats-text;
+
+            Text { x: 20px; y: 76px; text: "Stress data set"; font-size: 11px; color: Theme.text-muted; }
+            SegmentedControl {
+                x: 16px;
+                y: 94px;
+                width: min(parent.width - 32px, 760px);
+                options: ["World", "Light", "×3", "×10", "×50", "Cells", "Giant"];
+                current: root.level-index;
+                accessible-name: "Map stress data set";
+                picked(index) => { root.set-level(index); }
+            }
+            Text { x: 20px; y: 138px; text: "Edge cases"; font-size: 11px; color: Theme.text-muted; }
+            SegmentedControl {
+                x: 16px;
+                y: 156px;
+                width: min(parent.width - 32px, 560px);
+                options: ["Empty", "One", "Tiny+huge", "Multi+hole"];
+                current: root.level-index - 7;
+                accessible-name: "Map edge-case data set";
+                picked(index) => { root.set-level(index + 7); }
+            }
+        }
+    }
+}

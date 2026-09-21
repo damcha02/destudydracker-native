@@ -8,6 +8,10 @@ import { PresetCard } from "components/preset-card.slint";
 import { SessionRow } from "components/session-row.slint";
 import { TimerDisplay } from "components/timer-display.slint";
 import { DashboardView } from "dashboard.slint";
+import { MapLabView } from "map-lab.slint";
+import { MapRegionData, MapLabelData, MapMarkerData } from "map-types.slint";
+
+export { MapRegionData, MapLabelData, MapMarkerData } from "map-types.slint";
 import { SummaryCardData, WeeklyBarData, AxisMarkData, CourseRowData, SessionRowData } from "dashboard-types.slint";
 
 export { SummaryCardData, WeeklyBarData, AxisMarkData, CourseRowData, SessionRowData } from "dashboard-types.slint";
@@ -59,16 +63,17 @@ component TimerModeTile inherits Rectangle {
     }
 }
 
-// Shared Timer / Text spike / Dashboard switch (0 = timer, 1 = text spike, 2 = dashboard).
+// Shared view switch (0 = timer, 1 = text spike, 2 = dashboard, 3 = map lab).
 component ViewSwitcher inherits HorizontalLayout {
     in property <int> current;
     callback picked(int);
 
     spacing: 10px;
 
-    DemoButton { width: 120px; height: 42px; text: "Timer"; helper-text: ""; variant: root.current == 0 ? ButtonVariant.primary : ButtonVariant.secondary; clicked => { root.picked(0); } }
-    DemoButton { width: 170px; height: 42px; text: "Text spike"; helper-text: ""; variant: root.current == 1 ? ButtonVariant.primary : ButtonVariant.secondary; clicked => { root.picked(1); } }
-    DemoButton { width: 170px; height: 42px; text: "Dashboard"; helper-text: ""; variant: root.current == 2 ? ButtonVariant.primary : ButtonVariant.secondary; clicked => { root.picked(2); } }
+    DemoButton { width: 90px; height: 42px; text: "Timer"; helper-text: ""; variant: root.current == 0 ? ButtonVariant.primary : ButtonVariant.secondary; clicked => { root.picked(0); } }
+    DemoButton { width: 118px; height: 42px; text: "Text spike"; helper-text: ""; variant: root.current == 1 ? ButtonVariant.primary : ButtonVariant.secondary; clicked => { root.picked(1); } }
+    DemoButton { width: 118px; height: 42px; text: "Dashboard"; helper-text: ""; variant: root.current == 2 ? ButtonVariant.primary : ButtonVariant.secondary; clicked => { root.picked(2); } }
+    DemoButton { width: 100px; height: 42px; text: "Map lab"; helper-text: ""; variant: root.current == 3 ? ButtonVariant.primary : ButtonVariant.secondary; clicked => { root.picked(3); } }
 }
 
 export component MainWindow inherits Window {
@@ -120,6 +125,36 @@ export component MainWindow inherits Window {
     callback toggle-timer();
     callback reset-timer();
     callback select-mode(int);
+    in property <[MapRegionData]> map-regions;
+    in property <string> map-hover-commands;
+    in property <string> map-selected-commands;
+    in property <[MapLabelData]> map-labels;
+    in property <[MapMarkerData]> map-markers;
+    in property <length> map-layer-x;
+    in property <length> map-layer-y;
+    in property <float> map-layer-scale: 1;
+    in property <string> map-hover-text;
+    in property <string> map-selected-text;
+    in property <string> map-stats-text;
+    in property <string> map-perf-text;
+    in property <string> map-zoom-text;
+    in property <int> map-level-index;
+    in property <string> map-level-name;
+    callback map-viewport-resized(float, float);
+    callback map-press();
+    callback map-drag(float, float);
+    callback map-release(float, float);
+    callback map-hover(float, float);
+    callback map-leave();
+    callback map-wheel(float, float, float);
+    callback map-zoom-step(int);
+    callback map-reset-view();
+    callback map-step-selection(int);
+    callback map-focus-selected();
+    callback map-pan-key(float, float);
+    callback map-set-level(int);
+    callback map-cycle-level(int);
+
     callback weekly-select(int);
     callback weekly-step(int);
     callback history-hover(float);
@@ -130,6 +165,7 @@ export component MainWindow inherits Window {
 
     in-out property <bool> show-text-spike: true;
     in-out property <bool> show-dashboard: false;
+    in-out property <bool> show-map: false;
     private property <bool> text-input-focused: false;
     private property <string> single-line-sample: "Study Tracker - 日本語 note - cafe - sigma σ²";
     private property <string> mixed-line-sample: "Quantum Mechanics — 第4章 — σ² = 2.35 × 10⁻⁴";
@@ -159,7 +195,7 @@ export component MainWindow inherits Window {
         focus-on-click: true;
 
         key-pressed(event) => {
-            if root.show-dashboard { reject }
+            if root.show-dashboard || root.show-map { reject }
             else if !root.text-input-focused && event.text == Key.Space {
                 root.toggle-timer();
                 accept
@@ -186,7 +222,7 @@ export component MainWindow inherits Window {
             height: parent.height - 2 * root.shell-padding;
         }
 
-        if !root.show-dashboard: ScrollView {
+        if !root.show-dashboard && !root.show-map: ScrollView {
             x: root.content-x;
             y: root.shell-padding;
             width: root.main-width;
@@ -210,7 +246,7 @@ export component MainWindow inherits Window {
                     width: min(640px, parent.width);
                     height: 42px;
                     current: root.show-text-spike ? 1 : 0;
-                    picked(view) => { root.show-text-spike = view == 1; root.show-dashboard = view == 2; }
+                    picked(view) => { root.show-text-spike = view == 1; root.show-dashboard = view == 2; root.show-map = view == 3; }
                 }
 
                 if !root.show-text-spike: DemoCard {
@@ -425,7 +461,7 @@ export component MainWindow inherits Window {
                 width: min(640px, parent.width);
                 height: 42px;
                 current: 2;
-                picked(view) => { root.show-text-spike = view == 1; root.show-dashboard = view == 2; }
+                picked(view) => { root.show-text-spike = view == 1; root.show-dashboard = view == 2; root.show-map = view == 3; }
             }
 
             DashboardView {
@@ -469,7 +505,62 @@ export component MainWindow inherits Window {
             }
         }
 
-        if root.rail-width > 0px && !root.show-text-spike && !root.show-dashboard: Rectangle {
+        if root.show-map: Rectangle {
+            x: root.content-x;
+            y: root.shell-padding;
+            width: root.width - root.content-x - root.shell-padding;
+            height: parent.height - 2 * root.shell-padding;
+            background: transparent;
+
+            Text { x: 0px; y: 4px; text: "Map / rendering lab"; font-size: 30px; font-weight: 700; color: Theme.text-primary; }
+            Text { x: 1px; y: 44px; width: parent.width - 2px; text: "Vector country geometry drawn natively: pan, zoom, hit-testing and stress data sets."; font-size: Theme.text-md; color: Theme.text-secondary; overflow: elide; }
+            ViewSwitcher {
+                x: 0px;
+                y: 82px;
+                width: min(640px, parent.width);
+                height: 42px;
+                current: 3;
+                picked(view) => { root.show-text-spike = view == 1; root.show-dashboard = view == 2; root.show-map = view == 3; }
+            }
+
+            MapLabView {
+                x: 0px;
+                y: 142px;
+                width: parent.width;
+                height: parent.height - 142px;
+                regions: root.map-regions;
+                hover-commands: root.map-hover-commands;
+                selected-commands: root.map-selected-commands;
+                labels: root.map-labels;
+                markers: root.map-markers;
+                layer-x: root.map-layer-x;
+                layer-y: root.map-layer-y;
+                layer-scale: root.map-layer-scale;
+                hover-text: root.map-hover-text;
+                selected-text: root.map-selected-text;
+                stats-text: root.map-stats-text;
+                perf-text: root.map-perf-text;
+                zoom-text: root.map-zoom-text;
+                level-index: root.map-level-index;
+                level-name: root.map-level-name;
+                viewport-resized(w, h) => { root.map-viewport-resized(w, h); }
+                press() => { root.map-press(); }
+                drag(dx, dy) => { root.map-drag(dx, dy); }
+                release(x, y) => { root.map-release(x, y); }
+                hover(x, y) => { root.map-hover(x, y); }
+                leave() => { root.map-leave(); }
+                wheel(d, x, y) => { root.map-wheel(d, x, y); }
+                zoom-step(d) => { root.map-zoom-step(d); }
+                reset-view() => { root.map-reset-view(); }
+                step-selection(d) => { root.map-step-selection(d); }
+                focus-selected() => { root.map-focus-selected(); }
+                pan-key(dx, dy) => { root.map-pan-key(dx, dy); }
+                set-level(i) => { root.map-set-level(i); }
+                cycle-level(d) => { root.map-cycle-level(d); }
+            }
+        }
+
+        if root.rail-width > 0px && !root.show-text-spike && !root.show-dashboard && !root.show-map: Rectangle {
             x: root.content-x + root.main-width + 22px;
             y: root.shell-padding;
             width: root.rail-width;

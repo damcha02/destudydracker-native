@@ -1,5 +1,7 @@
 mod app_model;
 mod dashboard;
+mod map;
+mod map_adapter;
 
 use app_model::{format_clock, AppCommand, AppModel, TimerStatus};
 use dashboard::{format_minutes, AxisMark, DashboardScenario};
@@ -22,6 +24,12 @@ fn main() -> Result<(), slint::PlatformError> {
     apply_startup_options(&window, &mut model.borrow_mut());
     apply_model_to_window(&window, &model.borrow(), Instant::now());
     apply_dashboard(&window, &model.borrow());
+    let map = map_adapter::new_controller(map_level_from_env());
+    map_adapter::apply_all(&window, &mut map.borrow_mut());
+    map_adapter::bind(&window, &map);
+    let _bench_timer = std::env::var("STUDY_NATIVE_MAP_BENCH")
+        .ok()
+        .map(|spec| map_adapter::start_bench(&window, &map, &spec));
     bind_model_callbacks(&window, Rc::clone(&model), Rc::clone(&refresh_timer));
     window.run()
 }
@@ -34,6 +42,7 @@ fn apply_startup_options(window: &MainWindow, model: &mut AppModel) {
     if let Ok(view) = std::env::var("STUDY_NATIVE_VIEW") {
         window.set_show_dashboard(view == "dashboard");
         window.set_show_text_spike(view == "text");
+        window.set_show_map(view == "map");
     }
     if let Some(points) = std::env::var("STUDY_NATIVE_POINTS")
         .ok()
@@ -55,6 +64,15 @@ fn apply_startup_options(window: &MainWindow, model: &mut AppModel) {
     }) {
         window.window().set_size(slint::LogicalSize::new(w, h));
     }
+}
+
+/// `STUDY_NATIVE_MAP_LEVEL=0..10` selects the initial map stress level (see `StressLevel::ALL`).
+fn map_level_from_env() -> map::dataset::StressLevel {
+    std::env::var("STUDY_NATIVE_MAP_LEVEL")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .map(map::dataset::StressLevel::from_index)
+        .unwrap_or(map::dataset::StressLevel::World)
 }
 
 fn bind_model_callbacks(
