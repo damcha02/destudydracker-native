@@ -1,5 +1,7 @@
 # Native Prototype Architecture
 
+> **Stage 12.5 note**: the architecture direction described in this file (Slint UI over a renderer-independent Rust core, Windows-first, incremental migration) is now **frozen** as project policy, not just a Stage 1 exploration. See `docs/stage12_5-architecture-freeze.md` for the full decision, evidence, platform/renderer policy, timer invariants, persistence/network boundaries, migration roadmap and numbered future stages, and `docs/adr/0001-native-windows-architecture.md` for the condensed decision record. This file's original per-stage narrative below is kept as history and is not contradicted by the freeze.
+
 ## Isolation
 
 This prototype lives under `native-prototype/` so it can be built, tested, benchmarked, and eventually discarded without changing the existing Tauri, React, TypeScript, Cloudflare, updater, persistence, or timer code. The production-style application in this repository is reference material only for Stage 1.

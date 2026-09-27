@@ -1,5 +1,7 @@
 # Native Core Architecture
 
+> **Stage 12.5 note**: the dependency-direction rule and core boundary below are now **frozen** project-wide policy (extended to persistence/network/platform-service boundaries in `docs/stage12_5-architecture-freeze.md`, §5 and §13–§16). The timer performance/correctness invariants discovered in Stage 12 are recorded in that document's §10 and must not be silently reintroduced or removed by later migration work.
+
 Stage 7 establishes the renderer-independent Rust core boundary for a future native Study Tracker. The timer is the first bounded domain used to prove the architecture.
 
 ## Dependency Direction
