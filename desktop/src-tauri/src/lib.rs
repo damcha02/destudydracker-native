@@ -689,6 +689,11 @@ fn write_note(vault_path: String, note_title: String, content: String) -> Result
 }
 
 #[tauri::command]
+fn write_backup_file(path: String, contents: String) -> Result<(), String> {
+    fs::write(path, contents).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn delete_note(vault_path: String, note_title: String) -> Result<(), String> {
     let root = PathBuf::from(&vault_path);
     let note_path = note_path(&vault_path, &note_title)?;
@@ -1177,6 +1182,7 @@ pub fn run() {
             download_linux_update_package,
             native_social_sync,
             get_device_identity,
+            write_backup_file,
             set_timer_tray_state
         ])
         .run(tauri::generate_context!())

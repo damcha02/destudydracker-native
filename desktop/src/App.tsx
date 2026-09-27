@@ -1,7 +1,7 @@
-import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CSSProperties, ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -9,20 +9,28 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import type { PDFDocumentProxy } from "pdfjs-dist";
 import "./App.css";
 import { TimerClockDigits } from "./components/TimerClockDigits";
 import { WabiRestFluidRing } from "./components/WabiRestFluidRing";
+import SkribblRoom from "./components/SkribblRoom";
+import { SakuraScatter } from "./components/SakuraScatter";
+import { WhatsNewModal } from "./components/WhatsNewModal";
+import { WelcomeTourModal } from "./components/WelcomeTourModal";
+import { PageGuideModal } from "./components/PageGuideModal";
+import { PAGE_GUIDES } from "./lib/pageGuides";
+import { consumeStartupAnnouncement } from "./lib/releaseNotes";
+import { markWelcomeTourSeen } from "./lib/welcomeTour";
+import type { VaultScreenHandle } from "./features/vault/VaultScreen";
 import { useTimerProgressRing } from "./hooks/useTimerProgressRing";
 import { useTimerTick } from "./hooks/useTimerTick";
 import {
-  buildDailyNoteMarkdown,
   calculateAggregateWorkload,
   calculateDailyWork,
   clamp,
   daysUntil,
   formatDate,
   formatMinutes,
+  getActiveSemesterIds,
   getCourseHealthMap,
   getCourseMinutesMap,
   getCourseTasks,
@@ -47,16 +55,14 @@ import {
   groupTasksBySemesterId,
   isoDate,
 } from "./lib/metrics";
-import { createVault, deleteNote, importSummaryFiles, isTauriApp, linkVault, listNotes, listSummaryFiles, pickExistingVaultDirectory, pickSummaryFiles, pickVaultParentDirectory, readDailyNote, readNote, readReferenceNote, readSummaryPdf, writeDailyNote, writeNote, writeReferenceNote } from "./lib/obsidian";
-import type { SummaryFile, VaultNoteFile } from "./lib/obsidian";
 import { commentOnFeedPost, createFriendRequest, createSquad, deleteFeedPost, deleteFeedPostImage, deleteSquadMessage, finishVerifiedSession, getAdminUsage, getCurrentAnnouncement, getFriendStatus, getLeaderboardWithLocalSelf, getLocalLeaderboardEntry, getNextAutoSyncAt, getPlayerStats, getSocialFeed, getSocialLeaderboard, getSquadDetails, getSquadScoreboard, heartbeatVerifiedSession, isSocialApiConfigured, joinSquad, kickSquadMember, leaveSquad, notifyUsersAboutUpdate, presencePing, reactToFeedPost, reconcileOfflineVerifiedCredit, respondToFriendRequest, respondToSquadRequest, searchSquads, sendSquadMessage, sendTelemetryHeartbeat, setSquadMemberRole, shouldAutoSyncSocial, startVerifiedSession, syncSocialState, updateFeedPost, updateSquadSettings, uploadFeedPostImage, uploadProfileAvatar, voteOnFeedPoll } from "./lib/social";
 import type { AdminUsageResponse, AppAnnouncement, AppMetadata, PlayerStatsResponse, R2UsageStatus, SquadSearchResult } from "./lib/social";
-import { APP_STATE_STORAGE_KEYS, applyPersistedSections, createInitialPersistenceBaselines, defaultState, defaultTimer, downloadBackup, loadAppState, makeId, saveAppState } from "./lib/storage";
+import { APP_STATE_STORAGE_KEYS, applyPersistedSections, createInitialPersistenceBaselines, defaultState, defaultTimer, loadAppState, makeId, restoreBackup, saveAppState, saveBackup } from "./lib/storage";
 import type { PersistenceBaselines, PersistSection } from "./lib/storage";
 import { startTimerPersistenceHeartbeat } from "./lib/timerPersistence";
 import { closeTimerSegments, getDisplayRemainingSeconds, getIdleTimerSeconds, getTimerActiveSeconds } from "./lib/timerDisplay";
 import { pauseCountdownTimer, pauseStopwatchTimer, resumeCountdownTimer, resumeStopwatchTimer } from "./lib/timerTransitions";
-import type { AppState, CalendarEntry, Course, Exam, PlayedBreak, Priority, Semester, SocialAvatar, SocialAvatarStyle, SocialFeedComment, SocialFeedPost, SocialFeedScope, SocialFriend, SocialLeaderboardEntry, SocialLeaderboardPeriod, SocialLeaderboardScope, SocialSquadDetails, SocialSquadRole, SocialSquadScoreEntry, SocialSquadScorePeriod, SocialState, SocialSubtab, StudySession, TabKey, Task, TimerState } from "./types";
+import type { AppState, CalendarEntry, Course, DailyTodo, Exam, PlayedBreak, Priority, Semester, SemesterPhase, SocialAvatar, SocialAvatarStyle, SocialFeedPost, SocialFeedScope, SocialFriend, SocialLeaderboardEntry, SocialLeaderboardPeriod, SocialLeaderboardScope, SocialSquadDetails, SocialSquadRole, SocialSquadScoreEntry, SocialSquadScorePeriod, SocialState, SocialSubtab, StudySession, TabKey, Task, TaskSubtype, TimerState, TimetableEvent } from "./types";
 import type { Card, DurakGameState } from "./lib/durak";
 import { canBeat, findDailyPuzzle, executePlayerAttack, executePlayerThrow, defendOneCard, playerPassThrow, playerPickUp, processCpuTurn, executeSlide, getAttackLimitAgainstCpu, getLegalSlideCards, gameStateToPuzzle, puzzleToGameState, SUIT_SYMBOL, SUIT_COLOR } from "./lib/durak";
 import { filterFlaggleCountries, findFlaggleCountry, FLAGGLE_COUNTRY_COUNT, FLAGGLE_MAX_GUESSES, getFlaggleAnswerForDate, getFlagglePuzzleId, getFlagImageSrc, makeFlaggleSeedSalt, maskFlagByTargetColors, revealTargetFlagByGuesses } from "./lib/flaggle";
@@ -64,9 +70,32 @@ import { filterCountries, findCountryByName, GEODLE_COUNTRY_COUNT, GEODLE_MAX_GU
 import { TRAVLE_MAP_COUNTRIES } from "./lib/travleMapData";
 import { filterTravleCountries, findTravleCountry, getTravleDisplayPath, getTravleGuessStates, getTravlePuzzleForDate, getTravlePuzzleId, getTravleShortestPath, getTravleSolvedPath, isTravleRouteSolved, makeTravleSeedSalt, TRAVLE_COUNTRY_COUNT, TRAVLE_MAX_GUESSES } from "./lib/travle";
 import { getWordleAnswerForDate, getWordleHardModeViolation, getWordleKeyboardState, getWordlePuzzleId, isAcceptedWordleGuess, makeWordleSeedSalt, normalizeWordleGuess, scoreWordleGuess, WORDLE_ACCEPTED_GUESS_COUNT, WORDLE_ANSWER_COUNT, WORDLE_MAX_GUESSES, WORDLE_WORD_LENGTH } from "./lib/wordle";
+import { isTauriApp } from "./lib/obsidian";
+import { applyUndoPatch, countCompletedUnitOccurrences, diffForUndo, isEmptyUndoPatch, getOverdueTodos, setTodoOccurrenceTime, splitRecurringTodoAt, unitDecrementFor } from "./lib/plannerActions";
+import type { UndoPatch } from "./lib/plannerActions";
+import { TimeSpanFields } from "./features/planner/TimeSpanFields";
+import { MODERN_GARDEN_VARIANTS, ModernGarden } from "./features/garden/ModernGarden";
+import type { ModernGardenVariant } from "./features/garden/ModernGarden";
+import { TimeField } from "./features/planner/TimeField";
+import { displayTime } from "./lib/timeInput";
+import { formatSwissGrade, swissGrades } from "./lib/grades";
+import { buildDailyTimeline, computeOverlapLayout, countEventOccurrenceDates, endTimeFor, isValidIsoDate, expandDailyTodoDates, expandTimetableEvents, getSemesterWeekNumber, makeTimetableEvent, moveSingleOccurrence, splitRecurringEventAt } from "./lib/plannerSchedule";
+import type { DailyTimelineRow, OverlapLayoutSlot } from "./lib/plannerSchedule";
+import { ManageSemestersModal } from "./features/planner/ManageSemestersModal";
+import { WabiManageSemestersModal } from "./features/planner/WabiManageSemestersModal";
+import { TaskScheduleEditor } from "./features/planner/TaskScheduleEditor";
+import { RowMenu } from "./components/RowMenu";
+// AchievementBoard (the spray-paint wall) and InkGallery's other variants are still in the repo but
+// no longer mounted - the achievements room shows the album only.
+import { InkGallery } from "./features/rest/InkGallery";
+import { getScheduleHealth, withScheduleHealth } from "./lib/scheduleHealth";
+import { calculateScheduledDailyWork, calculateScheduledWorkload, getScheduledUnits } from "./lib/scheduleWorkload";
+import { TimetableEventModal } from "./features/planner/TimetableEventModal";
+import type { TimetableModalState } from "./features/planner/TimetableEventModal";
 import privacyPolicyText from "../../PRIVACY.md?raw";
 
-type PdfJsModule = typeof import("pdfjs-dist");
+const LazyVaultScreen = lazy(() => import("./features/vault/VaultScreen").then((module) => ({ default: module.VaultScreen })));
+const LazySocialScreen = lazy(() => import("./features/social/SocialScreen").then((module) => ({ default: module.SocialScreen })));
 
 type SocialProfileTarget = Pick<SocialFriend, "userId" | "displayName" | "friendCode" | "avatar"> & { lastSeenAt?: string | null };
 type ProfileBadge = {
@@ -347,7 +376,7 @@ const studyBreakGames = [
   { name: "Wordle", url: "https://www.nytimes.com/games/wordle", desc: "Guess the 5-letter word in 6 tries" },
   { name: "Travle", url: "", desc: "Build a border route between countries" },
   { name: "Flaggle", url: "", desc: "Guess the flag from shared colors" },
-  { name: "Strands", url: "https://www.nytimes.com/games/strands", desc: "Find hidden words in a grid" },
+  { name: "Daily Skribbl", url: "", desc: "Draw today's theme, then vote on the gallery" },
   { name: "Geodle", url: "", desc: "Guess the country from geography clues" },
 ];
 const STUDY_BREAK_GAME_COUNT = studyBreakGames.length;
@@ -468,7 +497,6 @@ const stretchIdeas = [
   "Take 3 deep belly breaths, exhale slowly",
 ];
 
-const swissGrades = [4.0, 4.25, 4.5, 4.75, 5.0, 5.25, 5.5, 5.75, 6.0];
 const TOTAL_WORKLOAD_ID = "__total_workload__";
 const DASHBOARD_LAYOUT_KEY = "study-tracker-dashboard-layout";
 const CUSTOM_DASHBOARD_LAYOUT_KEY = "study-tracker-dashboard-custom-layout";
@@ -511,7 +539,8 @@ type ThemePalette =
   | "lavender"
   | "gpt"
   | "claude"
-  | "cute";
+  | "cute"
+  | "sakura";
 type AppStyle = "modern" | "field-notebook" | "wabi-sabi";
 type ThemePanelView = "themes" | "styles";
 type FieldDashboardLayout = "quiet" | "full";
@@ -528,7 +557,6 @@ type DashboardWidgetLayout = {
 
 type CalendarView = "month" | "week";
 type MenuPanel = "theme" | "personal" | "settings" | "options" | null;
-type VaultSpace = "daily" | "references" | "summaries";
 type PageHelp = {
   title: string;
   purpose: string;
@@ -541,18 +569,6 @@ type TourStep = {
   title: string;
   body: string;
   tab?: TabKey;
-};
-
-type HelpExample = {
-  task: string;
-  unitLabel: string;
-  total: number;
-  done: number;
-  next: number;
-  caption: string;
-  result: string;
-  heading: string;
-  tone: "c1" | "c2" | "c3";
 };
 
 type MenuHelpItem = {
@@ -570,7 +586,9 @@ const primaryTabs: Array<{ id: TabKey; label: string }> = [
 ];
 
 const menuHelpItems: MenuHelpItem[] = [
-  { title: "Backup JSON", body: "Downloads a copy of your local Study Tracker data. Use it before big changes or when moving data manually." },
+  { title: "Settings → Backup and restore", body: "Saves a file with all your Study Tracker data (sessions, achievements, pet rock pats, settings, theme) and your account. You choose where it goes. Use it before big changes or to move to a new device." },
+  { title: "Restore from file", body: "In Settings. Loads a backup file and replaces this device's data with it. On a new device this makes it the same account as the original." },
+  { title: "Change style", body: "Opens the style picker directly, so you can switch the overall look of the app without going through themes." },
   { title: "Change theme", body: "Opens color palettes and the light/dark mode selector. The small sun/moon button is the fastest light/dark toggle." },
   { title: "Personal", body: "Set your display name and daily focus goal. The goal is used by Dashboard progress and daily study context." },
   { title: "Options", body: "Control visual effects, social feed images and polls, the help/info buttons, telemetry, and which tabs appear in navigation." },
@@ -608,14 +626,14 @@ const pageHelp: Record<TabKey, PageHelp> = {
   },
   planner: {
     title: "Planner",
-    purpose: "Use this page to create the structure of your semester: semesters, courses, tasks, exams, and calendar work blocks. Units are the countable pieces of a task, not minutes or hours. The unit label tells the app what to call each piece.",
+    purpose: "Use this page to create the structure of your semester: semesters, courses, tasks, exams, and calendar work blocks. Pick a task's subtype first (Lecture, Exercise session, Sheet, or Other), then track its progress as countable pieces, not minutes or hours.",
     steps: [
       "Create one semester.",
       "Add courses inside that semester.",
       "Add tasks or exams inside each course.",
-      "Set the unit label, like Lecture, Sheet, or Exam.",
-      "Set total units to the number of pieces you need to finish, then mark units complete as you work.",
-      "Schedule units on the calendar if you want a day-by-day plan.",
+      "Pick a subtype first, like Lecture, Sheet, or Exam.",
+      "Set the total pieces you need to finish, then mark them complete as you work.",
+      "Schedule tasks on the calendar if you want a day-by-day plan.",
     ],
     tour: [
       { target: "planner-add-semester", title: "Normally, start here", body: "A real setup starts with + Add semester. For this tutorial, Study Tracker has already created a Tutorial Semester so you can see the full workflow immediately." },
@@ -624,8 +642,8 @@ const pageHelp: Record<TabKey, PageHelp> = {
       { target: "planner-add-course", title: "Add courses here", body: "Normally you add each real course from this button. The tutorial has already created Tutorial Course inside Tutorial Semester." },
       { target: "planner-tutorial-course", title: "Tutorial Course", body: "Courses group related tasks and sessions. They also give Timer and Dashboard enough context to show where your study time went." },
       { target: "planner-add-task", title: "Add tasks here", body: "Tasks are the actual pieces of work: lectures, sheets, readings, old exams, projects, or revision sets." },
-      { target: "planner-tutorial-task", title: "Tutorial task", body: "This task is Watch tutorial lectures. It has 10 total units, 3 already completed, and the next unit is Lecture 4 of 10." },
-      { target: "planner-tutorial-task-meta", title: "Understand units", body: "The row shows completed units, total units, the next unit, and due date. Units are countable pieces, not hours." },
+      { target: "planner-tutorial-task", title: "Tutorial task", body: "This task is Watch tutorial lectures. It has 10 total pieces, 3 already completed, and the next one is Lecture 4 of 10." },
+      { target: "planner-tutorial-task-meta", title: "Understand progress", body: "The row shows completed pieces, total pieces, what's next, and due date. These are countable pieces, not hours." },
       { target: "planner-tutorial-task-progress", title: "Adjust progress", body: "After finishing a lecture, sheet, or exam, use plus. Use minus if you marked one by mistake. During the tutorial these controls are locked until Finish." },
       { target: "planner-tutorial-task-focus", title: "Focus from Planner", body: "Focus sends this task to the Timer already linked, so your session saves under the right semester, course, and task." },
       { target: "timer-links", title: "Arrive in Timer linked", body: "After focusing a task, the Timer can show the linked semester, course, and task so the session saves to the right place.", tab: "timer" },
@@ -665,7 +683,7 @@ const pageHelp: Record<TabKey, PageHelp> = {
   },
   vault: {
     title: "Vault",
-    purpose: "Use this page for markdown notes that stay compatible with Obsidian or any normal text editor.",
+    purpose: "Use this page for markdown notes that stay readable in any normal text editor.",
     steps: [
       "Create or link a vault folder.",
       "Use Daily notes for session reflections.",
@@ -673,10 +691,10 @@ const pageHelp: Record<TabKey, PageHelp> = {
     ],
     tour: [
       { target: "vault-setup", title: "Open vault setup", body: "The Vault needs a folder before it can save notes. Setup is where you create or link that folder." },
-      { target: "vault-name", title: "Vault name", body: "This is the display name for your markdown vault. It can match your Obsidian vault name." },
+      { target: "vault-name", title: "Vault name", body: "This is the display name for your markdown vault. It is also the folder name when you create a new one." },
       { target: "vault-path", title: "Vault path", body: "This shows where notes will be written. If no path exists yet, create or link a vault." },
       { target: "vault-create", title: "Create vault", body: "Create new vault makes a fresh folder structure for Daily, References, and Summaries." },
-      { target: "vault-link", title: "Link existing vault", body: "Use this if you already have an Obsidian vault or folder you want Study Tracker to write into." },
+      { target: "vault-link", title: "Link existing vault", body: "Use this if you already have a notes folder you want Study Tracker to write into." },
       { target: "vault-markdown", title: "Markdown cheatsheet", body: "Markdown help shows examples for headings, lists, links, quotes, and code blocks." },
       { target: "vault-spaces", title: "Switch vault spaces", body: "Daily is for study logs, References is for course notes, and Summaries is for PDFs or imported material." },
       { target: "vault-daily-date", title: "Choose daily note date", body: "Daily notes are date-based. Pick the day you want to load, edit, or save." },
@@ -734,44 +752,6 @@ const pageHelp: Record<TabKey, PageHelp> = {
   },
 };
 
-const helpExamples: Record<TabKey, HelpExample[]> = {
-  dashboard: [
-    { task: "Pick today's focus", unitLabel: "Step", total: 4, done: 1, next: 2, caption: "Open Dashboard, then inspect the top recommendation", result: "Next: Check urgent tasks", heading: "Fast daily workflow", tone: "c1" },
-    { task: "Read workload pressure", unitLabel: "Signal", total: 5, done: 3, next: 4, caption: "Health, urgent work, and exams tell you where pressure is building", result: "Next: Choose one task", heading: "Focus signals", tone: "c2" },
-    { task: "Review weekly rhythm", unitLabel: "Day", total: 7, done: 4, next: 5, caption: "Use the focus chart to see consistency without overthinking one bad day", result: "Next: Fill the next gap", heading: "Weekly check", tone: "c3" },
-  ],
-  planner: [
-    { task: "Watch lectures", unitLabel: "Lecture", total: 10, done: 3, next: 4, caption: "3 down, the glowing one is up next", result: "Next: Lecture 4 of 10", heading: "Three ways students use units", tone: "c1" },
-    { task: "Exercise sheets", unitLabel: "Sheet", total: 14, done: 6, next: 7, caption: "Halfway through the pile", result: "Next: Sheet 7 of 14", heading: "Three ways students use units", tone: "c2" },
-    { task: "Old exams", unitLabel: "Exam", total: 5, done: 1, next: 2, caption: "One solved, four to go", result: "Next: Exam 2 of 5", heading: "Three ways students use units", tone: "c3" },
-  ],
-  timer: [
-    { task: "Start a focus block", unitLabel: "Step", total: 4, done: 2, next: 3, caption: "Choose a preset, link work if useful, then start", result: "Next: Start timer", heading: "Common timer flows", tone: "c1" },
-    { task: "Link a task", unitLabel: "Field", total: 3, done: 1, next: 2, caption: "Semester, course, and task links make the session count in the right place", result: "Next: Pick course", heading: "Common timer flows", tone: "c2" },
-    { task: "Save a session", unitLabel: "Step", total: 5, done: 4, next: 5, caption: "Saving turns your focus block into dashboard stats and vault context", result: "Next: Save session", heading: "Common timer flows", tone: "c3" },
-  ],
-  vault: [
-    { task: "Create your vault", unitLabel: "Step", total: 3, done: 1, next: 2, caption: "Connect a folder once so notes save as normal markdown files", result: "Next: Link folder", heading: "Note-taking examples", tone: "c1" },
-    { task: "Write a daily note", unitLabel: "Part", total: 4, done: 2, next: 3, caption: "Daily notes can collect what you learned, blockers, and next steps", result: "Next: Add reflection", heading: "Note-taking examples", tone: "c2" },
-    { task: "Use markdown", unitLabel: "Format", total: 5, done: 3, next: 4, caption: "Headings, lists, links, and code blocks preview inside the app", result: "Next: Try a link", heading: "Note-taking examples", tone: "c3" },
-  ],
-  friends: [
-    { task: "Share a session", unitLabel: "Step", total: 4, done: 2, next: 3, caption: "Finish a timer block, write one sentence, then post it", result: "Next: Add note", heading: "Social examples", tone: "c1" },
-    { task: "Check accountability", unitLabel: "Space", total: 5, done: 1, next: 2, caption: "Feed, leaderboard, friends, squad, and profile each support a different kind of motivation", result: "Next: Open leaderboard", heading: "Social examples", tone: "c2" },
-    { task: "Build your circle", unitLabel: "Step", total: 3, done: 1, next: 2, caption: "Use friend codes and squads when you want focused competition", result: "Next: Add friend", heading: "Social examples", tone: "c3" },
-  ],
-  break: [
-    { task: "Earn a break", unitLabel: "Step", total: 4, done: 2, next: 3, caption: "Study time fills XP so breaks feel intentional, not accidental", result: "Next: Unlock activity", heading: "Break examples", tone: "c1" },
-    { task: "Reset properly", unitLabel: "Cue", total: 5, done: 3, next: 4, caption: "Use water, stretch prompts, and short games as a real reset", result: "Next: Drink water", heading: "Break examples", tone: "c2" },
-    { task: "Return to focus", unitLabel: "Step", total: 3, done: 2, next: 3, caption: "A good break ends by sending you back to the next focus block", result: "Next: Start timer", heading: "Break examples", tone: "c3" },
-  ],
-};
-
-const vaultSpaces: Array<{ id: VaultSpace; label: string }> = [
-  { id: "references", label: "References" },
-  { id: "summaries", label: "Summaries" },
-  { id: "daily", label: "Daily" },
-];
 
 const socialSubtabs: Array<{ id: SocialSubtab; label: string; badge?: string }> = [
   { id: "feed", label: "Feed" },
@@ -796,8 +776,8 @@ const squadRoleLabels: Record<SocialSquadRole, string> = {
 
 const squadRoles: SocialSquadRole[] = ["leader", "co_leader", "elder", "member"];
 const SQUAD_TRACKING_START_LABEL = "29.07.2026";
-const SQUAD_SEASON_NAME = "Summer Season 26";
-const SQUAD_SEASON_RANGE_LABEL = "29.07.2026 - 31.08.2026";
+const SQUAD_SEASON_NAME = "Frostbound Semester 26";
+const SQUAD_SEASON_RANGE_LABEL = "15.09.2026 - 18.12.2026";
 
 function squadRoleRank(role: SocialSquadRole) {
   return role === "leader" ? 4 : role === "co_leader" ? 3 : role === "elder" ? 2 : 1;
@@ -934,23 +914,11 @@ type CalendarDay = {
   inCurrentMonth: boolean;
 };
 
-type CalendarUnitAmount = CalendarEntry["unitAmount"];
-type CalendarTaskSource = "planner" | "new";
-type CalendarAddDraft = {
-  semesterId: string;
-  courseId: string;
-  source: CalendarTaskSource;
-  taskId: string;
-  title: string;
-  unitAmount: CalendarUnitAmount;
-  startTime: string;
-  durationMinutes: string;
-  noTime: boolean;
-};
 type CalendarEditDraft = {
   startTime: string;
   endTime: string;
 };
+type TimetableRowTarget = { kind: "event"; event: TimetableEvent } | { kind: "todo"; todo: DailyTodo };
 type CalendarResizeState = {
   entryId: string;
   startY: number;
@@ -1040,13 +1008,24 @@ type JapaneseGardenCell = { x: number; t: number; cw: number; low: boolean; key:
 type PlacedJapaneseGardenItem = JapaneseGardenItem & { x: number; t: number; cw: number; low?: boolean; growth: number };
 
 const calendarTimelineHours = Array.from({ length: 18 }, (_, index) => index + 6);
-const calendarDurationOptions = [15, 30, 45, 60, 90, 120, 180];
 const calendarTimeStepMinutes = 5;
 const calendarTimelineStartHour = 6;
 const calendarTimelineHourHeight = 72;
 const calendarTimelineStartMinutes = calendarTimelineStartHour * 60;
 const calendarTimelineEndMinutes = 24 * 60;
 const calendarTimelineTotalMinutes = calendarTimelineEndMinutes - calendarTimelineStartMinutes;
+
+/** A block always spans exactly its scheduled duration on the timeline (height proportional to
+ * minutes, never padded or floored); `density` only tells the CSS how much content fits inside. */
+function getTimelineBlockGeometry(startMinutes: number, endMinutes: number) {
+  const clippedStart = Math.max(startMinutes, calendarTimelineStartMinutes);
+  const clippedEnd = Math.min(Math.max(endMinutes, clippedStart + 1), calendarTimelineEndMinutes);
+  const pxPerMinute = calendarTimelineHourHeight / 60;
+  const top = (clippedStart - calendarTimelineStartMinutes) * pxPerMinute;
+  const height = (clippedEnd - clippedStart) * pxPerMinute;
+  const density: "roomy" | "compact" | "tiny" = height >= 56 ? "roomy" : height >= 30 ? "compact" : "tiny";
+  return { top, height, density };
+}
 
 function gardenHash(value: string) {
   let hash = 2166136261;
@@ -1294,7 +1273,7 @@ function buildGardenItems(courses: Course[], sessions: StudySession[], tasks: Ta
 
   sessions
     .filter((session) => (session.kind === "study" || session.kind === "exam") && session.courseId && courseMap.has(session.courseId))
-    .slice(-90)
+    .slice(-Math.round(22 * densityFactor))
     .forEach((session) => {
       const course = courseMap.get(session.courseId ?? "");
       if (!course) return;
@@ -1321,7 +1300,7 @@ function buildGardenItems(courses: Course[], sessions: StudySession[], tasks: Ta
   });
 
   const ambientBase = [4, 8, 12, 16, 21, 25][stage] ?? 4;
-  const ambient = Math.round((ambientBase + Math.min(8, Math.floor(weeklyMinutes / 90))) * densityFactor);
+  const ambient = Math.round((ambientBase + Math.min(8, Math.floor(weeklyMinutes / 90))) * densityFactor * 0.45);
   for (let index = 0; index < ambient; index += 1) {
     const rng = gardenRng(gardenHash(`ambient-${stage}-${index}`));
     items.push({ id: `ambient-${stage}-${index}`, kind: rng() < 0.6 ? "grass" : rng() < 0.5 ? "sprout" : "fern", maturity: 0.25 + rng() * 0.3, ambient: true });
@@ -1983,7 +1962,11 @@ function japanesePickSpecies(rng: () => number, maturity: number): JapaneseGarde
   return ["sakura", "momiji", "sakura", "bamboo", "pine"][Math.floor(rng() * 5)] as JapaneseGardenPlantKind;
 }
 
-const JG_ROWS = [0.1, 0.36, 0.62, 0.88];
+// Five depth rows instead of four, spaced a little further apart: with the canopy sizes
+// plants render at, four tightly-packed rows let neighbouring trees' canopies bleed into
+// each other's row band. More, evenly-spread rows give each depth its own clear vertical
+// slot so the garden reads as terraced rather than as one overlapping mass.
+const JG_ROWS = [0.08, 0.3, 0.52, 0.74, 0.94];
 const JG_UPPER: JapaneseGardenPondBoxShape = { cx: 63, cy: 64, rx: 9.5, ry: 3.8 };
 const JG_LOWER: JapaneseGardenPondBoxShape = { cx: 78, cy: 93, rx: 12.5, ry: 5 };
 const JG_FLOW: [number, number][] = [
@@ -2003,7 +1986,7 @@ const JAPANESE_GARDEN_TALL_KINDS: Partial<Record<JapaneseGardenPlantKind, true>>
   teahouse: true,
 };
 
-const JAPANESE_GARDEN_FILL_RATIO = [0.12, 0.26, 0.38, 0.48, 0.56, 0.62, 0.68, 0.74, 0.8];
+const JAPANESE_GARDEN_FILL_RATIO = [0.08, 0.14, 0.2, 0.24, 0.28, 0.3, 0.32, 0.34, 0.36];
 
 /* The river/bridge geometry was authored for a ~390x205 box. Dashboard layouts
    (e.g. the Focus layout's full-width hero card) can render this widget at far
@@ -2044,19 +2027,25 @@ function japaneseGardenOnWater(x: number, t: number, stage: number, containerWid
 }
 
 function japaneseGardenCells(stage: number, wide: boolean): JapaneseGardenCell[] {
-  const cols = wide ? 8 : 5;
-  const cw = 1 / cols;
+  const baseCols = wide ? 8 : 5;
   const upper = stage >= 5;
   const lower = stage >= 6;
   const cells: JapaneseGardenCell[] = [];
   for (let row = 0; row < JG_ROWS.length; row += 1) {
+    const t = JG_ROWS[row];
+    // The foreground rows render the biggest canopies (see the `depth` scale-up in
+    // JapaneseGardenWidget), so give them fewer, wider cells - the background rows can stay
+    // dense since their plants draw small. Alternate rows are also offset by half a cell so
+    // trunks don't line up in tidy columns straight down the card.
+    const cols = t > 0.82 ? baseCols - (wide ? 3 : 2) : t > 0.58 ? baseCols - (wide ? 1 : 1) : baseCols;
+    const cw = 1 / cols;
+    const stagger = row % 2 === 1 ? cw / 2 : 0;
     for (let col = 0; col < cols; col += 1) {
-      const x = (col + 0.5) / cols;
-      const t = JG_ROWS[row];
-      if (upper && t > 0.5 && t < 0.8 && x > 0.12 && x < 0.46) continue;
-      if (lower && t > 0.5 && t < 0.8 && x >= 0.3 && x < 0.62) continue;
-      if (lower && t > 0.8 && x > 0.46 && x < 0.92) continue;
-      const low = t > 0.8 && x < 0.4;
+      const x = ((col + 0.5) / cols + stagger) % 1;
+      if (upper && t > 0.42 && t < 0.62 && x > 0.12 && x < 0.46) continue;
+      if (lower && t > 0.42 && t < 0.62 && x >= 0.3 && x < 0.62) continue;
+      if (lower && t > 0.66 && x > 0.46 && x < 0.92) continue;
+      const low = t > 0.82 && x < 0.4;
       cells.push({ x, t, cw, low, key: `${row}-${col}` });
     }
   }
@@ -2164,8 +2153,8 @@ function placeJapaneseGardenItems(build: JapaneseGardenBuildResult, stage: numbe
   build.milestones.forEach((milestone) => push(milestone));
 
   let surplus = 0;
-  build.sessions.forEach((session) => {
-    if (!push(session)) surplus += 1;
+  build.sessions.forEach((session, index) => {
+    if (index >= (wide ? 14 : 8) || !push(session)) surplus += 1;
   });
 
   const target = Math.round(free.length * (JAPANESE_GARDEN_FILL_RATIO[stage] ?? 0.2));
@@ -2184,7 +2173,7 @@ function placeJapaneseGardenItems(build: JapaneseGardenBuildResult, stage: numbe
   }
 
   const fullness = 1 - free.length / Math.max(1, cells.length);
-  const growth = 1 + Math.min(0.32, surplus * 0.02) + Math.max(0, fullness - 0.7) * 0.35;
+  const growth = 1 + Math.min(0.08, surplus * 0.005) + Math.max(0, fullness - 0.7) * 0.2;
   return placed.map((plant) => ({ ...plant, growth: plant.ambient ? 1 + (growth - 1) * 0.3 : growth })).sort((a, b) => a.t - b.t);
 }
 
@@ -2552,7 +2541,7 @@ function JapaneseGardenWidget({ appState, weeklyMinutes }: { appState: AppState;
         const bed = containerWidth * (plant.cw || 0.125);
         const bottomPct = 1 + (1 - plant.t) * 55;
         const headroom = (containerHeight * (1 - bottomPct / 100) * 0.94) / 1.21;
-        let width = Math.min(bed * 0.66 * (japaneseGardenBaseWidth[plant.kind] || 1) * depth * (0.8 + 0.25 * (plant.maturity || 0.5)) * plant.growth, headroom, containerHeight * 0.46);
+        let width = Math.min(bed * 0.58 * (japaneseGardenBaseWidth[plant.kind] || 1) * depth * (0.8 + 0.25 * (plant.maturity || 0.5)) * plant.growth, headroom, containerHeight * 0.36);
         if (plant.low) width = Math.min(width, containerHeight * 0.17);
         const interactive = !plant.ambient;
         return (
@@ -2641,12 +2630,13 @@ const themePalettes: { id: ThemePalette; name: string; desc: string; swatch: str
   { id: "gpt", name: "GPT", desc: "Monochrome graphite and grey.", swatch: "#949494" },
   { id: "claude", name: "Claude", desc: "Clay-orange on warm charcoal.", swatch: "#c6613f" },
   { id: "cute", name: "Cute", desc: "Kawaii pastel pinks.", swatch: "#ff6b9d" },
+  { id: "sakura", name: "Sakura", desc: "Whitish-pink notebook — fallen petals.", swatch: "linear-gradient(135deg, #f7eeed 0%, #f191ac 100%)" },
 ];
 
 const appStyles: { id: AppStyle; name: string; desc: string; swatch: string }[] = [
   { id: "modern", name: "Modern", desc: "Current rounded study dashboard with palette themes.", swatch: "linear-gradient(135deg, #8fb4ff, #98c379)" },
   { id: "field-notebook", name: "Field Notebook", desc: "Paper, ink, course tabs, ruled ledgers, and study-circle social styling.", swatch: "linear-gradient(135deg, #fbf8f0 0 45%, #23211d 45% 55%, #9c5a34 55%)" },
-  { id: "wabi-sabi", name: "Wabi-Sabi 侘寂", desc: "Quiet paper and ink: one thing at a time, a sidebar of kanji, and a circle with no ranks unless you want them.", swatch: "linear-gradient(135deg, #e9e5d8 0 45%, #4f6b4a 45% 80%, #b0472e 80%)" },
+  { id: "wabi-sabi", name: "Wabi-Sabi 侘寂", desc: "The beauty of what is humble, impermanent and unfinished - a cracked bowl, moss on stone, the quiet of a single breath.", swatch: "linear-gradient(135deg, #e9e5d8 0 45%, #4f6b4a 45% 80%, #b0472e 80%)" },
 ];
 
 function isAppStyle(value: string | null): value is AppStyle {
@@ -2668,7 +2658,7 @@ function loadThemePalette(): ThemePalette {
 
 function loadAppStyle(): AppStyle {
   const saved = localStorage.getItem(APP_STYLE_STORAGE_KEY);
-  return isAppStyle(saved) ? saved : "modern";
+  return isAppStyle(saved) ? saved : "field-notebook";
 }
 
 function loadFieldDashboardLayout(): FieldDashboardLayout {
@@ -2679,10 +2669,13 @@ function loadWabiCircleCompetitive(): boolean {
   return localStorage.getItem(WABI_CIRCLE_COMPETITIVE_KEY) === "true";
 }
 
-type GardenVariant = "western" | "japanese";
+type GardenVariant = "western" | "japanese" | ModernGardenVariant;
+
+const GARDEN_VARIANT_ORDER: GardenVariant[] = ["western", "japanese", ...MODERN_GARDEN_VARIANTS.map((variant) => variant.id)];
 
 function loadGardenVariant(): GardenVariant {
-  return localStorage.getItem(GARDEN_VARIANT_KEY) === "japanese" ? "japanese" : "western";
+  const stored = localStorage.getItem(GARDEN_VARIANT_KEY) as GardenVariant | null;
+  return stored && GARDEN_VARIANT_ORDER.includes(stored) ? stored : "western";
 }
 
 const dashboardWidgetIds: DashboardWidgetId[] = [
@@ -2761,13 +2754,37 @@ type TaskDraft = {
   semesterId: string;
   courseId: string;
   title: string;
+  subtype: TaskSubtype;
   unitLabel: string;
-  totalUnits: string;
-  completedUnits: string;
   dueDate: string;
   priority: Priority;
   notes: string;
+  // Inline scheduling, only read/rendered while creating a task (see addTask) - lets a user pick
+  // a subtype and its first schedule in one unified step instead of saving the task, then
+  // separately finding it again in Manage Semesters to schedule it.
+  scheduleDate: string;
+  scheduleTime: string;
+  scheduleDuration: number;
+  scheduleRepeatWeekly: boolean;
+  scheduleReleaseDate: string;
+  scheduleReleaseTime: string;
+  scheduleReleaseDuration: number;
+  scheduleReleaseWeekly: boolean;
+  scheduleDueDate: string;
+  scheduleDueTime: string;
+  scheduleDueDuration: number;
+  scheduleDueWeekly: boolean;
+  scheduleUrl: string;
 };
+
+function emptyScheduleDraftFields() {
+  return {
+    scheduleDate: "", scheduleTime: "", scheduleDuration: 90, scheduleRepeatWeekly: true,
+    scheduleReleaseDate: "", scheduleReleaseTime: "", scheduleReleaseDuration: 30, scheduleReleaseWeekly: true,
+    scheduleDueDate: "", scheduleDueTime: "", scheduleDueDuration: 30, scheduleDueWeekly: true,
+    scheduleUrl: "",
+  };
+}
 
 function inferUnitLabel(title: string) {
   const normalized = title.toLowerCase();
@@ -2776,7 +2793,36 @@ function inferUnitLabel(title: string) {
   if (normalized.includes("exam")) return "Exam";
   if (normalized.includes("chapter")) return "Chapter";
   if (normalized.includes("reading")) return "Reading";
-  return "Unit";
+  return "Task";
+}
+
+/** Display text for each subtype, both as the creation modal's subtype picker labels and as the
+ * default progress-count label a new task starts with (e.g. "3/10 Lecture") - avoids the old
+ * generic "Unit" wording entirely. */
+const taskSubtypeDisplayLabel: Record<TaskSubtype, string> = {
+  Lecture: "Lecture",
+  Session: "Exercise session",
+  Sheet: "Sheet",
+  Other: "Other",
+};
+
+function subtypeToUnitLabel(subtype: TaskSubtype) {
+  return subtype === "Session" ? "Session" : subtype === "Other" ? "Task" : subtype;
+}
+
+/** Lecture/Session tasks are driven by scheduled calendar instances rather than a hard submission deadline, so their task form hides the due-date input. */
+function subtypeHidesDueDate(subtype: TaskSubtype) {
+  return subtype === "Lecture" || subtype === "Session";
+}
+
+/** Overrides an overlap-split timeline entry's left/width within its `.scheduled` track (left: 86px; width: calc(100% - 100px)) so it sits in its assigned column instead of covering the whole track. Entries with no overlap keep the default CSS-driven position. */
+function getOverlapSplitStyle(layout?: OverlapLayoutSlot): CSSProperties {
+  if (!layout || layout.columnCount <= 1) return {};
+  const fraction = 1 / layout.columnCount;
+  return {
+    left: `calc(86px + (100% - 100px) * ${layout.column * fraction})`,
+    width: `calc((100% - 100px) * ${fraction} - 4px)`,
+  };
 }
 
 function cleanUnitLabel(label: string, title: string) {
@@ -2784,13 +2830,13 @@ function cleanUnitLabel(label: string, title: string) {
 }
 
 function formatUnitLabel(label: string, count: number) {
-  const clean = label.trim() || "Unit";
+  const clean = label.trim() || "Task";
   return count === 1 || clean.endsWith("s") ? clean.toLowerCase() : `${clean.toLowerCase()}s`;
 }
 
 function getNextUnitLabel(task: Task) {
   const next = Math.min(task.totalUnits, Math.max(1, Math.floor(task.completedUnits) + 1));
-  const label = task.unitLabel || "Unit";
+  const label = task.unitLabel || "Task";
   return task.completedUnits >= task.totalUnits ? `All ${formatUnitLabel(label, task.totalUnits)} done` : `Next: ${label} ${next} of ${task.totalUnits}`;
 }
 
@@ -2808,13 +2854,6 @@ function formatClock(totalSeconds: number) {
   const minutes = String(Math.floor(seconds / 60)).padStart(2, "0");
   const remaining = String(seconds % 60).padStart(2, "0");
   return `${minutes}:${remaining}`;
-}
-
-function formatSwissGrade(grade: number) {
-  const fixed = grade.toFixed(2);
-  if (fixed.endsWith("00")) return fixed.slice(0, -1);
-  if (fixed.endsWith("0")) return fixed.slice(0, -1);
-  return fixed;
 }
 
 function toggleId(list: string[], id: string) {
@@ -3012,186 +3051,30 @@ function formatFileSize(bytes: number) {
   const units = ["B", "KB", "MB", "GB"];
   let value = bytes;
   let unitIndex = 0;
-
   while (value >= 1024 && unitIndex < units.length - 1) {
     value /= 1024;
     unitIndex += 1;
   }
-
   return `${value >= 10 || unitIndex === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`;
 }
 
-function buildReferenceNoteMarkdown(course: Course) {
-  return `# ${course.name} References
-
-> Useful links, docs, recordings, exercises, and exam prep for ${course.name}.
-
-## Official Links
-- [Course page](https://example.com)
-- [Moodle / LMS](https://example.com)
-
-## Lecture Resources
-- [Lecture recordings](https://example.com)
-- [Slides folder](https://example.com)
-
-## Exercises
-- [Exercise sheets](https://example.com)
-- [Solutions](https://example.com)
-
-## Exam Prep
-- [Past exams](https://example.com)
-- [Formula sheet](https://example.com)
-`;
-}
-
-function stripMarkdownFrontmatter(markdown: string) {
-  return markdown.replace(/^---\n[\s\S]*?\n---\n+/, "");
-}
-
-function isExternalWebUrl(url: string) {
-  return /^https?:\/\//i.test(url.trim());
+function sanitizeExternalUrl(url: string): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  // Accept bare domains/paths (e.g. "example.com") by defaulting to https:// - anything that
+  // isn't http(s) after that (mailto:, javascript:, relative app paths, etc.) is rejected so it
+  // can never fall through to the app's own router.
+  const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  return /^https?:\/\//i.test(withProtocol) ? withProtocol : null;
 }
 
 function openExternalLink(url: string) {
-  const target = url.trim();
-  if (!isExternalWebUrl(target)) return;
-
-  if (isTauriApp()) {
-    void openUrl(target);
-    return;
-  }
-
-  window.open(target, "_blank", "noreferrer");
+  const target = sanitizeExternalUrl(url);
+  if (!target) return;
+  if (isTauriApp()) void openUrl(target);
+  else window.open(target, "_blank", "noopener,noreferrer");
 }
 
-function renderExternalLink(label: ReactNode, url: string, key: string) {
-  return (
-    <a
-      key={key}
-      href={url}
-      onClick={(event: MouseEvent<HTMLAnchorElement>) => {
-        event.preventDefault();
-        openExternalLink(url);
-      }}
-      target="_blank"
-      rel="noreferrer"
-    >
-      {label}
-    </a>
-  );
-}
-
-function renderInlineMarkdown(text: string, keyPrefix: string) {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\)|https?:\/\/[^\s<)]+)/g).filter(Boolean);
-  return parts.map((part, index) => {
-    const key = `${keyPrefix}-${index}`;
-    if (part.startsWith("`") && part.endsWith("`")) return <code key={key}>{part.slice(1, -1)}</code>;
-    if (part.startsWith("**") && part.endsWith("**")) return <strong key={key}>{part.slice(2, -2)}</strong>;
-    if (part.startsWith("*") && part.endsWith("*")) return <em key={key}>{part.slice(1, -1)}</em>;
-
-    const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-    if (link) {
-      return renderExternalLink(link[1], link[2], key);
-    }
-
-    if (isExternalWebUrl(part)) return renderExternalLink(part, part, key);
-
-    return part;
-  });
-}
-
-function renderMarkdownPreview(markdown: string) {
-  const lines = markdown.split("\n");
-  const elements: ReactNode[] = [];
-  let listItems: string[] = [];
-  let orderedItems: string[] = [];
-  let codeLines: string[] = [];
-  let inCode = false;
-
-  function flushLists(key: string) {
-    if (listItems.length) {
-      elements.push(
-        <ul key={`${key}-ul`}>
-          {listItems.map((item, index) => <li key={index}>{renderInlineMarkdown(item, `${key}-ul-${index}`)}</li>)}
-        </ul>,
-      );
-      listItems = [];
-    }
-    if (orderedItems.length) {
-      elements.push(
-        <ol key={`${key}-ol`}>
-          {orderedItems.map((item, index) => <li key={index}>{renderInlineMarkdown(item, `${key}-ol-${index}`)}</li>)}
-        </ol>,
-      );
-      orderedItems = [];
-    }
-  }
-
-  lines.forEach((line, index) => {
-    const key = `md-${index}`;
-    const trimmed = line.trim();
-
-    if (trimmed.startsWith("```")) {
-      if (inCode) {
-        elements.push(<pre key={key}><code>{codeLines.join("\n")}</code></pre>);
-        codeLines = [];
-        inCode = false;
-      } else {
-        flushLists(key);
-        inCode = true;
-      }
-      return;
-    }
-
-    if (inCode) {
-      codeLines.push(line);
-      return;
-    }
-
-    if (!trimmed) {
-      flushLists(key);
-      return;
-    }
-
-    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
-    if (heading) {
-      flushLists(key);
-      const content = renderInlineMarkdown(heading[2], key);
-      if (heading[1].length === 1) elements.push(<h1 key={key}>{content}</h1>);
-      if (heading[1].length === 2) elements.push(<h2 key={key}>{content}</h2>);
-      if (heading[1].length === 3) elements.push(<h3 key={key}>{content}</h3>);
-      return;
-    }
-
-    if (trimmed.startsWith(">")) {
-      flushLists(key);
-      elements.push(<blockquote key={key}>{renderInlineMarkdown(trimmed.replace(/^>\s?/, ""), key)}</blockquote>);
-      return;
-    }
-
-    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
-    if (bullet) {
-      orderedItems = [];
-      listItems.push(bullet[1]);
-      return;
-    }
-
-    const ordered = trimmed.match(/^\d+\.\s+(.+)$/);
-    if (ordered) {
-      listItems = [];
-      orderedItems.push(ordered[1]);
-      return;
-    }
-
-    flushLists(key);
-    elements.push(<p key={key}>{renderInlineMarkdown(trimmed, key)}</p>);
-  });
-
-  flushLists("end");
-  if (inCode && codeLines.length) elements.push(<pre key="end-code"><code>{codeLines.join("\n")}</code></pre>);
-
-  return elements;
-}
 
 function buildSessionFromTimer(timer: TimerState, endedAt: string, minutes: number, startedAt = timer.startedAt ?? endedAt): StudySession {
   return {
@@ -3317,11 +3200,12 @@ function formatFeedPostedAt(value: string) {
 }
 
 const WABI_ATTENDANCE_WINDOW_MS = 48 * 60 * 60 * 1000;
-// Must match VERIFIED_SESSION_HEARTBEAT_MS / VERIFIED_SESSION_GRACE_MS in cloudflare/src/index.ts —
-// used client-side only to decide when a gap is worth reconciling, not as an authoritative bound
-// (the server independently derives and enforces its own boundary).
+// Must match VERIFIED_SESSION_HEARTBEAT_MS / VERIFIED_SESSION_NORMAL_CREDIT_GRACE_MS in
+// cloudflare/src/index.ts — used client-side only to decide when a gap is worth attempting to
+// reconcile, not as an authoritative bound (the server independently derives and enforces its own
+// boundary regardless of what the client thinks or sends).
 const VERIFIED_SESSION_HEARTBEAT_MS = 15 * 60 * 1000;
-const VERIFIED_SESSION_GRACE_MS = 5 * 60 * 1000;
+const VERIFIED_SESSION_NORMAL_CREDIT_GRACE_MS = 2 * 60 * 60 * 1000;
 
 function isRecentlyActive(value: string | null | undefined, maxAgeMs = 45 * 60 * 1000) {
   const timestamp = parseSocialTimestamp(value);
@@ -3394,7 +3278,6 @@ const AVATAR_IMAGE_COMPRESSION_ATTEMPTS = [
   { dimension: AVATAR_IMAGE_MAX_DIMENSION, quality: 0.45 },
   { dimension: 128, quality: 0.45 },
 ];
-const AVATAR_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const AVATAR_CROP_VIEWPORT_PX = 300;
 const AVATAR_CROP_MAX_ZOOM = 4;
 
@@ -3420,9 +3303,14 @@ function blobToDataUrl(blob: Blob) {
   });
 }
 
-async function dataUrlToBlob(dataUrl: string) {
-  const response = await fetch(dataUrl);
-  return response.blob();
+function dataUrlToBlob(dataUrl: string) {
+  const match = /^data:([^;,]*)(;base64)?,(.*)$/s.exec(dataUrl);
+  if (!match) throw new Error("Could not read photo.");
+  const [, mimeType, isBase64, payload] = match;
+  const binary = isBase64 ? atob(payload) : decodeURIComponent(payload);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: mimeType || "image/webp" });
 }
 
 function loadImageElement(dataUrl: string) {
@@ -3632,12 +3520,6 @@ async function toggleMaximizeWindow() {
   await getCurrentWindow().toggleMaximize();
 }
 
-async function toggleFullscreenWindow() {
-  if (!isTauriApp()) return;
-  const window = getCurrentWindow();
-  await window.setFullscreen(!(await window.isFullscreen()));
-}
-
 async function closeWindow() {
   if (!isTauriApp()) return;
   await getCurrentWindow().close();
@@ -3743,128 +3625,6 @@ function SquadArenaRow({ entry, period, isSelf, onOpen }: { entry: SocialSquadSc
   );
 }
 
-function SummaryPdfViewer({ vaultPath, path, title }: { vaultPath: string; path: string; title: string }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
-  const [documentProxy, setDocumentProxy] = useState<PDFDocumentProxy | null>(null);
-  const [pageNumber, setPageNumber] = useState(1);
-  const [pageCount, setPageCount] = useState(0);
-  const [scale, setScale] = useState(1.25);
-  const [loading, setLoading] = useState(false);
-  const [rendering, setRendering] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    let loadingTask: ReturnType<PdfJsModule["getDocument"]> | null = null;
-    setLoading(true);
-    setError(null);
-    setDocumentProxy(null);
-    setPageNumber(1);
-    setPageCount(0);
-
-    void Promise.all([
-      import("pdfjs-dist"),
-      import("pdfjs-dist/build/pdf.worker.mjs?url"),
-      readSummaryPdf(vaultPath, path),
-    ])
-      .then(([pdfjsLib, workerModule, bytes]) => {
-        if (cancelled) return null;
-        pdfjsLib.GlobalWorkerOptions.workerSrc = workerModule.default;
-        loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(bytes) });
-        return loadingTask.promise;
-      })
-      .then((pdf) => {
-        if (!pdf) return;
-        return pdf;
-      })
-      .then((pdf) => {
-        if (!pdf) return;
-        if (cancelled) {
-          void pdf.cleanup();
-          return;
-        }
-        setDocumentProxy(pdf);
-        setPageCount(pdf.numPages);
-      })
-      .catch((loadError: unknown) => {
-        if (!cancelled) setError(getErrorMessage(loadError, "Could not load this PDF."));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-      renderTaskRef.current?.cancel();
-      renderTaskRef.current = null;
-      void loadingTask?.destroy();
-    };
-  }, [path, vaultPath]);
-
-  useEffect(() => {
-    if (!documentProxy || !canvasRef.current) return undefined;
-    let cancelled = false;
-    setRendering(true);
-    setError(null);
-    renderTaskRef.current?.cancel();
-
-    void documentProxy.getPage(pageNumber)
-      .then((page) => {
-        if (cancelled || !canvasRef.current) return;
-        const canvas = canvasRef.current;
-        const context = canvas.getContext("2d");
-        if (!context) throw new Error("Could not prepare PDF canvas.");
-
-        const viewport = page.getViewport({ scale });
-        const pixelRatio = window.devicePixelRatio || 1;
-        canvas.width = Math.floor(viewport.width * pixelRatio);
-        canvas.height = Math.floor(viewport.height * pixelRatio);
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
-        context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-        context.clearRect(0, 0, viewport.width, viewport.height);
-
-        const renderTask = page.render({ canvas, canvasContext: context, viewport });
-        renderTaskRef.current = renderTask;
-        return renderTask.promise;
-      })
-      .catch((renderError: unknown) => {
-        if (cancelled) return;
-        if (renderError instanceof Error && renderError.name === "RenderingCancelledException") return;
-        setError(getErrorMessage(renderError, "Could not render this PDF page."));
-      })
-      .finally(() => {
-        if (!cancelled) setRendering(false);
-      });
-
-    return () => {
-      cancelled = true;
-      renderTaskRef.current?.cancel();
-      renderTaskRef.current = null;
-    };
-  }, [documentProxy, pageNumber, scale]);
-
-  return (
-    <div className="summary-pdf-viewer">
-      <div className="summary-pdf-controls">
-        <button type="button" className="ghost-button small-button" onClick={() => setPageNumber((current) => Math.max(1, current - 1))} disabled={!documentProxy || pageNumber <= 1}>Prev</button>
-        <span>Page {pageCount ? pageNumber : "-"} / {pageCount || "-"}</span>
-        <button type="button" className="ghost-button small-button" onClick={() => setPageNumber((current) => Math.min(pageCount, current + 1))} disabled={!documentProxy || pageNumber >= pageCount}>Next</button>
-        <button type="button" className="ghost-button small-button" onClick={() => setScale((current) => Math.max(0.7, Number((current - 0.15).toFixed(2))))} disabled={!documentProxy}>-</button>
-        <span>{Math.round(scale * 100)}%</span>
-        <button type="button" className="ghost-button small-button" onClick={() => setScale((current) => Math.min(2.5, Number((current + 0.15).toFixed(2))))} disabled={!documentProxy}>+</button>
-      </div>
-      <div className="summary-pdf-canvas-wrap" aria-busy={loading || rendering}>
-        {loading ? <p className="summary-pdf-status">Loading PDF...</p> : null}
-        {error ? <p className="summary-pdf-error">{error}</p> : null}
-        <canvas ref={canvasRef} aria-label={title} />
-        {rendering && !loading ? <p className="summary-pdf-status floating">Rendering page...</p> : null}
-      </div>
-    </div>
-  );
-}
-
 function GuidedTourOverlay({ help, stepIndex, onBack, onNext, onClose }: { help: PageHelp; stepIndex: number; onBack: () => void; onNext: () => void; onClose: () => void }) {
   const step = help.tour[stepIndex];
   const [rect, setRect] = useState<DOMRect | null>(null);
@@ -3928,54 +3688,34 @@ function GuidedTourOverlay({ help, stepIndex, onBack, onNext, onClose }: { help:
   );
 }
 
-function HelpExampleCards({ examples }: { examples: HelpExample[] }) {
-  const heading = examples[0]?.heading ?? "Examples";
-  return (
-    <div className="planner-unit-examples">
-      <div className="help-example-heading">
-        <span>{heading}</span>
-        <hr />
-      </div>
-      <div className="hp-stack">
-        {examples.map((example) => {
-          const progress = Math.round((example.done / example.total) * 100);
-          return (
-            <article key={example.task} className={`hp-card ${example.tone}`}>
-              <div className="hp-head">
-                <span className="hp-task">{example.task}</span>
-                <span className="hp-unit">{example.unitLabel.toLowerCase()} · <b>{example.next}</b> next · {example.total} total</span>
-              </div>
-              <div className="hp-row" aria-label={`${example.done} completed, ${example.next} next, ${example.total} total`}>
-                {Array.from({ length: example.total }, (_, index) => {
-                  const unit = index + 1;
-                  const stateClass = unit <= example.done ? "done" : unit === example.next ? "next" : "";
-                  return <span key={unit} className={`hp-cell ${stateClass}`}>{unit}</span>;
-                })}
-              </div>
-              <p className="hp-caption">{example.caption} <span aria-hidden="true">-&gt;</span> <b>{example.result}</b></p>
-              <div className="hp-progress" aria-label={`${progress}% complete`}>
-                <span className="hp-pct">{progress}%</span>
-                <div className="hp-track"><div className="hp-fill" style={{ width: `${progress}%` }} /></div>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 const TIMER_ONLY_SECTION: ReadonlySet<PersistSection> = new Set(["timer"]);
 const ALL_PERSIST_SECTIONS: ReadonlySet<PersistSection> = new Set(["timer", "social", "core"]);
+
+/** Harder achievements get a higher rarity and are sprayed bigger on the break-room wall. */
+const BREAK_ROOM_RARITY: Record<string, number> = {
+  "first-break": 0.08, "early-bird": 0.22, "night-owl": 0.22, "on-fire": 0.35, explorer: 0.4,
+  speedrunner: 0.55, veteran: 0.62, "full-house": 0.82, perfectionist: 1,
+};
+/** The Focus Fossil and Garden badges use tiny text symbols (◆ ❀ ...) on the profile; on the wall each gets a real picture. */
+const BREAK_ROOM_WALL_ICONS: Record<string, string> = {
+  "fossil-10": "\u{1F330}", "fossil-25": "\u{1F9AA}", "fossil-50": "\u{1F41A}", "fossil-100": "\u{1F52E}",
+  "fossil-250": "\u{1F9B4}", "fossil-500": "\u{1F3FA}", "fossil-1000": "\u{1F4C0}",
+  "garden-first-sprout": "\u{1F33C}", "garden-streak-bloom": "\u{1F338}", "garden-mushroom-ring": "\u{1F344}",
+  "garden-cross-pollinator": "\u{1F41D}", "garden-full-bloom": "\u{1F33A}", "garden-harvest-season": "\u{1F33E}",
+  "garden-wise-tree": "\u{1F332}",
+};
 
 function App() {
   const [state, setState] = useState<AppState>(() => {
     const loaded = loadAppState();
     return { ...loaded, sessions: pruneSessionHistory(loaded.sessions) };
   });
-  const [theme, setTheme] = useState(() => localStorage.getItem("study-tracker-theme") || "dark");
+  const [savedTheme, setTheme] = useState(() => localStorage.getItem("study-tracker-theme") || "dark");
   const [palette, setPalette] = useState<ThemePalette>(loadThemePalette);
   const [appStyle, setAppStyle] = useState<AppStyle>(loadAppStyle);
+  // Sakura is light-only in Wabi-Sabi (for now); the saved preference is kept for other styles/palettes.
+  const themeLocked = appStyle === "wabi-sabi" && palette === "sakura";
+  const theme = themeLocked ? "light" : savedTheme;
   const [themePanelView, setThemePanelView] = useState<ThemePanelView>("themes");
   const [wabiQuietMode, setWabiQuietMode] = useState(false);
   const [wabiQuietTaskId, setWabiQuietTaskId] = useState<string | null>(null);
@@ -3987,7 +3727,7 @@ function App() {
   const [breakTimerRunning, setBreakTimerRunning] = useState(false);
   const [breakTimerEditing, setBreakTimerEditing] = useState(false);
   const [breakTimerDraft, setBreakTimerDraft] = useState("");
-  const [wabiRestRoom, setWabiRestRoom] = useState<"games" | "meditation">("games");
+  const [wabiRestRoom, setWabiRestRoom] = useState<"games" | "meditation" | "achievements">("games");
   const [breathOn, setBreathOn] = useState(false);
   const [breathElapsedSeconds, setBreathElapsedSeconds] = useState(0);
   const [fieldDashboardLayout, setFieldDashboardLayout] = useState<FieldDashboardLayout>(loadFieldDashboardLayout);
@@ -3999,12 +3739,14 @@ function App() {
   const [focusTip, setFocusTip] = useState<FocusTip | null>(null);
   const [activeFocusMilestone, setActiveFocusMilestone] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [undoState, setUndoState] = useState<{ label: string; patch: UndoPatch } | null>(null);
   const [endlessInactivityPrompt, setEndlessInactivityPrompt] = useState<EndlessInactivityPrompt | null>(null);
   const [timerInactivityNoticeVisible, setTimerInactivityNoticeVisible] = useState(false);
   const [countdownNowMs, setCountdownNowMs] = useState(() => Date.now());
   const endlessContinuousStartedAtRef = useRef<string | null>(null);
   const endlessInactivityPromptRef = useRef<EndlessInactivityPrompt | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const restoreBackupInputRef = useRef<HTMLInputElement | null>(null);
   const [wabiMenuPosition, setWabiMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const wabiMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const [activeMenuPanel, setActiveMenuPanel] = useState<MenuPanel>(null);
@@ -4014,9 +3756,15 @@ function App() {
   const [selectedQuietDashboardEntryId, setSelectedQuietDashboardEntryId] = useState<string | null>(null);
   const [fieldPlannerTaskId, setFieldPlannerTaskId] = useState<string | null>(null);
   const [fieldPlannerTaskMode, setFieldPlannerTaskMode] = useState<FieldPlannerTaskMode | null>(null);
+  // Subtype-first creation: the rest of the task form stays hidden until the user has explicitly
+  // picked a subtype for this open of the create modal (reset in openAddTaskModalFor below).
+  const [taskSubtypeChosen, setTaskSubtypeChosen] = useState(false);
   const [fieldPlannerDeleteTarget, setFieldPlannerDeleteTarget] = useState<FieldPlannerDeleteTarget | null>(null);
   const [fieldPlannerWorkloadId, setFieldPlannerWorkloadId] = useState<string>(TOTAL_WORKLOAD_ID);
   const [helpTab, setHelpTab] = useState<TabKey | null>(null);
+  // The welcome introduction, reopened from the Dashboard question mark. Separate from the
+  // first-run showing (startupAnnounce) so replaying it cannot re-trigger first-run behaviour.
+  const [introReplayOpen, setIntroReplayOpen] = useState(false);
   const [menuHelpOpen, setMenuHelpOpen] = useState(false);
   const [tourState, setTourState] = useState<{ tab: TabKey; step: number } | null>(null);
   const [semesterName, setSemesterName] = useState("");
@@ -4030,12 +3778,12 @@ function App() {
     semesterId: "",
     courseId: "",
     title: "",
-    unitLabel: "Unit",
-    totalUnits: "10",
-    completedUnits: "0",
+    subtype: "Other",
+    unitLabel: "Task",
     dueDate: "",
     priority: "medium",
     notes: "",
+    ...emptyScheduleDraftFields(),
   });
   const [examDraft, setExamDraft] = useState<ExamDraft>({
     semesterId: "",
@@ -4065,13 +3813,15 @@ function App() {
     semesterId: "",
     courseId: "",
     title: "",
-    unitLabel: "Unit",
-    totalUnits: "10",
-    completedUnits: "0",
+    subtype: "Other",
+    unitLabel: "Task",
     dueDate: "",
     priority: "medium",
     notes: "",
+    ...emptyScheduleDraftFields(),
   });
+  const [editingExamId, setEditingExamId] = useState<string | null>(null);
+  const [examEditDraft, setExamEditDraft] = useState({ title: "", examDate: "", weight: "40", preparedness: "35", location: "" });
   const [calculatorOpen, setCalculatorOpen] = useState(true);
   const [timerAdvancedOpen, setTimerAdvancedOpen] = useState(false);
   const [timerFaceEditing, setTimerFaceEditing] = useState(false);
@@ -4085,18 +3835,49 @@ function App() {
   const [calendarView, setCalendarView] = useState<CalendarView>("week");
   const [calendarCursorDate, setCalendarCursorDate] = useState(() => new Date());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
-  const [calendarAddOpen, setCalendarAddOpen] = useState(false);
-  const [calendarAddDraft, setCalendarAddDraft] = useState<CalendarAddDraft>({
-    semesterId: "",
-    courseId: "",
-    source: "planner",
-    taskId: "",
-    title: "",
-    unitAmount: 1,
-    startTime: "09:00",
-    durationMinutes: "60",
-    noTime: false,
+  const [timetableModalState, setTimetableModalState] = useState<TimetableModalState>(null);
+  const [timetableEditMode, setTimetableEditMode] = useState(false);
+  const [manageSemestersOpen, setManageSemestersOpen] = useState(false);
+  const [manageSemestersInitialCourseId, setManageSemestersInitialCourseId] = useState<string | null>(null);
+  const [manageSemestersInitialSemesterId, setManageSemestersInitialSemesterId] = useState<string | null>(null);
+  const [manageSemestersMode, setManageSemestersMode] = useState<"full" | "semesters" | "courses">("full");
+  const [taskScheduleOpen, setTaskScheduleOpen] = useState(false);
+  // Wabi-Sabi calendar: the small "mark done" window for a scheduled timetable item.
+  const [calendarItemPopup, setCalendarItemPopup] = useState<{ eventId: string; date: string } | null>(null);
+  function closeManageSemesters() {
+    setManageSemestersOpen(false);
+    setManageSemestersInitialCourseId(null);
+    setManageSemestersInitialSemesterId(null);
+    setManageSemestersMode("full");
+  }
+  const [wabiNotesMenuOpen, setWabiNotesMenuOpen] = useState(false);
+  // Wabi-Sabi dashboard "Something else": pick what to work on from today or the coming days.
+  const [wabiPickerOpen, setWabiPickerOpen] = useState(false);
+  // The achievements room shows the album and nothing else; the old per-display picker and its
+  // remembered "study-tracker-achievement-view" setting are no longer read. The other displays'
+  // components are kept in the repo (see the achievements room below).
+  // Rest room: click the tree to cycle through the watercolour trees (remembered on this device).
+// Widths keep every tree at the same scale (pine is the tallest); all of them stand on the pine's baseline.
+  const restTrees = [
+    { file: "japanese-pine.png", width: 111 },
+    { file: "japanese-sakura.png", width: 150 },
+    { file: "japanese-maple.png", width: 131 },
+    { file: "japanese-green-tree.png", width: 99 },
+  ];
+  const [restTreeIndex, setRestTreeIndex] = useState(() => {
+    try { return Math.max(0, Number(localStorage.getItem("study-tracker-rest-tree")) || 0) % restTrees.length; } catch { return 0; }
   });
+  const [wabiOneThingPick, setWabiOneThingPick] = useState<{ refId: string; date: string } | null>(null);
+  const [wabiCircleMenuOpen, setWabiCircleMenuOpen] = useState(false);
+  const [wabiRestMenuOpen, setWabiRestMenuOpen] = useState(false);
+  const [wabiVaultSpace, setWabiVaultSpace] = useState<"daily" | "references" | "summaries">("daily");
+  const [wabiTimerMenuOpen, setWabiTimerMenuOpen] = useState(false);
+  const [wabiTimerSemesterOpen, setWabiTimerSemesterOpen] = useState(false);
+  const [wabiTimerOpenCourseIds, setWabiTimerOpenCourseIds] = useState<string[]>([]);
+  const [sessionLogsOpen, setSessionLogsOpen] = useState(false);
+  const [sessionNoteEdit, setSessionNoteEdit] = useState<{ id: string; draft: string } | null>(null);
+  const [wabiPlanMenuOpen, setWabiPlanMenuOpen] = useState(false);
+  const [wabiSemesterMenuOpen, setWabiSemesterMenuOpen] = useState(false);
   const [calendarEditEntryId, setCalendarEditEntryId] = useState<string | null>(null);
   const [calendarEditDraft, setCalendarEditDraft] = useState<CalendarEditDraft>({ startTime: "09:00", endTime: "10:00" });
   const [calendarDragEntryId, setCalendarDragEntryId] = useState<string | null>(null);
@@ -4105,37 +3886,20 @@ function App() {
   const calendarTimelineRef = useRef<HTMLDivElement | null>(null);
   const calendarMoveDragRef = useRef<CalendarMoveDragState | null>(null);
   const calendarResizeRef = useRef<CalendarResizeState | null>(null);
+  const [timetableDragRowId, setTimetableDragRowId] = useState<string | null>(null);
+  const [timetableDragPreview, setTimetableDragPreview] = useState<{ x: number; y: number; time: string; top: number } | null>(null);
+  const [timetableResizeRowId, setTimetableResizeRowId] = useState<string | null>(null);
+  const timetableMoveDragRef = useRef<{ row: DailyTimelineRow; target: TimetableRowTarget; durationMinutes: number | null; startX: number; startY: number; moved: boolean } | null>(null);
+  const timetableResizeRef = useRef<{ row: DailyTimelineRow; target: TimetableRowTarget; startY: number; startMinutes: number; endMinutes: number } | null>(null);
+  // Dragging a to-do that has no time yet, from the Unscheduled panel onto the timeline canvas to
+  // give it its first time slot - distinct from timetableMoveDragRef, which repositions a pill
+  // already on the canvas, because the drag doesn't start from inside the canvas at all.
+  const unscheduledTodoDragRef = useRef<{ todoId: string; occurrenceDate: string } | null>(null);
+  const [timetableRecurrenceConfirm, setTimetableRecurrenceConfirm] = useState<{ eventId: string | null; todoId: string | null; originalDate: string; newDate: string; newTime: string; newEndTime: string | null } | null>(null);
   const [calendarToday, setCalendarToday] = useState(localIsoDate);
   const [personalNameDraft, setPersonalNameDraft] = useState(() => state.settings.userName);
   const [personalDailyGoalHoursDraft, setPersonalDailyGoalHoursDraft] = useState(() => String((state.settings.dailyGoalMinutes ?? 120) / 60));
-  const [vaultNoteDate, setVaultNoteDate] = useState(localIsoDate);
-  const [vaultNoteContent, setVaultNoteContent] = useState("");
-  const [vaultNotePath, setVaultNotePath] = useState<string | null>(null);
-  const [vaultNotes, setVaultNotes] = useState<VaultNoteFile[]>([]);
-  const [vaultNoteTitle, setVaultNoteTitle] = useState("");
-  const [vaultNoteSavedAt, setVaultNoteSavedAt] = useState<number | null>(null);
-  const [vaultNotesLoading, setVaultNotesLoading] = useState(false);
-  const [vaultNoteDirty, setVaultNoteDirty] = useState(false);
-  const [vaultNoteLoading, setVaultNoteLoading] = useState(false);
-  const [vaultSetupOpen, setVaultSetupOpen] = useState(() => !state.settings.vaultPath);
-  const [vaultDailyEditing, setVaultDailyEditing] = useState(false);
-  const [markdownCheatsheetOpen, setMarkdownCheatsheetOpen] = useState(false);
-  const [vaultSpace, setVaultSpace] = useState<VaultSpace>("daily");
-  const [referenceSemesterId, setReferenceSemesterId] = useState("");
-  const [referenceCourseId, setReferenceCourseId] = useState("");
-  const [referenceContent, setReferenceContent] = useState("");
-  const [referencePath, setReferencePath] = useState<string | null>(null);
-  const [referenceDirty, setReferenceDirty] = useState(false);
-  const [referenceLoading, setReferenceLoading] = useState(false);
-  const [referenceEditing, setReferenceEditing] = useState(false);
-  const [referencePathVisible, setReferencePathVisible] = useState(false);
-  const referenceLoadRequestRef = useRef(0);
-  const [summarySemesterId, setSummarySemesterId] = useState("");
-  const [summaryCourseId, setSummaryCourseId] = useState("");
-  const [summaryFiles, setSummaryFiles] = useState<SummaryFile[]>([]);
-  const [selectedSummaryPath, setSelectedSummaryPath] = useState<string | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
-  const summaryLoadRequestRef = useRef(0);
+  const vaultScreenRef = useRef<VaultScreenHandle | null>(null);
   const pendingUpdateRef = useRef<Update | null>(null);
   const latestStateRef = useRef(state);
   const persistenceBaselinesRef = useRef<PersistenceBaselines>(createInitialPersistenceBaselines(state));
@@ -4153,6 +3917,7 @@ function App() {
   const seenFeedCommentIdsRef = useRef<Set<string> | null>(null);
   const wordleModalRef = useRef<HTMLDivElement | null>(null);
   const [currentAppVersion, setCurrentAppVersion] = useState("loading...");
+  const [startupAnnounce, setStartupAnnounce] = useState<ReturnType<typeof consumeStartupAnnouncement>>(null);
   const [updateInstallSupport, setUpdateInstallSupport] = useState<UpdateInstallSupport>(DEFAULT_UPDATE_INSTALL_SUPPORT);
   const [linuxUpdateDownload, setLinuxUpdateDownload] = useState<LinuxUpdateDownload | null>(null);
   const [linuxPackageDownloading, setLinuxPackageDownloading] = useState(false);
@@ -4204,6 +3969,7 @@ function App() {
   const [squadSettingsPrivateDraft, setSquadSettingsPrivateDraft] = useState(false);
   const [socialSyncing, setSocialSyncing] = useState(false);
   const [socialNameEditing, setSocialNameEditing] = useState(false);
+  const [socialNamePromptOpen, setSocialNamePromptOpen] = useState(false);
   const [socialNameDraft, setSocialNameDraft] = useState(() => state.social.displayName);
   const [profileAvatarEditorOpen, setProfileAvatarEditorOpen] = useState(false);
   const [profileAvatarDraft, setProfileAvatarDraft] = useState<SocialAvatar>(() => state.social.avatar);
@@ -4232,6 +3998,7 @@ function App() {
   const [showGeodlePuzzle, setShowGeodlePuzzle] = useState(false);
   const [showFlagglePuzzle, setShowFlagglePuzzle] = useState(false);
   const [showTravlePuzzle, setShowTravlePuzzle] = useState(false);
+  const [showSkribblPuzzle, setShowSkribblPuzzle] = useState(false);
   const [durakGameState, setDurakGameState] = useState<DurakGameState | null>(null);
   const [durakSelected, setDurakSelected] = useState<number[]>([]);
   const [wordleDraft, setWordleDraft] = useState("");
@@ -4275,6 +4042,46 @@ function App() {
       saveStateTimeoutRef.current = null;
     }, 700);
   }, [state]);
+
+  // No task takes a manual totalUnits/completedUnits input (see the task form) - a task's
+  // progress is derived entirely from how many of its occurrences are projected
+  // across the semester's date range (weekly recurrence expanded, holidays excluded) and how many
+  // of those specific dates are checked off. Recompute and write those two fields through
+  // whenever the schedule or task list changes, so every existing consumer (workload calc, task
+  // cards, dashboard) keeps reading plain numbers. This never touches the recurrence engine
+  // itself (plannerSchedule's expandTimetableEvents), which stays fully independent of subtype -
+  // it only ever reads date/time/repeatWeekly/overrides/holidays.
+  useEffect(() => {
+    setState((current) => {
+      let changed = false;
+      const tasks = current.tasks.map((task) => {
+        // Sheet releases are notifications, not units - only deadlines/occurrences are counted.
+        const events = current.timetableEvents.filter((event) => event.taskId === task.id && event.kind !== "sheet-release");
+        if (!events.length) return task;
+        const semester = current.semesters.find((item) => item.id === task.semesterId);
+        let totalUnits: number;
+        let completedUnits: number;
+        if (semester?.startDate && semester?.endDate) {
+          totalUnits = 0;
+          completedUnits = 0;
+          for (const event of events) {
+            const dates = countEventOccurrenceDates(event, current.holidays, task.semesterId, semester.startDate, semester.endDate);
+            totalUnits += dates.length;
+            completedUnits += dates.filter((date) => event.completedOccurrences.includes(date)).length;
+          }
+        } else {
+          // No semester date range configured yet - fall back to counting event records rather
+          // than expanding an unbounded weekly recurrence.
+          totalUnits = events.length;
+          completedUnits = events.filter((event) => event.completedOccurrences.length > 0).length;
+        }
+        if (task.totalUnits === totalUnits && task.completedUnits === completedUnits) return task;
+        changed = true;
+        return { ...task, totalUnits, completedUnits };
+      });
+      return changed ? { ...current, tasks } : current;
+    });
+  }, [state.timetableEvents, state.tasks, state.semesters, state.holidays]);
 
   useEffect(() => {
     if (!state.timer.running) return undefined;
@@ -4344,7 +4151,10 @@ function App() {
     }
 
     void getVersion()
-      .then(setCurrentAppVersion)
+      .then((version) => {
+        setCurrentAppVersion(version);
+        setStartupAnnounce(consumeStartupAnnouncement(version));
+      })
       .catch((error: unknown) => {
         console.warn("Could not read app version.", error);
         setCurrentAppVersion("unknown");
@@ -4377,9 +4187,14 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (state.settings.hideProfilePictures) document.documentElement.dataset.hideAvatars = "true";
+    else delete document.documentElement.dataset.hideAvatars;
+  }, [state.settings.hideProfilePictures]);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("study-tracker-theme", theme);
-  }, [theme]);
+    localStorage.setItem("study-tracker-theme", savedTheme);
+  }, [theme, savedTheme]);
 
   useEffect(() => {
     document.documentElement.dataset.appStyle = appStyle;
@@ -4406,6 +4221,17 @@ function App() {
     window.addEventListener("resize", updateWabiMenuPosition);
     return () => window.removeEventListener("resize", updateWabiMenuPosition);
   }, [appStyle, menuOpen]);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    function handleOutsidePointerDown(event: globalThis.MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest(".topbar-menu, .topbar-menu-wrap, .wabi-toolbar-menu-wrap")) return;
+      setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", handleOutsidePointerDown);
+    return () => document.removeEventListener("mousedown", handleOutsidePointerDown);
+  }, [menuOpen]);
 
   useEffect(() => {
     localStorage.setItem(WABI_CIRCLE_COMPETITIVE_KEY, String(wabiCircleCompetitive));
@@ -4488,14 +4314,10 @@ function App() {
   }, [message]);
 
   useEffect(() => {
-    if (!markdownCheatsheetOpen) return undefined;
-    function closeOnEscape(event: globalThis.KeyboardEvent) {
-      if (event.key === "Escape") setMarkdownCheatsheetOpen(false);
-    }
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [markdownCheatsheetOpen]);
+    if (!undoState) return undefined;
+    const timeout = window.setTimeout(() => setUndoState(null), 8000);
+    return () => window.clearTimeout(timeout);
+  }, [undoState]);
 
   useEffect(() => {
     if (!state.timer.running) return undefined;
@@ -4669,6 +4491,11 @@ function App() {
 
   useEffect(() => {
     if (!isTauriApp()) return;
+    void getCurrentWindow().setFullscreen(fullscreen).catch(() => undefined);
+  }, [fullscreen]);
+
+  useEffect(() => {
+    if (!isTauriApp()) return;
     let cancelled = false;
     let unlisten: (() => void) | undefined;
     getCurrentWindow().isMaximized().then((value) => { if (!cancelled) setWindowMaximized(value); }).catch(() => undefined);
@@ -4677,23 +4504,6 @@ function App() {
     }).then((fn) => { if (cancelled) fn(); else unlisten = fn; }).catch(() => undefined);
     return () => { cancelled = true; unlisten?.(); };
   }, []);
-
-  useEffect(() => {
-    if (
-      selectedTaskId === TOTAL_WORKLOAD_ID ||
-      (selectedTaskId && state.tasks.some((task) => task.id === selectedTaskId))
-    ) {
-      return;
-    }
-    const nextTask = state.tasks.find((task) => getRemainingUnits(task) > 0) ?? state.tasks[0] ?? null;
-    setSelectedTaskId(nextTask?.id ?? null);
-  }, [selectedTaskId, state.tasks]);
-
-  useEffect(() => {
-    if (!calendarAddDraft.semesterId && state.semesters[0]?.id) {
-      setCalendarAddDraft((current) => ({ ...current, semesterId: state.semesters[0].id }));
-    }
-  }, [calendarAddDraft.semesterId, state.semesters]);
 
   useEffect(() => {
     function handleMoveDrag(event: globalThis.MouseEvent) {
@@ -4748,44 +4558,123 @@ function App() {
       setCalendarResizeEntryId(null);
     }
 
+    function handleTimetableMoveDrag(event: globalThis.MouseEvent) {
+      const drag = timetableMoveDragRef.current;
+      const timeline = calendarTimelineRef.current;
+      if (!drag || !timeline) return;
+
+      const movedEnough = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 4;
+      if (!movedEnough && !drag.moved) return;
+      drag.moved = true;
+
+      const target = getTimelineTimeFromClientY(timeline, event.clientY);
+      setTimetableDragPreview({ x: event.clientX, y: event.clientY, top: target.top, time: target.time });
+    }
+
+    function handleTimetableMoveEnd(event: globalThis.MouseEvent) {
+      const drag = timetableMoveDragRef.current;
+      const timeline = calendarTimelineRef.current;
+      timetableMoveDragRef.current = null;
+      setTimetableDragRowId(null);
+      setTimetableDragPreview(null);
+      if (!drag || !timeline || !drag.moved) return;
+
+      const target = getTimelineTimeFromClientY(timeline, event.clientY);
+      const newEndTime = drag.durationMinutes !== null ? addMinutesToTime(target.time, drag.durationMinutes) : null;
+      commitTimetableOccurrenceChange(drag.target, drag.row.occurrenceDate, target.time, newEndTime);
+    }
+
+    function handleTimetableResizeMove(event: globalThis.MouseEvent) {
+      const resize = timetableResizeRef.current;
+      if (!resize) return;
+      const minuteDelta = snapCalendarMinutes(((event.clientY - resize.startY) / calendarTimelineHourHeight) * 60);
+      const endMinutes = clamp(resize.endMinutes + minuteDelta, resize.startMinutes + calendarTimeStepMinutes, 23 * 60 + 59);
+      setTimetableDragPreview({ x: event.clientX, y: event.clientY, top: 0, time: minutesToTime(endMinutes) });
+    }
+
+    function handleTimetableResizeEnd(event: globalThis.MouseEvent) {
+      const resize = timetableResizeRef.current;
+      timetableResizeRef.current = null;
+      setTimetableResizeRowId(null);
+      setTimetableDragPreview(null);
+      if (!resize) return;
+      const minuteDelta = snapCalendarMinutes(((event.clientY - resize.startY) / calendarTimelineHourHeight) * 60);
+      const endMinutes = clamp(resize.endMinutes + minuteDelta, resize.startMinutes + calendarTimeStepMinutes, 23 * 60 + 59);
+      commitTimetableOccurrenceChange(resize.target, resize.row.occurrenceDate, resize.row.time ?? minutesToTime(resize.startMinutes), minutesToTime(endMinutes));
+    }
+
+    function isOverTimeline(clientX: number, clientY: number) {
+      const timeline = calendarTimelineRef.current;
+      if (!timeline) return false;
+      const rect = timeline.getBoundingClientRect();
+      return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+    }
+
+    function handleUnscheduledTodoDrag(event: globalThis.MouseEvent) {
+      const drag = unscheduledTodoDragRef.current;
+      const timeline = calendarTimelineRef.current;
+      if (!drag || !timeline) return;
+      if (!isOverTimeline(event.clientX, event.clientY)) {
+        setTimetableDragPreview(null);
+        return;
+      }
+      const target = getTimelineTimeFromClientY(timeline, event.clientY);
+      setTimetableDragPreview({ x: event.clientX, y: event.clientY, top: target.top, time: target.time });
+    }
+
+    function handleUnscheduledTodoDragEnd(event: globalThis.MouseEvent) {
+      const drag = unscheduledTodoDragRef.current;
+      const timeline = calendarTimelineRef.current;
+      unscheduledTodoDragRef.current = null;
+      setTimetableDragRowId(null);
+      setTimetableDragPreview(null);
+      if (!drag || !timeline || !isOverTimeline(event.clientX, event.clientY)) return;
+      const target = getTimelineTimeFromClientY(timeline, event.clientY);
+      const todo = latestStateRef.current.dailyTodos.find((item) => item.id === drag.todoId);
+      if (!todo) return;
+      commitTimetableOccurrenceChange({ kind: "todo", todo }, drag.occurrenceDate, target.time, addMinutesToTime(target.time, 30));
+    }
+
+    function cancelDrags(event: globalThis.KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      calendarMoveDragRef.current = null;
+      calendarResizeRef.current = null;
+      timetableMoveDragRef.current = null;
+      timetableResizeRef.current = null;
+      unscheduledTodoDragRef.current = null;
+      setCalendarDragEntryId(null);
+      setCalendarResizeEntryId(null);
+      setCalendarMovePreview(null);
+      setTimetableDragRowId(null);
+      setTimetableResizeRowId(null);
+      setTimetableDragPreview(null);
+    }
+
     window.addEventListener("mousemove", handleResizeMove);
     window.addEventListener("mouseup", handleResizeEnd);
     window.addEventListener("mousemove", handleMoveDrag);
     window.addEventListener("mouseup", handleMoveEnd);
+    window.addEventListener("mousemove", handleTimetableMoveDrag);
+    window.addEventListener("mouseup", handleTimetableMoveEnd);
+    window.addEventListener("mousemove", handleTimetableResizeMove);
+    window.addEventListener("mouseup", handleTimetableResizeEnd);
+    window.addEventListener("mousemove", handleUnscheduledTodoDrag);
+    window.addEventListener("mouseup", handleUnscheduledTodoDragEnd);
+    window.addEventListener("keydown", cancelDrags);
     return () => {
+      window.removeEventListener("keydown", cancelDrags);
       window.removeEventListener("mousemove", handleResizeMove);
       window.removeEventListener("mouseup", handleResizeEnd);
       window.removeEventListener("mousemove", handleMoveDrag);
       window.removeEventListener("mouseup", handleMoveEnd);
+      window.removeEventListener("mousemove", handleTimetableMoveDrag);
+      window.removeEventListener("mouseup", handleTimetableMoveEnd);
+      window.removeEventListener("mousemove", handleUnscheduledTodoDrag);
+      window.removeEventListener("mouseup", handleUnscheduledTodoDragEnd);
+      window.removeEventListener("mousemove", handleTimetableResizeMove);
+      window.removeEventListener("mouseup", handleTimetableResizeEnd);
     };
   }, []);
-
-  useEffect(() => {
-    setCalendarAddDraft((current) => {
-      if (!current.semesterId) return current;
-      if (current.courseId && state.courses.some((course) => course.id === current.courseId && course.semesterId === current.semesterId)) return current;
-      return { ...current, courseId: "", taskId: "" };
-    });
-  }, [calendarAddDraft.semesterId, state.courses]);
-
-  useEffect(() => {
-    setCalendarAddDraft((current) => {
-      if (current.source !== "planner") return current;
-      const taskMatches = current.taskId && state.tasks.some((task) => {
-        if (task.id !== current.taskId) return false;
-        if (current.courseId) return task.courseId === current.courseId;
-        if (current.semesterId) return task.semesterId === current.semesterId;
-        return true;
-      });
-      if (taskMatches) return current;
-      const nextTask = state.tasks.find((task) => {
-        if (current.courseId) return task.courseId === current.courseId;
-        if (current.semesterId) return task.semesterId === current.semesterId;
-        return true;
-      });
-      return { ...current, taskId: nextTask?.id ?? "" };
-    });
-  }, [calendarAddDraft.courseId, calendarAddDraft.semesterId, state.tasks]);
 
   useEffect(() => {
     const firstSemester = state.semesters[0]?.id ?? "";
@@ -4814,24 +4703,29 @@ function App() {
     () => new Map(state.semesters.map((semester) => [semester.id, semester])),
     [state.semesters],
   );
+  const activeSemesters = useMemo(() => state.semesters.filter((semester) => !semester.archived), [state.semesters]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- getActiveSemesterIds only reads state.semesters
+  const activeSemesterIds = useMemo(() => getActiveSemesterIds(state), [state.semesters]);
+  // Archived semesters' courses/tasks/exams are excluded from workload totals, health scores,
+  // and workload selectors - only currently-running semesters count toward "total workload".
+  const activeCourses = useMemo(() => state.courses.filter((course) => activeSemesterIds.has(course.semesterId)), [state.courses, activeSemesterIds]);
+  const activeTasks = useMemo(() => state.tasks.filter((task) => activeSemesterIds.has(task.semesterId)), [state.tasks, activeSemesterIds]);
+  const activeExams = useMemo(() => state.exams.filter((exam) => activeSemesterIds.has(exam.semesterId)), [state.exams, activeSemesterIds]);
+
+  useEffect(() => {
+    if (
+      selectedTaskId === TOTAL_WORKLOAD_ID ||
+      (selectedTaskId && activeTasks.some((task) => task.id === selectedTaskId))
+    ) {
+      return;
+    }
+    const nextTask = activeTasks.find((task) => getRemainingUnits(task) > 0) ?? activeTasks[0] ?? null;
+    setSelectedTaskId(nextTask?.id ?? null);
+  }, [selectedTaskId, activeTasks]);
   const courseLookup = useMemo(
     () => new Map(state.courses.map((course) => [course.id, course])),
     [state.courses],
   );
-  const referenceCourses = useMemo(
-    () => referenceSemesterId ? state.courses.filter((course) => course.semesterId === referenceSemesterId) : [],
-    [referenceSemesterId, state.courses],
-  );
-  const summaryCourses = useMemo(
-    () => summarySemesterId ? state.courses.filter((course) => course.semesterId === summarySemesterId) : [],
-    [summarySemesterId, state.courses],
-  );
-  const selectedReferenceSemester = referenceSemesterId ? semesterLookup.get(referenceSemesterId) ?? null : null;
-  const selectedReferenceCourse = referenceCourseId ? courseLookup.get(referenceCourseId) ?? null : null;
-  const selectedSummarySemester = summarySemesterId ? semesterLookup.get(summarySemesterId) ?? null : null;
-  const selectedSummaryCourse = summaryCourseId ? courseLookup.get(summaryCourseId) ?? null : null;
-  const selectedSummaryFile = summaryFiles.find((file) => file.path === selectedSummaryPath) ?? summaryFiles[0] ?? null;
-  const selectedSummaryUrl = selectedSummaryFile ? convertFileSrc(selectedSummaryFile.path) : null;
   const taskLookup = useMemo(() => new Map(state.tasks.map((task) => [task.id, task])), [state.tasks]);
   // Single-pass grouping/aggregation maps shared by the dashboard course radar and the planner
   // semester/course lists, instead of each course/semester re-scanning the full tasks/exams/
@@ -4845,120 +4739,69 @@ function App() {
   // would silently freeze past midnight until courses/tasks/exams changed for some other
   // reason. Mirrors the same pattern already used by weeklyActivity/todayMinutes/streakDays/
   // focusMomentum below.
+  // Health is measured against the calendar (what should be done by now vs done) wherever something
+  // is scheduled; the completion-based figure is only the fallback.
   const courseHealthByCourseId = useMemo(
-    () => getCourseHealthMap(state.courses, courseTasksByCourseId, state.exams),
+    () => {
+      const base = getCourseHealthMap(state.courses, courseTasksByCourseId, state.exams);
+      for (const course of state.courses) {
+        const semester = state.semesters.find((item) => item.id === course.semesterId);
+        const record = base.get(course.id);
+        if (!semester || !record) continue;
+        const schedule = getScheduleHealth({
+          events: state.timetableEvents.filter((event) => event.courseId === course.id),
+          holidays: state.holidays,
+          semesters: [semester],
+          exams: state.exams.filter((exam) => exam.courseId === course.id),
+          today: calendarToday,
+        });
+        base.set(course.id, withScheduleHealth(record, schedule));
+      }
+      return base;
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarToday forces day-boundary invalidation, see comment above
-    [state.courses, courseTasksByCourseId, state.exams, calendarToday],
+    [state.courses, state.semesters, state.timetableEvents, state.holidays, courseTasksByCourseId, state.exams, calendarToday],
   );
   const semesterHealthBySemesterId = useMemo(
-    () => getSemesterHealthMap(state.semesters, semesterTasksBySemesterId, state.exams),
+    () => {
+      const base = getSemesterHealthMap(state.semesters, semesterTasksBySemesterId, state.exams);
+      for (const semester of state.semesters) {
+        const record = base.get(semester.id);
+        if (!record) continue;
+        const schedule = getScheduleHealth({
+          events: state.timetableEvents.filter((event) => event.semesterId === semester.id),
+          holidays: state.holidays,
+          semesters: [semester],
+          exams: state.exams.filter((exam) => exam.semesterId === semester.id),
+          today: calendarToday,
+        });
+        base.set(semester.id, withScheduleHealth(record, schedule));
+      }
+      return base;
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarToday forces day-boundary invalidation, see comment above
-    [state.semesters, semesterTasksBySemesterId, state.exams, calendarToday],
+    [state.semesters, state.timetableEvents, state.holidays, semesterTasksBySemesterId, state.exams, calendarToday],
   );
-  const calendarAddCourses = useMemo(
-    () => calendarAddDraft.semesterId ? state.courses.filter((course) => course.semesterId === calendarAddDraft.semesterId) : [],
-    [calendarAddDraft.semesterId, state.courses],
-  );
-  const calendarAddTasks = useMemo(
-    () => state.tasks.filter((task) => {
-      if (calendarAddDraft.courseId) return task.courseId === calendarAddDraft.courseId;
-      if (calendarAddDraft.semesterId) return task.semesterId === calendarAddDraft.semesterId;
-      return true;
-    }),
-    [calendarAddDraft.courseId, calendarAddDraft.semesterId, state.tasks],
-  );
-
-  useEffect(() => {
-    const firstSemester = state.semesters[0]?.id ?? "";
-    if (!referenceSemesterId && firstSemester) {
-      setReferenceSemesterId(firstSemester);
-      return;
-    }
-    if (referenceSemesterId && !state.semesters.some((semester) => semester.id === referenceSemesterId)) {
-      setReferenceSemesterId(firstSemester);
-      setReferenceCourseId("");
-    }
-  }, [referenceSemesterId, state.semesters]);
-
-  useEffect(() => {
-    const firstCourse = referenceCourses[0]?.id ?? "";
-    if (!referenceCourseId && firstCourse) {
-      setReferenceCourseId(firstCourse);
-      return;
-    }
-    if (referenceCourseId && !referenceCourses.some((course) => course.id === referenceCourseId)) {
-      setReferenceCourseId(firstCourse);
-    }
-  }, [referenceCourseId, referenceCourses]);
-
-  useEffect(() => {
-    setReferenceContent("");
-    setReferencePath(null);
-    setReferenceDirty(false);
-    setReferenceEditing(false);
-    setReferencePathVisible(false);
-  }, [referenceSemesterId, referenceCourseId]);
-
-  useEffect(() => {
-    if (vaultSpace !== "references" || !state.settings.vaultPath || !selectedReferenceSemester || !selectedReferenceCourse) return;
-    void loadReferenceNote(state.settings.vaultPath, selectedReferenceSemester, selectedReferenceCourse, { silent: true });
-  }, [selectedReferenceCourse, selectedReferenceSemester, state.settings.vaultPath, vaultSpace]);
-
-  useEffect(() => {
-    const firstSemester = state.semesters[0]?.id ?? "";
-    if (!summarySemesterId && firstSemester) {
-      setSummarySemesterId(firstSemester);
-      return;
-    }
-    if (summarySemesterId && !state.semesters.some((semester) => semester.id === summarySemesterId)) {
-      setSummarySemesterId(firstSemester);
-      setSummaryCourseId("");
-    }
-  }, [state.semesters, summarySemesterId]);
-
-  useEffect(() => {
-    const firstCourse = summaryCourses[0]?.id ?? "";
-    if (!summaryCourseId && firstCourse) {
-      setSummaryCourseId(firstCourse);
-      return;
-    }
-    if (summaryCourseId && !summaryCourses.some((course) => course.id === summaryCourseId)) {
-      setSummaryCourseId(firstCourse);
-    }
-  }, [summaryCourseId, summaryCourses]);
-
-  useEffect(() => {
-    setSummaryFiles([]);
-    setSelectedSummaryPath(null);
-  }, [summarySemesterId, summaryCourseId]);
-
-  useEffect(() => {
-    if (vaultSpace !== "summaries" || !state.settings.vaultPath || !selectedSummarySemester || !selectedSummaryCourse) return;
-    void loadSummaryFileList(state.settings.vaultPath, selectedSummarySemester, selectedSummaryCourse, { silent: true });
-  }, [selectedSummaryCourse, selectedSummarySemester, state.settings.vaultPath, vaultSpace]);
-
-  useEffect(() => {
-    if (appStyle !== "wabi-sabi" || state.activeTab !== "vault" || !state.settings.vaultPath) return;
-    void loadVaultNotes(state.settings.vaultPath);
-  }, [appStyle, state.activeTab, state.settings.vaultPath]);
-
-  useEffect(() => {
-    if (appStyle !== "wabi-sabi" || vaultNoteTitle || !vaultNotes.length) return;
-    void openVaultNote(vaultNotes[0]);
-  }, [appStyle, vaultNoteTitle, vaultNotes]);
   const selectedTask = useMemo(
     () => state.tasks.find((task) => task.id === selectedTaskId) ?? null,
     [selectedTaskId, state.tasks],
   );
+  // Workload is read from the calendar (each scheduled lecture / session / sheet due date), since
+  // those tasks carry no due date of their own.
+  const scheduledUnits = useMemo(
+    () => getScheduledUnits(state.timetableEvents, state.holidays, activeSemesters, calendarToday),
+    [state.timetableEvents, state.holidays, activeSemesters, calendarToday],
+  );
+  const taskDailyWork = (task: Task) => calculateScheduledDailyWork(task, scheduledUnits.get(task.id), calendarToday) ?? calculateDailyWork(task);
   const totalWorkload = useMemo(() => {
-    return calculateAggregateWorkload(state.tasks);
-  }, [state.tasks]);
+    return calculateScheduledWorkload(activeTasks, scheduledUnits, calendarToday);
+  }, [activeTasks, scheduledUnits, calendarToday]);
   const isTotalWorkloadSelected = selectedTaskId === TOTAL_WORKLOAD_ID;
   const fieldPlannerWorkload = useMemo(() => {
     if (fieldPlannerWorkloadId === TOTAL_WORKLOAD_ID) return { ...totalWorkload, label: "Total workload" };
 
-    const course = state.courses.find((item) => item.id === fieldPlannerWorkloadId) ?? null;
-    const courseTasks = course ? state.tasks.filter((task) => task.courseId === course.id) : [];
+    const course = activeCourses.find((item) => item.id === fieldPlannerWorkloadId) ?? null;
+    const courseTasks = course ? activeTasks.filter((task) => task.courseId === course.id) : [];
     if (!course) {
       return {
         ...calculateAggregateWorkload([]),
@@ -4967,23 +4810,27 @@ function App() {
       };
     }
 
-    return { ...calculateAggregateWorkload(courseTasks), label: course.name };
-  }, [fieldPlannerWorkloadId, state.courses, state.tasks, totalWorkload]);
+    return { ...calculateScheduledWorkload(courseTasks, scheduledUnits, calendarToday), label: course.name };
+  }, [fieldPlannerWorkloadId, activeCourses, activeTasks, totalWorkload, scheduledUnits, calendarToday]);
 
   const weeklyActivity = useMemo(() => getWeeklyActivity(state.sessions, new Date(`${calendarToday}T00:00:00`)), [state.sessions, calendarToday]);
   const upcomingExams = useMemo(() => getUpcomingExams({ exams: state.exams } as AppState), [state.exams]);
-  const overallHealth = useMemo(() => getOverallHealth({ tasks: state.tasks, exams: state.exams } as AppState), [state.exams, state.tasks]);
-  const notePreview = useMemo(() => buildDailyNoteMarkdown({ courses: state.courses, sessions: state.sessions } as AppState, vaultNoteDate), [state.courses, state.sessions, vaultNoteDate]);
-  const dailyPreviewContent = stripMarkdownFrontmatter(vaultNoteContent || notePreview);
-  const referencePreview = selectedReferenceSemester && selectedReferenceCourse
-    ? stripMarkdownFrontmatter(referenceContent || buildReferenceNoteMarkdown(selectedReferenceCourse))
-    : "";
+  // The overall score is measured against the calendar (what should be done by now vs done), falling
+  // back to the completion-based score while nothing is scheduled.
+  const wabiScheduleHealth = useMemo(
+    () => getScheduleHealth({ events: state.timetableEvents, holidays: state.holidays, semesters: activeSemesters, exams: activeExams, today: calendarToday }),
+    [state.timetableEvents, state.holidays, activeSemesters, activeExams, calendarToday],
+  );
+  const overallHealth = useMemo(
+    () => wabiScheduleHealth?.score ?? getOverallHealth({ tasks: activeTasks, exams: activeExams } as AppState),
+    [wabiScheduleHealth, activeExams, activeTasks],
+  );
   const healthLabel = overallHealth >= 75 ? "Strong" : overallHealth >= 55 ? "Steady" : overallHealth >= 35 ? "Watch" : "Critical";
   const healthState = overallHealth >= 75 ? "strong" : overallHealth >= 55 ? "steady" : overallHealth >= 35 ? "watch" : "critical";
   const scoreColor = overallHealth >= 75 ? "var(--ok)" : overallHealth >= 55 ? "var(--steady)" : overallHealth >= 35 ? "var(--watch)" : "var(--critical)";
   const greetingName = state.settings.userName.trim();
   const dashboardGreeting = `${getTimeGreeting()}${greetingName ? `, ${greetingName}` : ""}`;
-  const selectedTaskCalc = selectedTask ? calculateDailyWork(selectedTask) : null;
+  const selectedTaskCalc = selectedTask ? taskDailyWork(selectedTask) : null;
   const selectedTaskProgress = isTotalWorkloadSelected ? totalWorkload.progress : selectedTask ? getTaskProgress(selectedTask) : 0;
   const weeklyTotalMinutes = weeklyActivity.reduce((sum, entry) => sum + entry.minutes, 0);
   const gardenStage = Math.max(0, [0, 30, 90, 210, 420, 720].filter((threshold) => weeklyTotalMinutes >= threshold).length - 1);
@@ -5063,12 +4910,12 @@ function App() {
 
     // Offline credit is measured from the PREVIOUS anchor (the last point the server actually
     // acknowledged) forward to the moment a call succeeds again — i.e. only triggers once a real
-    // gap (longer than the heartbeat+grace window) is confirmed to have closed, never on the
-    // ordinary 15-minute cadence.
+    // gap (longer than the normal-credit grace window) is confirmed to have closed, never for
+    // gaps the server will already fully credit as normal verified time.
     const maybeReconcileOffline = (previousAnchor: SocialState["verifiedAnchor"], confirmedAt: string) => {
       if (!previousAnchor || reconcilingOfflineCreditRef.current) return;
       const staleMs = new Date(confirmedAt).getTime() - new Date(previousAnchor.confirmedAt).getTime();
-      if (staleMs <= VERIFIED_SESSION_HEARTBEAT_MS + VERIFIED_SESSION_GRACE_MS) return;
+      if (staleMs <= VERIFIED_SESSION_NORMAL_CREDIT_GRACE_MS) return;
 
       const intervals = computeOfflineIntervals(latestStateRef.current, previousAnchor.confirmedAt, confirmedAt);
       if (!intervals.length) return;
@@ -5093,17 +4940,22 @@ function App() {
       maybeReconcileOffline(previousAnchor, confirmedAt);
     };
 
-    const attemptHeartbeat = (sessionId: string) => {
+    function attemptHeartbeat(sessionId: string) {
       void heartbeatVerifiedSession(social, sessionId)
         .then(() => confirmAnchor(sessionId))
-        .catch(() => undefined);
-    };
+        .catch((error: unknown) => {
+          if (getErrorMessage(error, "").includes("Verified session not found")) {
+            verifiedSessionRef.current = null;
+            attemptStart();
+          }
+        });
+    }
 
-    const scheduleHeartbeats = (sessionId: string) => {
+    function scheduleHeartbeats(sessionId: string) {
       heartbeatInterval = window.setInterval(() => attemptHeartbeat(sessionId), VERIFIED_SESSION_HEARTBEAT_MS);
-    };
+    }
 
-    const attemptStart = () => {
+    function attemptStart() {
       void startVerifiedSession(social)
         .then(({ sessionId }) => {
           if (disposed || !timerRunningRef.current) {
@@ -5115,7 +4967,7 @@ function App() {
           return undefined;
         })
         .catch(() => undefined);
-    };
+    }
 
     // Ground-truth reconnect detection is "the next verified-session call actually succeeds" —
     // the `online` listener below just calls this sooner as a latency optimization; it never
@@ -5327,13 +5179,13 @@ function App() {
   const completionCircumference = 2 * Math.PI * completionRadius;
   const completionOffset = completionCircumference - (selectedTaskProgress / 100) * completionCircumference;
 
-  const timerCourses = state.timer.semesterId ? getSemesterCourses(state, state.timer.semesterId) : state.courses;
+  const timerCourses = state.timer.semesterId ? getSemesterCourses(state, state.timer.semesterId) : activeCourses;
   const timerTasks = state.timer.courseId ? getCourseTasks(state, state.timer.courseId) : [];
   const timerSelectableTasks = state.timer.courseId
     ? timerTasks
     : state.timer.semesterId
       ? getSemesterTasks(state, state.timer.semesterId)
-      : state.tasks;
+      : activeTasks;
   const timerCourse = state.timer.courseId ? courseLookup.get(state.timer.courseId) : null;
   const timerTask = state.timer.taskId ? taskLookup.get(state.timer.taskId) : null;
   const hasKnownTimerPreset = focusPresets.some((preset) => preset.label === state.timer.presetLabel);
@@ -5352,6 +5204,14 @@ function App() {
     () => formatCalendarTitle(calendarCursorDate, calendarView),
     [calendarCursorDate, calendarView],
   );
+  const calendarWeekNumber = useMemo(() => {
+    const cursorIso = localIsoDate(calendarCursorDate);
+    const matches = activeSemesters.filter(
+      (semester) => semester.startDate && semester.endDate && cursorIso >= semester.startDate && cursorIso <= semester.endDate,
+    );
+    if (matches.length !== 1) return null;
+    return getSemesterWeekNumber(matches[0], cursorIso);
+  }, [activeSemesters, calendarCursorDate]);
   const calendarEntriesByDate = useMemo(() => {
     const map = new Map<string, CalendarEntry[]>();
     state.calendarEntries.forEach((entry) => {
@@ -5381,24 +5241,36 @@ function App() {
     });
     return map;
   }, [state.tasks]);
-  const scheduledIncompleteByTask = useMemo(() => {
-    const map = new Map<string, number>();
-    state.calendarEntries.forEach((entry) => {
-      if (entry.completed) return;
-      map.set(entry.taskId, (map.get(entry.taskId) ?? 0) + getCalendarEntryAmount(entry));
+  const dailyTodosByDate = useMemo(() => {
+    const map = new Map<string, { todo: DailyTodo; occurrenceDate: string }[]>();
+    if (!calendarDays.length) return map;
+    const rangeStart = calendarDays[0].iso;
+    const rangeEnd = calendarDays[calendarDays.length - 1].iso;
+    state.dailyTodos.forEach((todo) => {
+      for (const occurrenceDate of expandDailyTodoDates(todo, rangeStart, rangeEnd)) {
+        const todos = map.get(occurrenceDate) ?? [];
+        todos.push({ todo, occurrenceDate });
+        map.set(occurrenceDate, todos);
+      }
     });
     return map;
-  }, [state.calendarEntries]);
-  const completedCalendarRemainderByTask = useMemo(() => {
-    const totals = new Map<string, number>();
-    state.calendarEntries.forEach((entry) => {
-      if (!entry.completed) return;
-      totals.set(entry.taskId, (totals.get(entry.taskId) ?? 0) + getCalendarEntryAmount(entry));
-    });
-    const remainders = new Map<string, number>();
-    totals.forEach((amount, taskId) => remainders.set(taskId, amount - Math.floor(amount + 0.0001)));
-    return remainders;
-  }, [state.calendarEntries]);
+  }, [calendarDays, state.dailyTodos]);
+  const timetableOccurrencesByDate = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof expandTimetableEvents>>();
+    if (!calendarDays.length) return map;
+    const rangeStart = calendarDays[0].iso;
+    const rangeEnd = calendarDays[calendarDays.length - 1].iso;
+    for (const semester of activeSemesters) {
+      for (const occurrence of expandTimetableEvents(state.timetableEvents, state.holidays, semester, rangeStart, rangeEnd)) {
+        // A sheet shows once, on its due date - not also on the day it is released.
+        if (occurrence.event.kind === "sheet-release") continue;
+        const list = map.get(occurrence.date) ?? [];
+        list.push(occurrence);
+        map.set(occurrence.date, list);
+      }
+    }
+    return map;
+  }, [calendarDays, activeSemesters, state.timetableEvents, state.holidays]);
   const todayCalendarEntries = useMemo(
     () =>
       state.calendarEntries
@@ -5601,6 +5473,76 @@ function App() {
     },
   ];
 
+  // The day an achievement is actually WATCHED flipping from not-earned to earned, recorded right then -
+  // this is what the "book" achievement wall titles each entry by. The first time this ever runs, every
+  // already-earned achievement is just the starting baseline, not a "just now" transition, so none of them
+  // get a date: we genuinely don't know when they were earned, and a made-up date is worse than none.
+  const seenEarnedIdsRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const earnedIds = new Set<string>();
+    profileBadgeGroups.forEach((group) => {
+      const visit = (badges: ProfileBadge[]) => badges.forEach((badge) => { if (badge.earned) earnedIds.add(badge.id); });
+      visit(group.badges);
+      group.subgroups?.forEach((subgroup) => visit(subgroup.badges));
+    });
+    const baseline = seenEarnedIdsRef.current;
+    seenEarnedIdsRef.current = earnedIds;
+    if (!baseline) return; // first run: establish the baseline, don't date anything yet
+
+    const newlyEarned = [...earnedIds].filter((id) => !baseline.has(id) && !state.achievementEarnedOnDates[id]);
+    if (!newlyEarned.length) return;
+    setState((current) => {
+      const next = { ...current.achievementEarnedOnDates };
+      let changed = false;
+      newlyEarned.forEach((id) => {
+        if (next[id]) return;
+        next[id] = todayStr;
+        changed = true;
+      });
+      return changed ? { ...current, achievementEarnedOnDates: next } : current;
+    });
+    // profileBadgeGroups is rebuilt every render from state, so depending on the earned ids' own
+    // membership (not the array) is what avoids re-running this every render for no reason.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [[...profileBadgeGroups.flatMap((group) => [...group.badges, ...(group.subgroups?.flatMap((subgroup) => subgroup.badges) ?? [])]).filter((badge) => badge.earned).map((badge) => badge.id)].sort().join(","), state.achievementEarnedOnDates, todayStr]);
+
+  // Every earned badge, once, as the break room's walls want it. "rock-current" is only a copy of the newest
+  // pet-rock milestone, so it is left out (it made the same picture appear twice).
+  //
+  // Memoised on what the list is actually MADE of, not on profileBadgeGroups (rebuilt every render): the break
+  // room re-renders once a second while a timer runs, and a fresh array here means a fresh array identity for
+  // the album, which re-decodes all ~40 achievement pictures and re-renders every page on every tick.
+  const earnedAchievementsSignature = [
+    ...profileBadgeGroups
+      .flatMap((group) => [...group.badges, ...(group.subgroups?.flatMap((subgroup) => subgroup.badges) ?? [])])
+      .filter((badge) => badge.earned)
+      .map((badge) => `${badge.id}:${badge.count ?? 0}`),
+  ].sort().join(",");
+  const earnedAchievements = useMemo(() => {
+    const seen = new Set<string>();
+    const list: { id: string; icon: string; name: string; how: string; rarity: number; daily?: boolean; copies?: number; earnedAt?: string }[] = [];
+    const visit = (badges: ProfileBadge[], byPosition: boolean) => badges.forEach((badge, index) => {
+      if (!badge.earned || seen.has(badge.id) || badge.id === "rock-current") return;
+      seen.add(badge.id);
+      // Milestone lists are ordered easiest to hardest, so the position in the list is the difficulty.
+      const rarity = byPosition ? index / Math.max(1, badges.length - 1) : BREAK_ROOM_RARITY[badge.id] ?? 0.4;
+      list.push({
+        id: badge.id, icon: BREAK_ROOM_WALL_ICONS[badge.id] ?? badge.icon, name: badge.name, how: badge.how, rarity,
+        ...(badge.daily ? { daily: true, copies: Math.max(1, badge.count ?? 1) } : {}),
+        // Left out entirely when the day it was earned was never actually recorded - no guessed date.
+        ...(state.achievementEarnedOnDates[badge.id] ? { earnedAt: state.achievementEarnedOnDates[badge.id] } : {}),
+      });
+    });
+    profileBadgeGroups.forEach((group) => {
+      visit(group.badges, group.category !== "Break Room");
+      group.subgroups?.forEach((subgroup) => visit(subgroup.badges, true));
+    });
+    return list;
+    // profileBadgeGroups is deliberately not a dependency: it is a fresh array on every render, and
+    // earnedAchievementsSignature above already tracks everything about it this list is built from.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [earnedAchievementsSignature, state.achievementEarnedOnDates]);
+
   const renderProfileBadgeCard = (badge: ProfileBadge) => (
     <button key={badge.id} type="button" className={`profile-badge-card ${badge.earned ? "earned" : "locked"}`}>
       <span className="profile-badge-icon">{badge.icon}</span>
@@ -5613,21 +5555,37 @@ function App() {
     </button>
   );
 
-  function setActiveTab(activeTab: TabKey) {
-    if (activeTab === "friends") setHasUnreadSocial(false);
+  async function setActiveTab(activeTab: TabKey) {
+    if (state.activeTab === "vault" && activeTab !== "vault" && vaultScreenRef.current && !await vaultScreenRef.current.flush()) return;
+    if (activeTab === "friends") {
+      setHasUnreadSocial(false);
+      if (/^Student [A-Z0-9]{0,4}$/.test(state.social.displayName.trim())) {
+        setSocialNameDraft("");
+        setSocialNamePromptOpen(true);
+      }
+    }
     setTourState(null);
     setState((current) => ({ ...current, activeTab }));
   }
 
   function openPageHelp(tab: TabKey) {
-    setHelpTab(tab);
     setMenuHelpOpen(false);
     setTourState(null);
+    // The Dashboard has no guide of its own: its question mark brings back the introduction, which
+    // is the overview of every tab and the only place that still explains the menu.
+    if (tab === "dashboard") {
+      setHelpTab(null);
+      setIntroReplayOpen(true);
+      return;
+    }
+    setIntroReplayOpen(false);
+    setHelpTab(tab);
   }
 
   function openMenuHelp() {
     setMenuHelpOpen(true);
     setHelpTab(null);
+    setIntroReplayOpen(false);
     setTourState(null);
   }
 
@@ -5642,10 +5600,10 @@ function App() {
 
       const semesters = hasSemester
         ? current.semesters
-        : [{ id: TUTORIAL_SEMESTER_ID, name: TUTORIAL_SEMESTER_NAME, createdAt }, ...current.semesters];
+        : [{ id: TUTORIAL_SEMESTER_ID, name: TUTORIAL_SEMESTER_NAME, createdAt, startDate: null, endDate: null, phase: "semester" as SemesterPhase, archived: false, archivedAt: null }, ...current.semesters];
       const courses = hasCourse
         ? current.courses
-        : [{ id: TUTORIAL_COURSE_ID, semesterId: TUTORIAL_SEMESTER_ID, name: TUTORIAL_COURSE_NAME, targetGrade: 5, color: "#8fb4ff", createdAt }, ...current.courses];
+        : [{ id: TUTORIAL_COURSE_ID, semesterId: TUTORIAL_SEMESTER_ID, name: TUTORIAL_COURSE_NAME, targetGrade: 5, color: "#8fb4ff", createdAt, externalUrl: null }, ...current.courses];
       const tasks = hasTask
         ? current.tasks
         : [{
@@ -5653,6 +5611,7 @@ function App() {
             semesterId: TUTORIAL_SEMESTER_ID,
             courseId: TUTORIAL_COURSE_ID,
             title: TUTORIAL_TASK_TITLE,
+            subtype: "Other" as const,
             unitLabel: "Lecture",
             totalUnits: 10,
             completedUnits: 3,
@@ -5744,15 +5703,6 @@ function App() {
       setTimerAdvancedOpen(true);
     }
 
-    if (desiredTab === "vault") {
-      if (step.target.startsWith("vault-setup") || step.target === "vault-name" || step.target === "vault-path" || step.target === "vault-create" || step.target === "vault-link") {
-        setVaultSetupOpen(true);
-      }
-      if (step.target.startsWith("vault-daily") || step.target === "vault-load" || step.target === "vault-session-draft" || step.target === "vault-edit" || step.target === "vault-editor" || step.target === "vault-recent") {
-        setVaultSpace("daily");
-      }
-      if (step.target === "vault-editor") setVaultDailyEditing(true);
-    }
 
     if (desiredTab === "friends") {
       if (step.target === "social-leaderboard-tab") setSocialSubtab("leaderboard");
@@ -5805,7 +5755,9 @@ function App() {
     setFeedCommentNotice(null);
   }
 
-  function toggleTabVisibility(tab: TabKey) {
+  async function toggleTabVisibility(tab: TabKey) {
+    const visibleTabs = state.settings.visibleTabs ?? defaultState.settings.visibleTabs;
+    if (tab === state.activeTab && visibleTabs[tab] !== false && state.activeTab === "vault" && vaultScreenRef.current && !await vaultScreenRef.current.flush()) return;
     setState((current) => {
       const visibleTabs = current.settings.visibleTabs ?? defaultState.settings.visibleTabs;
       const isVisible = visibleTabs[tab] !== false;
@@ -5848,6 +5800,13 @@ function App() {
       },
     }));
     if (!state.settings.hideFeedImages) setExpandedFeedImageId(null);
+  }
+
+  function toggleProfilePictures() {
+    setState((current) => ({
+      ...current,
+      settings: { ...current.settings, hideProfilePictures: !current.settings.hideProfilePictures },
+    }));
   }
 
   function toggleFeedPolls() {
@@ -6014,6 +5973,7 @@ function App() {
     };
     setState(nextState);
     setSocialNameEditing(false);
+    setSocialNamePromptOpen(false);
     setMessage("Player name saved.");
     if (socialConfigured) await runSocialSync({ silent: true, stateOverride: nextState });
   }
@@ -6069,7 +6029,7 @@ function App() {
     event.target.value = "";
     if (!file) return;
     try {
-      if (!AVATAR_IMAGE_TYPES.has(file.type)) throw new Error("Use PNG, JPEG, or WebP photos.");
+      if (file.type && !file.type.startsWith("image/")) throw new Error("Choose an image file.");
       if (file.size > AVATAR_SOURCE_IMAGE_MAX_BYTES) throw new Error("Photo is too large. Use an image under 1 MB.");
       const url = await blobToDataUrl(file);
       const element = await loadImageElement(url);
@@ -6846,8 +6806,32 @@ function App() {
     }
   }
 
-  function openMenuPanel(panel: Exclude<MenuPanel, null>) {
+  async function handleBackupClick() {
+    setMenuOpen(false);
+    try {
+      const savedTo = await saveBackup(state);
+      if (savedTo) setMessage(`Backup saved to ${savedTo}`);
+    } catch (error) {
+      setMessage(getErrorMessage(error, "Could not save the backup."));
+    }
+  }
+
+  async function handleRestoreBackupFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!window.confirm("Restore this backup? It replaces ALL data on this device with the backup's data, and this device becomes the backup's account.")) return;
+    try {
+      restoreBackup(await file.text());
+      window.location.reload();
+    } catch (error) {
+      setMessage(getErrorMessage(error, "Could not restore the backup."));
+    }
+  }
+
+  function openMenuPanel(panel: Exclude<MenuPanel, null>, themeView?: ThemePanelView) {
     setActiveMenuPanel(panel);
+    if (panel === "theme" && themeView) setThemePanelView(themeView);
     setMenuOpen(false);
     setDeleteConfirmOpen(false);
     if (panel === "personal") {
@@ -7640,7 +7624,7 @@ function App() {
     setSelectedTaskId(TOTAL_WORKLOAD_ID);
     setSemesterName("");
     setCourseDraft({ semesterId: "", name: "", targetGrade: "4.0", color: "#8fb4ff" });
-    setTaskDraft({ semesterId: "", courseId: "", title: "", unitLabel: "Unit", totalUnits: "10", completedUnits: "0", dueDate: "", priority: "medium", notes: "" });
+    setTaskDraft({ semesterId: "", courseId: "", title: "", subtype: "Other", unitLabel: "Task", dueDate: "", priority: "medium", notes: "", ...emptyScheduleDraftFields() });
     setExamDraft({ semesterId: "", courseId: "", title: "", examDate: "", weight: "40", preparedness: "35" });
     setShowSemesterForm(false);
     setExpandedSemesterIds([]);
@@ -7674,6 +7658,11 @@ function App() {
       id: makeId(),
       name,
       createdAt: new Date().toISOString(),
+      startDate: null,
+      endDate: null,
+      phase: "semester",
+      archived: false,
+      archivedAt: null,
     };
 
     setState((current) => ({ ...current, semesters: [...current.semesters, semester] }));
@@ -7701,6 +7690,7 @@ function App() {
       color: courseDraft.color,
       targetGrade: Number(courseDraft.targetGrade) || 4,
       createdAt: new Date().toISOString(),
+      externalUrl: null,
     };
 
     setState((current) => ({ ...current, courses: [...current.courses, course] }));
@@ -7748,24 +7738,105 @@ function App() {
       semesterId: taskDraft.semesterId,
       courseId: taskDraft.courseId,
       title: taskDraft.title.trim(),
+      subtype: taskDraft.subtype,
       unitLabel: cleanUnitLabel(taskDraft.unitLabel, taskDraft.title),
-      totalUnits: Math.max(1, Number(taskDraft.totalUnits) || 1),
-      completedUnits: clamp(Number(taskDraft.completedUnits) || 0, 0, Number(taskDraft.totalUnits) || 1),
-      dueDate: taskDraft.dueDate || null,
+      totalUnits: 0,
+      completedUnits: 0,
+      dueDate: subtypeHidesDueDate(taskDraft.subtype) ? null : (taskDraft.dueDate || null),
       priority: taskDraft.priority,
       notes: taskDraft.notes.trim(),
       createdAt: new Date().toISOString(),
     };
 
-    setState((current) => ({ ...current, tasks: [task, ...current.tasks] }));
+    // Inline scheduling: if the user filled in the schedule fields on the same form, create the
+    // task's first timetable event(s) in this same save instead of forcing a second trip through
+    // Manage Semesters just to schedule what was already configured here.
+    const scheduledEvents: TimetableEvent[] = [];
+    let scheduled = false;
+    const pastMidnight = "That duration runs past midnight - shorten it or start earlier.";
+    if (task.subtype === "Sheet") {
+      // Wabi-Sabi: times are optional - a sheet with only dates is scheduled for those days, untimed.
+      const timesOptional = appStyle === "wabi-sabi";
+      const releaseEnd = endTimeFor(taskDraft.scheduleReleaseTime, taskDraft.scheduleReleaseDuration);
+      const dueEnd = endTimeFor(taskDraft.scheduleDueTime, taskDraft.scheduleDueDuration);
+      const anyFilled = taskDraft.scheduleReleaseDate || taskDraft.scheduleReleaseTime || taskDraft.scheduleDueDate || taskDraft.scheduleDueTime;
+      const allFilled = timesOptional
+        ? Boolean(taskDraft.scheduleReleaseDate && taskDraft.scheduleDueDate)
+        : Boolean(taskDraft.scheduleReleaseDate && taskDraft.scheduleReleaseTime && taskDraft.scheduleDueDate && taskDraft.scheduleDueTime);
+      if (anyFilled && !allFilled) {
+        setMessage(timesOptional ? "Pick both a release date and a due date to schedule this sheet, or clear them." : "Fill in a date and time for both release and due to schedule this sheet, or clear them.");
+        return;
+      }
+      if (anyFilled && !timesOptional && (!releaseEnd || !dueEnd)) {
+        setMessage(pastMidnight);
+        return;
+      }
+      if (timesOptional && anyFilled) {
+        const createdAt = new Date().toISOString();
+        const url = taskDraft.scheduleUrl.trim() || null;
+        scheduledEvents.push(makeTimetableEvent({
+          id: makeId(), semesterId: task.semesterId, courseId: task.courseId, taskId: task.id,
+          kind: "sheet-release", label: task.title,
+          date: taskDraft.scheduleReleaseDate, time: taskDraft.scheduleReleaseTime, endTime: releaseEnd, // null when untimed or too late for a 30 min slot (no end shown)
+         
+          repeatWeekly: taskDraft.scheduleReleaseWeekly, url, createdAt,
+        }));
+        scheduledEvents.push(makeTimetableEvent({
+          id: makeId(), semesterId: task.semesterId, courseId: task.courseId, taskId: task.id,
+          kind: "sheet-deadline", label: task.title,
+          date: taskDraft.scheduleDueDate, time: taskDraft.scheduleDueTime, endTime: dueEnd,
+          repeatWeekly: taskDraft.scheduleDueWeekly, url, createdAt,
+        }));
+        scheduled = true;
+      } else       if (releaseEnd && dueEnd) {
+        const createdAt = new Date().toISOString();
+        const url = taskDraft.scheduleUrl.trim() || null;
+        scheduledEvents.push(makeTimetableEvent({
+          id: makeId(), semesterId: task.semesterId, courseId: task.courseId, taskId: task.id,
+          kind: "sheet-release", label: task.title,
+          date: taskDraft.scheduleReleaseDate, time: taskDraft.scheduleReleaseTime, endTime: releaseEnd,
+          repeatWeekly: taskDraft.scheduleReleaseWeekly, url, createdAt,
+        }));
+        scheduledEvents.push(makeTimetableEvent({
+          id: makeId(), semesterId: task.semesterId, courseId: task.courseId, taskId: task.id,
+          kind: "sheet-deadline", label: task.title,
+          date: taskDraft.scheduleDueDate, time: taskDraft.scheduleDueTime, endTime: dueEnd,
+          repeatWeekly: taskDraft.scheduleDueWeekly, url, createdAt,
+        }));
+        scheduled = true;
+      }
+    } else if (taskDraft.scheduleDate || taskDraft.scheduleTime) {
+      const end = endTimeFor(taskDraft.scheduleTime, taskDraft.scheduleDuration);
+      if (!isValidIsoDate(taskDraft.scheduleDate) || !taskDraft.scheduleTime) {
+        setMessage("Fill in both a valid date and a start time to schedule it, or clear them.");
+        return;
+      }
+      if (!end) {
+        setMessage(pastMidnight);
+        return;
+      }
+      scheduledEvents.push(makeTimetableEvent({
+        id: makeId(), semesterId: task.semesterId, courseId: task.courseId, taskId: task.id,
+        kind: "occurrence", label: task.title,
+        date: taskDraft.scheduleDate, time: taskDraft.scheduleTime, endTime: end,
+        repeatWeekly: taskDraft.scheduleRepeatWeekly,
+      }));
+      scheduled = true;
+    }
+
+    setState((current) => ({
+      ...current,
+      tasks: [task, ...current.tasks],
+      timetableEvents: scheduledEvents.length ? [...current.timetableEvents, ...scheduledEvents] : current.timetableEvents,
+    }));
     setTaskDraft((current) => ({
       ...current,
       title: "",
-      unitLabel: "Unit",
-      totalUnits: "10",
-      completedUnits: "0",
+      subtype: "Other",
+      unitLabel: "Task",
       dueDate: "",
       notes: "",
+      ...emptyScheduleDraftFields(),
     }));
     setExpandedCourseIds((current) => (current.includes(task.courseId) ? current : [...current, task.courseId]));
     setAddingTaskCourseId(null);
@@ -7774,7 +7845,7 @@ function App() {
       setFieldPlannerTaskId(task.id);
       setFieldPlannerTaskMode("view");
     }
-    setMessage(`${task.title} is now tracked.`);
+    setMessage(scheduled ? `${task.title} is now tracked and scheduled.` : `${task.title} is now tracked.`);
   }
 
   function startEditingCourse(course: Course) {
@@ -7818,15 +7889,29 @@ function App() {
       semesterId: task.semesterId,
       courseId: task.courseId,
       title: task.title,
+      subtype: task.subtype,
       unitLabel: task.unitLabel || inferUnitLabel(task.title),
-      totalUnits: task.totalUnits.toString(),
-      completedUnits: task.completedUnits.toString(),
       dueDate: task.dueDate ?? "",
       priority: task.priority,
       notes: task.notes,
+      ...emptyScheduleDraftFields(),
     });
     setEditingTaskId(task.id);
     setAddingTaskCourseId(null);
+  }
+
+  /** Opens the same task-create modal the field-notebook sidebar's "+ add task" uses, so "Add Unit"/"Add Course Task" everywhere shares one entity and one UI. */
+  function openAddTaskModalFor(semesterId: string, courseId: string) {
+    setTaskDraft((current) => ({ ...current, semesterId, courseId, title: "", subtype: "Other", unitLabel: "Task", dueDate: "", priority: "medium", notes: "", ...emptyScheduleDraftFields() }));
+    setFieldPlannerTaskId(null);
+    setFieldPlannerTaskMode("create");
+    setTaskSubtypeChosen(false);
+  }
+
+  function openTaskEditor(task: Task) {
+    startEditingTask(task);
+    setFieldPlannerTaskId(task.id);
+    setFieldPlannerTaskMode("edit");
   }
 
   function updateTask(event: FormEvent<HTMLFormElement>) {
@@ -7838,8 +7923,6 @@ function App() {
 
     const title = taskEditDraft.title.trim();
     const unitLabel = cleanUnitLabel(taskEditDraft.unitLabel, title);
-    const totalUnits = Math.max(1, Number(taskEditDraft.totalUnits) || 1);
-    const completedUnits = clamp(Number(taskEditDraft.completedUnits) || 0, 0, totalUnits);
     setState((current) => ({
       ...current,
       tasks: current.tasks.map((task) =>
@@ -7847,10 +7930,9 @@ function App() {
           ? {
               ...task,
               title,
+              subtype: taskEditDraft.subtype,
               unitLabel,
-              totalUnits,
-              completedUnits,
-              dueDate: taskEditDraft.dueDate || null,
+              dueDate: subtypeHidesDueDate(taskEditDraft.subtype) ? null : (taskEditDraft.dueDate || null),
               priority: taskEditDraft.priority,
               notes: taskEditDraft.notes.trim(),
             }
@@ -7882,6 +7964,7 @@ function App() {
       examDate: examDraft.examDate,
       weight: clamp(Number(examDraft.weight) || 0, 0, 100),
       preparedness: clamp(Number(examDraft.preparedness) || 0, 0, 100),
+      location: "",
     };
 
     setState((current) => ({ ...current, exams: [exam, ...current.exams] }));
@@ -7890,20 +7973,32 @@ function App() {
     setMessage(`${exam.title} added to the runway.`);
   }
 
-  function adjustTask(taskId: string, delta: number) {
-    setState((current) => ({
-      ...current,
-      tasks: current.tasks.map((task) =>
-        task.id === taskId ? { ...task, completedUnits: clamp(task.completedUnits + delta, 0, task.totalUnits) } : task,
-      ),
-    }));
+
+  /** Wraps a destructive setState update with an "Undo" toast: records what the update
+   * changes, applies it, and lets undoLastDelete put exactly that back. Only for
+   * deletes - edits and toggles don't need this since they're cheap to redo by hand. */
+  function performDelete(label: string, updater: (current: AppState) => AppState) {
+    // The undo patch only covers what this delete touched, so undoing can never roll back unrelated
+    // state (a study session finished, a timer tick) that happened in the meantime.
+    const patch = diffForUndo(latestStateRef.current, updater(latestStateRef.current));
+    setState(updater);
+    if (!isEmptyUndoPatch(patch)) setUndoState({ label, patch });
+  }
+
+  function undoLastDelete() {
+    if (!undoState) return;
+    const { patch } = undoState;
+    setState((current) => applyUndoPatch(current, patch));
+    setUndoState(null);
   }
 
   function removeTask(taskId: string) {
-    setState((current) => ({
+    const task = state.tasks.find((item) => item.id === taskId);
+    performDelete(`"${task?.title ?? "Task"}" removed`, (current) => ({
       ...current,
-      tasks: current.tasks.filter((task) => task.id !== taskId),
+      tasks: current.tasks.filter((item) => item.id !== taskId),
       calendarEntries: current.calendarEntries.filter((entry) => entry.taskId !== taskId),
+      timetableEvents: current.timetableEvents.filter((event) => event.taskId !== taskId),
       timer: current.timer.taskId === taskId ? { ...current.timer, taskId: null } : current.timer,
     }));
     setEditingTaskId((current) => (current === taskId ? null : current));
@@ -7912,7 +8007,8 @@ function App() {
   }
 
   function removeCourse(courseId: string) {
-    setState((current) => ({
+    const course = state.courses.find((item) => item.id === courseId);
+    performDelete(`"${course?.name ?? "Subject"}" removed`, (current) => ({
       ...current,
       calendarEntries: current.calendarEntries.filter((entry) => {
         const task = current.tasks.find((item) => item.id === entry.taskId);
@@ -7921,6 +8017,7 @@ function App() {
       courses: current.courses.filter((course) => course.id !== courseId),
       tasks: current.tasks.filter((task) => task.courseId !== courseId),
       exams: current.exams.filter((exam) => exam.courseId !== courseId),
+      timetableEvents: current.timetableEvents.filter((event) => event.courseId !== courseId),
       timer:
         current.timer.courseId === courseId
           ? { ...current.timer, courseId: null, taskId: null }
@@ -7938,7 +8035,8 @@ function App() {
 
   function removeSemester(semesterId: string) {
     const courseIds = state.courses.filter((course) => course.semesterId === semesterId).map((course) => course.id);
-    setState((current) => ({
+    const semesterName = state.semesters.find((item) => item.id === semesterId)?.name ?? "Semester";
+    performDelete(`"${semesterName}" removed`, (current) => ({
       ...current,
       calendarEntries: current.calendarEntries.filter((entry) => {
         const task = current.tasks.find((item) => item.id === entry.taskId);
@@ -7948,6 +8046,8 @@ function App() {
       courses: current.courses.filter((course) => course.semesterId !== semesterId),
       tasks: current.tasks.filter((task) => task.semesterId !== semesterId),
       exams: current.exams.filter((exam) => exam.semesterId !== semesterId),
+      timetableEvents: current.timetableEvents.filter((event) => event.semesterId !== semesterId),
+      holidays: current.holidays.filter((holiday) => holiday.semesterId !== semesterId),
       timer:
         current.timer.semesterId === semesterId || courseIds.includes(current.timer.courseId ?? "")
           ? { ...current.timer, semesterId: null, courseId: null, taskId: null }
@@ -7967,7 +8067,40 @@ function App() {
   }
 
   function removeExam(examId: string) {
-    setState((current) => ({ ...current, exams: current.exams.filter((exam) => exam.id !== examId) }));
+    const exam = state.exams.find((item) => item.id === examId);
+    performDelete(`"${exam?.title ?? "Exam"}" removed`, (current) => ({ ...current, exams: current.exams.filter((item) => item.id !== examId) }));
+  }
+
+  function startEditingExam(exam: Exam) {
+    setEditingExamId(exam.id);
+    setExamEditDraft({
+      title: exam.title,
+      examDate: exam.examDate,
+      weight: String(exam.weight),
+      preparedness: String(exam.preparedness),
+      location: exam.location,
+    });
+  }
+
+  function saveExamEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingExamId) return;
+    setState((current) => ({
+      ...current,
+      exams: current.exams.map((exam) =>
+        exam.id === editingExamId
+          ? {
+              ...exam,
+              title: examEditDraft.title.trim() || exam.title,
+              examDate: examEditDraft.examDate || exam.examDate,
+              weight: clamp(Number(examEditDraft.weight) || 0, 0, 100),
+              preparedness: clamp(Number(examEditDraft.preparedness) || 0, 0, 100),
+              location: examEditDraft.location,
+            }
+          : exam,
+      ),
+    }));
+    setEditingExamId(null);
   }
 
   function removeSession(sessionId: string) {
@@ -8465,89 +8598,6 @@ function App() {
   const [stretchIndex, setStretchIndex] = useState(() => Math.floor(Math.random() * stretchIdeas.length));
   const stretch = stretchIdeas[stretchIndex];
 
-  function addCalendarEntryFromDrawer() {
-    if (!selectedCalendarDate) return;
-
-    const durationMinutes = Number(calendarAddDraft.durationMinutes);
-    const startTime = calendarAddDraft.startTime;
-    if (!calendarAddDraft.noTime && !isValidCalendarTime(startTime)) {
-      setMessage("Use 24-hour time like 09:00 or 17:30.");
-      return;
-    }
-    const endTime = addMinutesToTime(startTime, Number.isFinite(durationMinutes) ? durationMinutes : 60);
-    const timeOptions = calendarAddDraft.noTime ? {} : { startTime, endTime };
-
-    if (calendarAddDraft.source === "planner") {
-      const task = taskLookup.get(calendarAddDraft.taskId);
-      if (!task) {
-        setMessage("Pick a planner task first.");
-        return;
-      }
-      if (task.dueDate && selectedCalendarDate > task.dueDate) {
-        setMessage(`"${task.title}" cannot be scheduled after ${formatDate(task.dueDate)}.`);
-        return;
-      }
-
-      const unscheduledUnits = Math.max(
-        0,
-        getRemainingUnits(task) - (scheduledIncompleteByTask.get(task.id) ?? 0) - (completedCalendarRemainderByTask.get(task.id) ?? 0),
-      );
-      if (unscheduledUnits < calendarAddDraft.unitAmount) {
-        setMessage(`All remaining units for "${task.title}" are already planned.`);
-        return;
-      }
-
-      const entry: CalendarEntry = {
-        id: makeId(),
-        taskId: task.id,
-        date: selectedCalendarDate,
-        unitAmount: calendarAddDraft.unitAmount,
-        unitStart: Math.min(
-          task.totalUnits,
-          Math.max(
-            1,
-            Math.floor(
-              task.completedUnits
-              + (scheduledIncompleteByTask.get(task.id) ?? 0)
-              + (completedCalendarRemainderByTask.get(task.id) ?? 0),
-            ) + 1,
-          ),
-        ),
-        completed: false,
-        completedAt: null,
-        createdAt: new Date().toISOString(),
-        ...timeOptions,
-      };
-      setState((current) => ({ ...current, calendarEntries: [...current.calendarEntries, entry] }));
-      setCalendarAddOpen(false);
-      return;
-    }
-
-    const title = calendarAddDraft.title.trim();
-    if (!title) {
-      setMessage("Type a task title first.");
-      return;
-    }
-
-    const entry: CalendarEntry = {
-      id: makeId(),
-      taskId: "",
-      date: selectedCalendarDate,
-      unitAmount: calendarAddDraft.unitAmount,
-      completed: false,
-      completedAt: null,
-      createdAt: new Date().toISOString(),
-      adHocTitle: title,
-      adHocSemesterId: calendarAddDraft.semesterId || undefined,
-      adHocCourseId: calendarAddDraft.courseId || undefined,
-      ...timeOptions,
-    };
-
-    setState((current) => ({ ...current, calendarEntries: [...current.calendarEntries, entry] }));
-    setCalendarAddDraft((current) => ({ ...current, title: "" }));
-    setCalendarAddOpen(false);
-  }
-
   function toggleCalendarEntry(entryId: string) {
     setState((current) => {
       const entry = current.calendarEntries.find((item) => item.id === entryId);
@@ -8575,8 +8625,30 @@ function App() {
     });
   }
 
-  function removeCalendarEntry(entryId: string) {
+  /** Non-repeating to-dos just flip their own completed/completedAt. A repeating to-do has no
+   * single "completed" state - each projected weekday tracks completion independently in
+   * completedOccurrences, the same pattern TimetableEvent uses for its recurring occurrences. */
+  function toggleDailyTodoOccurrence(todoId: string, occurrenceDate: string) {
     setState((current) => ({
+      ...current,
+      dailyTodos: current.dailyTodos.map((todo) => {
+        if (todo.id !== todoId) return todo;
+        if (todo.repeatWeekly) {
+          const wasCompleted = todo.completedOccurrences.includes(occurrenceDate);
+          return {
+            ...todo,
+            completedOccurrences: wasCompleted
+              ? todo.completedOccurrences.filter((date) => date !== occurrenceDate)
+              : [...todo.completedOccurrences, occurrenceDate],
+          };
+        }
+        return { ...todo, completed: !todo.completed, completedAt: !todo.completed ? new Date().toISOString() : null };
+      }),
+    }));
+  }
+
+  function removeCalendarEntry(entryId: string) {
+    performDelete("Scheduled task removed", (current) => ({
       ...current,
       calendarEntries: current.calendarEntries.filter((entry) => entry.id !== entryId || entry.completed),
     }));
@@ -8636,7 +8708,7 @@ function App() {
 
   function saveCalendarEntryEdit(entryId: string) {
     if (!isValidCalendarTime(calendarEditDraft.startTime) || !isValidCalendarTime(calendarEditDraft.endTime)) {
-      setMessage("Use 24-hour time like 09:00 or 17:30.");
+      setMessage("Enter a valid time, like 9:30 AM or 17:30.");
       return;
     }
     const startMinutes = timeToMinutes(calendarEditDraft.startTime);
@@ -8658,6 +8730,101 @@ function App() {
     const endMinutes = timeToMinutes(entry.endTime ?? addMinutesToTime(entry.startTime, 60));
     calendarResizeRef.current = { entryId: entry.id, startY: event.clientY, startMinutes, endMinutes };
     setCalendarResizeEntryId(entry.id);
+  }
+
+  function findTimetableRowTarget(row: DailyTimelineRow): TimetableRowTarget | null {
+    if (row.kind === "todo") {
+      const todo = state.dailyTodos.find((item) => item.id === row.refId);
+      return todo ? { kind: "todo", todo } : null;
+    }
+    const event = state.timetableEvents.find((item) => item.id === row.refId);
+    return event ? { kind: "event", event } : null;
+  }
+
+  function startTimetableRowMove(event: MouseEvent<HTMLDivElement>, row: DailyTimelineRow) {
+    if (!timetableEditMode) return;
+    const eventTarget = event.target as HTMLElement;
+    if (eventTarget.closest("button,input,.calendar-resize-handle")) return;
+    const target = findTimetableRowTarget(row);
+    if (!target) return;
+    event.preventDefault();
+    const durationMinutes = row.time && row.endTime ? timeToMinutes(row.endTime) - timeToMinutes(row.time) : null;
+    timetableMoveDragRef.current = { row, target, durationMinutes, startX: event.clientX, startY: event.clientY, moved: false };
+    setTimetableDragRowId(row.id);
+  }
+
+  function startTimetableRowResize(event: MouseEvent<HTMLDivElement>, row: DailyTimelineRow) {
+    if (!timetableEditMode || !row.time || !row.endTime) return;
+    const target = findTimetableRowTarget(row);
+    if (!target) return;
+    event.preventDefault();
+    event.stopPropagation();
+    timetableResizeRef.current = { row, target, startY: event.clientY, startMinutes: timeToMinutes(row.time), endMinutes: timeToMinutes(row.endTime) };
+    setTimetableResizeRowId(row.id);
+  }
+
+  /** The Unscheduled panel's to-do pills use this instead of startTimetableRowMove - they aren't
+   * on the canvas yet, so there's no existing pixel position to drag from, just a to-do id to
+   * drop somewhere on the timeline. */
+  function startUnscheduledTodoDrag(event: MouseEvent<HTMLDivElement>, row: DailyTimelineRow) {
+    if (!timetableEditMode) return;
+    const eventTarget = event.target as HTMLElement;
+    if (eventTarget.closest("button,input")) return;
+    event.preventDefault();
+    unscheduledTodoDragRef.current = { todoId: row.refId, occurrenceDate: row.occurrenceDate };
+    setTimetableDragRowId(row.id);
+  }
+
+  function commitTimetableOccurrenceChange(target: TimetableRowTarget, originalDate: string, newTime: string, newEndTime: string | null) {
+    if (target.kind === "todo") {
+      if (target.todo.repeatWeekly) {
+        setTimetableRecurrenceConfirm({ eventId: null, todoId: target.todo.id, originalDate, newDate: originalDate, newTime, newEndTime });
+        return;
+      }
+      setState((current) => ({
+        ...current,
+        dailyTodos: current.dailyTodos.map((todo) => (todo.id === target.todo.id ? { ...todo, time: newTime, endTime: newEndTime } : todo)),
+      }));
+      return;
+    }
+    const eventSnapshot = target.event;
+    if (!eventSnapshot.repeatWeekly) {
+      setState((current) => ({
+        ...current,
+        timetableEvents: current.timetableEvents.map((item) => (item.id === eventSnapshot.id ? { ...item, time: newTime, endTime: newEndTime } : item)),
+      }));
+      return;
+    }
+    setTimetableRecurrenceConfirm({ eventId: eventSnapshot.id, todoId: null, originalDate, newDate: originalDate, newTime, newEndTime });
+  }
+
+  function resolveTimetableRecurrenceConfirm(scope: "occurrence" | "future") {
+    const pending = timetableRecurrenceConfirm;
+    if (!pending) return;
+    if (pending.todoId) {
+      const todoId = pending.todoId;
+      setState((current) => {
+        const todo = current.dailyTodos.find((item) => item.id === todoId);
+        if (!todo) return current;
+        const replacement = scope === "occurrence"
+          ? [setTodoOccurrenceTime(todo, pending.originalDate, pending.newTime, pending.newEndTime)]
+          : splitRecurringTodoAt(todo, pending.originalDate, pending.newTime, pending.newEndTime, makeId);
+        return { ...current, dailyTodos: current.dailyTodos.flatMap((item) => (item.id === todoId ? replacement : [item])) };
+      });
+      setTimetableRecurrenceConfirm(null);
+      return;
+    }
+    setState((current) => {
+      const event = current.timetableEvents.find((item) => item.id === pending.eventId);
+      if (!event) return current;
+      if (scope === "occurrence") {
+        const updated = moveSingleOccurrence(event, pending.originalDate, pending.newDate, pending.newTime, pending.newEndTime);
+        return { ...current, timetableEvents: current.timetableEvents.map((item) => (item.id === event.id ? updated : item)) };
+      }
+      const { updatedOriginal, newEvent } = splitRecurringEventAt(event, pending.originalDate, pending.newDate, pending.newTime, pending.newEndTime, makeId);
+      return { ...current, timetableEvents: [...current.timetableEvents.map((item) => (item.id === event.id ? updatedOriginal : item)), newEvent] };
+    });
+    setTimetableRecurrenceConfirm(null);
   }
 
   function shiftCalendar(direction: -1 | 1) {
@@ -8684,41 +8851,29 @@ function App() {
 
   function openCalendarDrawer(date: string) {
     setSelectedCalendarDate(date);
-    setCalendarAddOpen(false);
     setCalendarEditEntryId(null);
   }
 
   function closeCalendarDrawer() {
     setSelectedCalendarDate(null);
-    setCalendarAddOpen(false);
     setCalendarEditEntryId(null);
     setCalendarDragEntryId(null);
     calendarMoveDragRef.current = null;
     setCalendarMovePreview(null);
   }
 
-  function openCalendarAddDrawer() {
-    setCalendarAddOpen(true);
-  }
-
-  function openTodayTodoDrawer() {
-    const today = localIsoDate();
-    setCalendarCursorDate(parseCalendarDate(today));
-    setSelectedCalendarDate(today);
-    setCalendarEditEntryId(null);
-    setCalendarAddDraft((current) => ({ ...current, source: "new", noTime: true }));
-    setCalendarAddOpen(true);
-  }
-
-  function closeCalendarAddDrawer() {
-    setCalendarAddOpen(false);
+  /** The Dashboard's "Add To-Do" entry point - opens the exact same to-do-only creation modal
+   * used by the Planner's Daily View, so a to-do made from either place is the same DailyTodo
+   * record with the same fields and the same store handler (addTask's to-do branch in
+   * TimetableEventModal), not a separate parallel system. */
+  function openDashboardTodoModal() {
+    setTimetableModalState({ mode: "create", prefill: { date: localIsoDate(), time: "", semesterId: null } });
   }
 
   function openNextCalendarDay() {
     setSelectedCalendarDate((current) => {
       const nextDate = addCalendarDays(current ? parseCalendarDate(current) : new Date(), 1);
       setCalendarCursorDate(nextDate);
-      setCalendarAddOpen(false);
       return localIsoDate(nextDate);
     });
   }
@@ -8732,6 +8887,7 @@ function App() {
   }
 
   function applyPreset(label: string, study: number, breakMinutes: number, mode: "focus" | "exam" | "endless") {
+    if (state.timer.phase !== "idle") return;
     setTimerFaceEditing(false);
     setState((current) => ({
       ...current,
@@ -8856,7 +9012,9 @@ function App() {
       },
     }));
 
-    setFullscreen(true);
+    if (appStyle !== "wabi-sabi") {
+      setFullscreen(true);
+    }
   }
 
   function pauseTimer() {
@@ -8945,342 +9103,6 @@ function App() {
     setMessage("Session saved.");
   }
 
-  async function handleCreateVault() {
-    if (!isTauriApp()) {
-      setMessage("Vault creation works inside the desktop build.");
-      return;
-    }
-
-    try {
-      const parent = await pickVaultParentDirectory();
-      if (!parent) return;
-      const vaultPath = await createVault(parent, state.settings.vaultName || "StudyTrackerVault");
-      setState((current) => ({
-        ...current,
-        activeTab: "vault",
-        settings: { ...current.settings, vaultPath },
-      }));
-      await loadVaultNote(vaultPath, vaultNoteDate);
-      setMessage(`Vault created at ${vaultPath}`);
-    } catch (error) {
-      setMessage(getErrorMessage(error, "Could not create the vault."));
-    }
-  }
-
-  async function handleLinkVault() {
-    if (!isTauriApp()) {
-      setMessage("Linking a vault works inside the desktop build.");
-      return;
-    }
-
-    try {
-      const selected = await pickExistingVaultDirectory();
-      if (!selected) return;
-      const vaultPath = await linkVault(selected);
-      setState((current) => ({
-        ...current,
-        activeTab: "vault",
-        settings: { ...current.settings, vaultPath },
-      }));
-      await loadVaultNote(vaultPath, vaultNoteDate);
-      setMessage(`Vault linked at ${vaultPath}`);
-    } catch (error) {
-      setMessage(getErrorMessage(error, "Could not link the vault."));
-    }
-  }
-
-  async function loadVaultNotes(vaultPath = state.settings.vaultPath) {
-    if (!vaultPath) return;
-
-    setVaultNotesLoading(true);
-    try {
-      setVaultNotes(await listNotes(vaultPath));
-    } catch (error) {
-      setMessage(getErrorMessage(error, "Could not load notes."));
-    } finally {
-      setVaultNotesLoading(false);
-    }
-  }
-
-  async function openVaultNote(note: VaultNoteFile) {
-    if (!state.settings.vaultPath) return;
-
-    setVaultNotesLoading(true);
-    try {
-      const content = await readNote(state.settings.vaultPath, note.title);
-      setVaultNoteTitle(note.title);
-      setVaultNoteContent(stripMarkdownFrontmatter(content ?? ""));
-      setVaultNotePath(note.path);
-      setVaultNoteSavedAt(note.savedAt);
-      setVaultNoteDirty(false);
-      setVaultDailyEditing(false);
-    } catch (error) {
-      setMessage(getErrorMessage(error, "Could not open note."));
-    } finally {
-      setVaultNotesLoading(false);
-    }
-  }
-
-  function startNewVaultNote() {
-    setVaultNoteTitle("Untitled note");
-    setVaultNoteContent("");
-    setVaultNotePath(null);
-    setVaultNoteSavedAt(null);
-    setVaultNoteDirty(false);
-    setVaultDailyEditing(true);
-  }
-
-  async function handleSaveWabiVaultNote() {
-    if (!state.settings.vaultPath) return;
-    const title = vaultNoteTitle.trim();
-    if (!title) {
-      setMessage("Give the note a title before saving.");
-      return;
-    }
-
-    setVaultNotesLoading(true);
-    try {
-      const notePath = await writeNote(state.settings.vaultPath, title, vaultNoteContent);
-      const savedAt = Date.now();
-      setVaultNotePath(notePath);
-      setVaultNoteSavedAt(savedAt);
-      setVaultNoteDirty(false);
-      setVaultDailyEditing(false);
-      await loadVaultNotes(state.settings.vaultPath);
-      setMessage(`Saved ${title}.`);
-    } catch (error) {
-      setMessage(getErrorMessage(error, "Could not save note."));
-    } finally {
-      setVaultNotesLoading(false);
-    }
-  }
-
-  async function handleDeleteWabiVaultNote() {
-    if (!state.settings.vaultPath || !vaultNotePath || !vaultNoteTitle) return;
-    if (!window.confirm(`Delete "${vaultNoteTitle}"? This cannot be undone.`)) return;
-
-    setVaultNotesLoading(true);
-    try {
-      await deleteNote(state.settings.vaultPath, vaultNoteTitle);
-      const remaining = (await listNotes(state.settings.vaultPath)).filter((note) => note.title !== vaultNoteTitle);
-      setVaultNotes(remaining);
-      const nextNote = remaining[0];
-      if (nextNote) {
-        await openVaultNote(nextNote);
-      } else {
-        startNewVaultNote();
-        setVaultDailyEditing(false);
-      }
-      setMessage(`Deleted ${vaultNoteTitle}.`);
-    } catch (error) {
-      setMessage(getErrorMessage(error, "Could not delete note."));
-    } finally {
-      setVaultNotesLoading(false);
-    }
-  }
-
-  async function loadVaultNote(vaultPath = state.settings.vaultPath, noteDate = vaultNoteDate) {
-    if (!vaultPath) {
-      setMessage("Create or link an Obsidian vault first.");
-      return;
-    }
-
-    setVaultNoteLoading(true);
-    try {
-      const existing = await readDailyNote(vaultPath, noteDate);
-      setVaultNoteContent(existing ? stripMarkdownFrontmatter(existing) : buildDailyNoteMarkdown(state, noteDate));
-      setVaultNotePath(`${vaultPath}/Daily/${noteDate}.md`);
-      setVaultNoteDirty(false);
-      setVaultDailyEditing(false);
-      setMessage(existing ? `Loaded ${noteDate}.md` : `Created an unsaved draft for ${noteDate}.`);
-    } catch (error) {
-      setMessage(getErrorMessage(error, "Could not load the daily note."));
-    } finally {
-      setVaultNoteLoading(false);
-    }
-  }
-
-  async function handleSaveVaultNote() {
-    if (!state.settings.vaultPath) {
-      setMessage("Create or link an Obsidian vault first.");
-      return;
-    }
-
-    setVaultNoteLoading(true);
-    try {
-      const notePath = await writeDailyNote(state.settings.vaultPath, vaultNoteDate, vaultNoteContent || notePreview);
-      setVaultNotePath(notePath);
-      setVaultNoteDirty(false);
-      setVaultDailyEditing(false);
-      setState((current) => ({
-        ...current,
-        exports: [
-          {
-            id: makeId(),
-            exportedAt: new Date().toISOString(),
-            noteDate: vaultNoteDate,
-            notePath,
-          },
-          ...current.exports,
-        ].slice(0, 20),
-      }));
-      setMessage(`Saved daily note to ${notePath}`);
-    } catch (error) {
-      setMessage(getErrorMessage(error, "Could not save the daily note."));
-    } finally {
-      setVaultNoteLoading(false);
-    }
-  }
-
-  async function loadReferenceNote(
-    vaultPath = state.settings.vaultPath,
-    semester = selectedReferenceSemester,
-    course = selectedReferenceCourse,
-    options: { silent?: boolean } = {},
-  ) {
-    if (!vaultPath) {
-      setMessage("Create or link an Obsidian vault first.");
-      return;
-    }
-    if (!semester || !course) {
-      setMessage("Choose a semester and course first.");
-      return;
-    }
-
-    const requestId = referenceLoadRequestRef.current + 1;
-    referenceLoadRequestRef.current = requestId;
-    setReferenceLoading(true);
-    try {
-      const existing = await readReferenceNote(vaultPath, semester.name, course.name);
-      if (referenceLoadRequestRef.current !== requestId) return;
-      setReferenceContent(existing ? stripMarkdownFrontmatter(existing) : buildReferenceNoteMarkdown(course));
-      setReferencePath(`${vaultPath}/References/${semester.name}/${course.name}.md`);
-      setReferenceDirty(false);
-      setReferenceEditing(false);
-      if (!options.silent) setMessage(existing ? `Loaded references for ${course.name}.` : `Created an unsaved references draft for ${course.name}.`);
-    } catch (error) {
-      if (referenceLoadRequestRef.current !== requestId) return;
-      setMessage(getErrorMessage(error, "Could not load course references."));
-    } finally {
-      if (referenceLoadRequestRef.current === requestId) setReferenceLoading(false);
-    }
-  }
-
-  async function handleSaveReferenceNote() {
-    if (!state.settings.vaultPath) {
-      setMessage("Create or link an Obsidian vault first.");
-      return;
-    }
-    if (!selectedReferenceSemester || !selectedReferenceCourse) {
-      setMessage("Choose a semester and course first.");
-      return;
-    }
-
-    setReferenceLoading(true);
-    try {
-      const content = referenceContent || buildReferenceNoteMarkdown(selectedReferenceCourse);
-      const notePath = await writeReferenceNote(
-        state.settings.vaultPath,
-        selectedReferenceSemester.name,
-        selectedReferenceCourse.name,
-        content,
-      );
-      setReferenceContent(content);
-      setReferencePath(notePath);
-      setReferenceDirty(false);
-      setReferenceEditing(false);
-      setMessage(`Saved references to ${notePath}`);
-    } catch (error) {
-      setMessage(getErrorMessage(error, "Could not save course references."));
-    } finally {
-      setReferenceLoading(false);
-    }
-  }
-
-  function handleEditReferenceNote() {
-    if (!selectedReferenceSemester || !selectedReferenceCourse) {
-      setMessage("Choose a semester and course first.");
-      return;
-    }
-    setReferenceContent((current) => current || buildReferenceNoteMarkdown(selectedReferenceCourse));
-    setReferenceEditing(true);
-  }
-
-  async function loadSummaryFileList(
-    vaultPath = state.settings.vaultPath,
-    semester = selectedSummarySemester,
-    course = selectedSummaryCourse,
-    options: { silent?: boolean } = {},
-  ) {
-    if (!vaultPath) {
-      setMessage("Create or link an Obsidian vault first.");
-      return;
-    }
-    if (!semester || !course) {
-      setMessage("Choose a semester and course first.");
-      return;
-    }
-
-    const requestId = summaryLoadRequestRef.current + 1;
-    summaryLoadRequestRef.current = requestId;
-    setSummaryLoading(true);
-    try {
-      const files = await listSummaryFiles(vaultPath, semester.name, course.name);
-      if (summaryLoadRequestRef.current !== requestId) return;
-      setSummaryFiles(files);
-      setSelectedSummaryPath((current) => (current && files.some((file) => file.path === current) ? current : files[0]?.path ?? null));
-      if (!options.silent) setMessage(files.length ? `Loaded ${files.length} summary file${files.length === 1 ? "" : "s"}.` : `No summaries found for ${course.name}.`);
-    } catch (error) {
-      if (summaryLoadRequestRef.current !== requestId) return;
-      setMessage(getErrorMessage(error, "Could not load summaries."));
-    } finally {
-      if (summaryLoadRequestRef.current === requestId) setSummaryLoading(false);
-    }
-  }
-
-  async function handleAddSummaryFiles() {
-    if (!state.settings.vaultPath) {
-      setMessage("Create or link an Obsidian vault first.");
-      return;
-    }
-    if (!selectedSummarySemester || !selectedSummaryCourse) {
-      setMessage("Choose a semester and course first.");
-      return;
-    }
-    if (!isTauriApp()) {
-      setMessage("Adding summary files works inside the desktop build.");
-      return;
-    }
-
-    const selected = await pickSummaryFiles();
-    if (!selected.length) return;
-
-    setSummaryLoading(true);
-    try {
-      const files = await importSummaryFiles(
-        state.settings.vaultPath,
-        selectedSummarySemester.name,
-        selectedSummaryCourse.name,
-        selected,
-      );
-      setSummaryFiles(files);
-      const imported = new Set(selected.map((path) => path.split(/[\\/]/).pop()));
-      const firstImported = files.find((file) => imported.has(file.name));
-      setSelectedSummaryPath(firstImported?.path ?? files[0]?.path ?? null);
-      setMessage(`Added ${selected.length} file${selected.length === 1 ? "" : "s"} to Summaries.`);
-    } catch (error) {
-      setMessage(getErrorMessage(error, "Could not add summary files."));
-    } finally {
-      setSummaryLoading(false);
-    }
-  }
-
-  function handleUseGeneratedNote() {
-    setVaultNoteContent(notePreview);
-    setVaultNoteDirty(true);
-    setVaultDailyEditing(true);
-    setMessage("Session draft copied into the editor. Save it when you are ready.");
-  }
 
   function healthClass(score: number) {
     if (score >= 75) return "strong";
@@ -9303,6 +9125,18 @@ function App() {
       },
     }));
     setMessage(`"${task.title}" sent to timer.`);
+  }
+
+  /** A to-do has no course task behind it, so it goes to the timer as the session goal only. */
+  function focusTodoInTimer(title: string) {
+    setSelectedTaskId(null);
+    setState((current) => ({
+      ...current,
+      activeTab: "timer",
+      // No course or task either: leaving the previous ones would title the timer (and file the session) under them.
+      timer: { ...current.timer, semesterId: null, courseId: null, taskId: null, goal: title },
+    }));
+    setMessage(`"${title}" sent to timer.`);
   }
 
   function selectTaskForNow(task: Task) {
@@ -9372,7 +9206,7 @@ function App() {
     return task ? semesterLookup.get(task.semesterId) ?? null : entry.adHocSemesterId ? semesterLookup.get(entry.adHocSemesterId) ?? null : null;
   };
 
-  function renderCalendarTimelineEntry(entry: CalendarEntry) {
+  function renderCalendarTimelineEntry(entry: CalendarEntry, layout?: OverlapLayoutSlot) {
     const task = getCalendarEntryTask(entry);
     const course = getCalendarEntryCourse(entry);
     const semester = getCalendarEntrySemester(entry);
@@ -9381,16 +9215,17 @@ function App() {
     const isResizing = calendarResizeEntryId === entry.id;
     const entryStartMinutes = entry.startTime ? timeToMinutes(entry.startTime) : calendarTimelineStartMinutes;
     const entryEndMinutes = entry.endTime ? timeToMinutes(entry.endTime) : entryStartMinutes + 60;
-    const entryTop = ((entryStartMinutes - calendarTimelineStartMinutes) / calendarTimelineTotalMinutes) * calendarTimelineHeight;
-    const entryHeight = Math.max(58, ((entryEndMinutes - entryStartMinutes) / calendarTimelineTotalMinutes) * calendarTimelineHeight - 8);
+    const entryGeometry = getTimelineBlockGeometry(entryStartMinutes, entryEndMinutes);
+    const isSplit = Boolean(layout && layout.columnCount > 1);
     const entryStyle = {
       "--entry-color": course?.color ?? "var(--accent)",
-      ...(entry.startTime ? { top: `${Math.max(4, entryTop + 4)}px`, height: `${entryHeight}px` } : {}),
+      ...(entry.startTime ? { top: `${entryGeometry.top}px`, height: `${isEditing ? Math.max(58, entryGeometry.height) : entryGeometry.height}px` } : {}),
+      ...(entry.startTime ? getOverlapSplitStyle(layout) : {}),
     } as CSSProperties;
     return (
       <div
         key={entry.id}
-        className={`calendar-timeline-entry ${entry.startTime ? "scheduled" : "unscheduled"} ${entry.completed ? "done" : ""} ${isDragging ? "dragging" : ""} ${isResizing ? "resizing" : ""}`}
+        className={`calendar-timeline-entry ${entry.startTime ? "scheduled" : "unscheduled"} density-${entry.startTime && !isEditing ? entryGeometry.density : "roomy"} ${entry.completed ? "done" : ""} ${isDragging ? "dragging" : ""} ${isResizing ? "resizing" : ""} ${isSplit ? "overlap-split" : ""}`}
         onMouseDown={(event) => !isEditing && startCalendarEntryMove(event, entry)}
         style={entryStyle}
       >
@@ -9398,25 +9233,11 @@ function App() {
           <div className="calendar-edit-inline">
             <label>
               <span>Start</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-2][0-9]:[0-5][0-9]"
-                placeholder="09:00"
-                value={calendarEditDraft.startTime}
-                onChange={(event) => setCalendarEditDraft((current) => ({ ...current, startTime: event.target.value }))}
-              />
+              <TimeField value={calendarEditDraft.startTime} onChange={(startTime) => setCalendarEditDraft((current) => ({ ...current, startTime }))} ariaLabel="Start time" />
             </label>
             <label>
               <span>End</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-2][0-9]:[0-5][0-9]"
-                placeholder="10:00"
-                value={calendarEditDraft.endTime}
-                onChange={(event) => setCalendarEditDraft((current) => ({ ...current, endTime: event.target.value }))}
-              />
+              <TimeField value={calendarEditDraft.endTime} onChange={(endTime) => setCalendarEditDraft((current) => ({ ...current, endTime }))} ariaLabel="End time" />
             </label>
             <button type="button" className="calendar-primary-button" onClick={() => saveCalendarEntryEdit(entry.id)}>
               Save
@@ -9469,6 +9290,319 @@ function App() {
     );
   }
 
+  function toggleGeneratedRowDone(row: DailyTimelineRow) {
+    if (row.kind === "todo") {
+      toggleDailyTodoOccurrence(row.refId, row.occurrenceDate);
+      return;
+    }
+    setState((current) => {
+      const event = current.timetableEvents.find((item) => item.id === row.refId);
+      if (!event) return current;
+      const wasCompleted = event.completedOccurrences.includes(row.occurrenceDate);
+      const timetableEvents = current.timetableEvents.map((item) =>
+        item.id === row.refId
+          ? {
+              ...item,
+              completedOccurrences: wasCompleted
+                ? item.completedOccurrences.filter((date) => date !== row.occurrenceDate)
+                : [...item.completedOccurrences, row.occurrenceDate],
+            }
+          : item,
+      );
+      // A Sheet Release is an informational notification/link, not a completed academic unit -
+      // its checkbox still tracks per-occurrence "seen" state above, but must never move the
+      // subject's completed-unit count. Only a Sheet Due (or a non-sheet occurrence) does that.
+      if (event.kind === "sheet-release") {
+        return { ...current, timetableEvents };
+      }
+
+      // Checking off any other occurrence updates its course task's completed-units count;
+      // unchecking backs it out - except for occurrences past the task's total, which were never
+      // counted in the first place (see unitDecrementFor).
+      const completedBefore = countCompletedUnitOccurrences(current.timetableEvents, event.taskId);
+      return {
+        ...current,
+        timetableEvents,
+        tasks: current.tasks.map((task) =>
+          task.id === event.taskId
+            ? { ...task, completedUnits: clamp(task.completedUnits + (wasCompleted ? -unitDecrementFor(completedBefore, task.totalUnits, 1) : 1), 0, task.totalUnits) }
+            : task,
+        ),
+      };
+    });
+  }
+
+  function removeGeneratedRow(row: DailyTimelineRow) {
+    if (row.kind === "todo") {
+      // Like a recurring TimetableEvent, removing one occurrence of a repeating to-do only skips
+      // that date; the whole series is deleted from the to-do's Edit dialog.
+      const todo = state.dailyTodos.find((item) => item.id === row.refId);
+      if (todo?.repeatWeekly) {
+        performDelete(`"${todo.title}" removed for this date`, (current) => ({
+          ...current,
+          dailyTodos: current.dailyTodos.map((item) =>
+            item.id === row.refId
+              ? {
+                  ...item,
+                  skippedOccurrences: [...item.skippedOccurrences, row.occurrenceDate],
+                  completedOccurrences: item.completedOccurrences.filter((date) => date !== row.occurrenceDate),
+                }
+              : item,
+          ),
+        }));
+        return;
+      }
+      performDelete(`"${todo?.title ?? "To-do"}" removed`, (current) => ({ ...current, dailyTodos: current.dailyTodos.filter((item) => item.id !== row.refId) }));
+      return;
+    }
+    const removedEvent = state.timetableEvents.find((item) => item.id === row.refId);
+    performDelete(`"${removedEvent?.label ?? "Item"}" removed`, (current) => {
+      const event = current.timetableEvents.find((item) => item.id === row.refId);
+      if (!event) return current;
+
+      // A repeating event's single day-of occurrence shares its id with every other projected
+      // occurrence - removing it must skip just that date via an override, not delete the whole
+      // series (which would silently wipe every other week too).
+      if (event.repeatWeekly) {
+        const wasCompleted = event.completedOccurrences.includes(row.occurrenceDate);
+        const timetableEvents = current.timetableEvents.map((item) =>
+          item.id === row.refId
+            ? {
+                ...item,
+                occurrenceOverrides: { ...item.occurrenceOverrides, [row.occurrenceDate]: { skipped: true as const } },
+                completedOccurrences: wasCompleted
+                  ? item.completedOccurrences.filter((date) => date !== row.occurrenceDate)
+                  : item.completedOccurrences,
+              }
+            : item,
+        );
+        if (!wasCompleted || event.kind === "sheet-release") return { ...current, timetableEvents };
+        const completedBefore = countCompletedUnitOccurrences(current.timetableEvents, event.taskId);
+        return {
+          ...current,
+          timetableEvents,
+          tasks: current.tasks.map((task) =>
+            task.id === event.taskId ? { ...task, completedUnits: clamp(task.completedUnits - unitDecrementFor(completedBefore, task.totalUnits, 1), 0, task.totalUnits) } : task,
+          ),
+        };
+      }
+
+      const timetableEvents = current.timetableEvents.filter((item) => item.id !== row.refId);
+      if (!event.completedOccurrences.length || event.kind === "sheet-release") {
+        return { ...current, timetableEvents };
+      }
+      const completedCount = event.completedOccurrences.length;
+      const completedBefore = countCompletedUnitOccurrences(current.timetableEvents, event.taskId);
+      return {
+        ...current,
+        timetableEvents,
+        tasks: current.tasks.map((task) =>
+          task.id === event.taskId ? { ...task, completedUnits: clamp(task.completedUnits - unitDecrementFor(completedBefore, task.totalUnits, completedCount), 0, task.totalUnits) } : task,
+        ),
+      };
+    });
+  }
+
+  function openEditModalForRow(row: DailyTimelineRow) {
+    if (row.kind === "todo") {
+      const todo = state.dailyTodos.find((item) => item.id === row.refId);
+      if (todo) setTimetableModalState({ mode: "edit", entityKind: "todo", todo });
+      return;
+    }
+    const event = state.timetableEvents.find((item) => item.id === row.refId);
+    if (event) setTimetableModalState({ mode: "edit", entityKind: "event", event });
+  }
+
+  function renderTimetableTimelineEntry(row: DailyTimelineRow, layout?: OverlapLayoutSlot) {
+    const course = row.courseId ? courseLookup.get(row.courseId) : null;
+    const isUnscheduled = row.kind === "todo" && !row.time;
+    let startMinutes = row.time ? timeToMinutes(row.time) : calendarTimelineStartMinutes;
+    // Wabi-Sabi: an item due right before midnight (e.g. 23:59) would be clipped to a 1-minute sliver
+    // at the very bottom - keep it a clickable block by pulling it up to fit one hour before the end.
+    if (appStyle === "wabi-sabi" && row.time && !row.endTime) startMinutes = Math.min(startMinutes, calendarTimelineEndMinutes - 60);
+    const endMinutes = row.endTime ? timeToMinutes(row.endTime) : startMinutes + 60;
+    const geometry = getTimelineBlockGeometry(startMinutes, endMinutes);
+    const style = isUnscheduled ? ({ "--entry-color": course?.color ?? "var(--accent)" } as CSSProperties) : ({
+      "--entry-color": course?.color ?? "var(--accent)",
+      top: `${geometry.top}px`,
+      height: `${geometry.height}px`,
+      ...getOverlapSplitStyle(layout),
+    } as CSSProperties);
+    const isSolvedSheet = row.kind === "sheet-deadline" && row.completed;
+    const isStandaloneTodo = row.kind === "todo";
+    const draggable = timetableEditMode;
+    const isDragging = timetableDragRowId === row.id;
+    const isResizing = timetableResizeRowId === row.id;
+    const isSplit = Boolean(layout && layout.columnCount > 1);
+    return (
+      <div
+        key={row.id}
+        className={`calendar-timeline-entry ${isUnscheduled ? "unscheduled" : "scheduled"} density-${isUnscheduled ? "roomy" : geometry.density} generated ${row.completed ? "done" : ""} ${draggable ? "editable-draggable" : ""} ${isDragging ? "dragging" : ""} ${isResizing ? "resizing" : ""} ${isSplit ? "overlap-split" : ""} ${isStandaloneTodo ? "standalone-todo" : "subject-bound"}`}
+        style={style}
+        onMouseDown={isUnscheduled ? (event) => startUnscheduledTodoDrag(event, row) : (event) => startTimetableRowMove(event, row)}
+        onClick={appStyle === "wabi-sabi" && !timetableEditMode && row.kind !== "todo" ? (event) => {
+          if ((event.target as HTMLElement).closest("input, button")) return;
+          event.stopPropagation();
+          setCalendarItemPopup({ eventId: row.refId, date: row.occurrenceDate });
+        } : undefined}
+        title={isUnscheduled && timetableEditMode ? "Drag onto the timeline to schedule" : undefined}
+      >
+        <div className="calendar-timeline-entry-copy">
+          <strong>{isStandaloneTodo ? <span className="timetable-todo-icon" aria-hidden="true">&#9679;</span> : null}{row.title}</strong>
+          <span>{isStandaloneTodo ? "To-do" : (course?.name ?? "General")}{isSolvedSheet ? <em className="timetable-solved-badge">Solved</em> : null}</span>
+          {row.time ? <small>{displayTime(row.time)}{row.endTime ? `–${displayTime(row.endTime)}` : ""}</small> : null}
+        </div>
+        <input
+          className="calendar-timeline-checkbox"
+          type="checkbox"
+          checked={Boolean(row.completed)}
+          onChange={() => toggleGeneratedRowDone(row)}
+          title={row.kind === "sheet-deadline" ? "Mark solved" : row.kind === "sheet-release" ? "Mark done" : "Mark done"}
+        />
+        {timetableEditMode || row.url ? (
+          <div className="calendar-timeline-entry-actions">
+            {row.url ? (
+              <button type="button" className="ghost-button small-button" onClick={() => openExternalLink(row.url!)}>
+                Open
+              </button>
+            ) : null}
+            {timetableEditMode ? (
+              <button type="button" className="ghost-button small-button" onClick={() => openEditModalForRow(row)}>
+                Edit
+              </button>
+            ) : null}
+            {timetableEditMode ? (
+              <button type="button" className="ghost-button small-button" onClick={() => removeGeneratedRow(row)}>
+                Remove
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {timetableEditMode && row.time && row.endTime ? (
+          <div className="calendar-resize-handle" onMouseDown={(event) => startTimetableRowResize(event, row)} title="Drag to change duration" />
+        ) : null}
+      </div>
+    );
+  }
+
+  function saveSessionNote() {
+    if (!sessionNoteEdit) return;
+    const { id, draft } = sessionNoteEdit;
+    setState((current) => ({ ...current, sessions: current.sessions.map((session) => (session.id === id ? { ...session, learned: draft.trim() } : session)) }));
+    setSessionNoteEdit(null);
+  }
+
+  function renderSessionLogsModal() {
+    if (!sessionLogsOpen) return null;
+    const close = () => { setSessionLogsOpen(false); setSessionNoteEdit(null); };
+    const dayFormat = new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric", month: "short" });
+    const sessions = [...state.sessions].sort((a, b) => b.endedAt.localeCompare(a.endedAt));
+    const groups: { day: string; rows: StudySession[] }[] = [];
+    for (const session of sessions) {
+      const day = isoDate(new Date(session.endedAt));
+      const group = groups[groups.length - 1];
+      if (group && group.day === day) group.rows.push(session);
+      else groups.push({ day, rows: [session] });
+    }
+    return createPortal(
+      <div className="wabi-logs-backdrop" onMouseDown={close}>
+        <section className="wabi-logs" role="dialog" aria-modal="true" aria-label="Session logs" onMouseDown={(event) => event.stopPropagation()}>
+          <header className="wabi-logs-head">
+            <div>
+              <p className="wabi-eyebrow">TIMER</p>
+              <h2>Session logs</h2>
+            </div>
+            <button type="button" className="ghost-button small-button" onClick={close}>Close</button>
+          </header>
+          <div className="wabi-logs-body">
+            {groups.length ? groups.map((group) => (
+              <div key={group.day} className="wabi-logs-day">
+                <p className="wabi-logs-day-label">{group.day === calendarToday ? "Today" : dayFormat.format(new Date(`${group.day}T00:00:00`))}</p>
+                {group.rows.map((session) => {
+                  const course = courseLookup.get(session.courseId ?? "");
+                  const editing = sessionNoteEdit?.id === session.id;
+                  return (
+                    <div key={session.id} className="wabi-logs-row">
+                      <div className="wabi-logs-main">
+                        <div className="wabi-logs-line">
+                          <span className="wabi-logs-time">{new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(session.endedAt))}</span>
+                          <strong>{session.goal || session.presetLabel}</strong>
+                          <span className="wabi-logs-mins">{formatMinutes(session.minutes)}</span>
+                        </div>
+                        <p className="wabi-logs-meta">{session.kind === "study" ? "" : `${session.kind} · `}{course?.name ?? "General"}</p>
+                        {editing ? (
+                          <div className="wabi-logs-note-edit">
+                            <textarea
+                              autoFocus
+                              rows={3}
+                              value={sessionNoteEdit.draft}
+                              onChange={(event) => setSessionNoteEdit({ id: session.id, draft: event.target.value })}
+                              placeholder="What happened in this session?"
+                            />
+                            <div className="wabi-logs-note-actions">
+                              <button type="button" onClick={saveSessionNote}>Save</button>
+                              <button type="button" className="ghost-button small-button" onClick={() => setSessionNoteEdit(null)}>Cancel</button>
+                            </div>
+                          </div>
+                        ) : session.learned ? (
+                          <p className="wabi-logs-note">{session.learned}</p>
+                        ) : null}
+                      </div>
+                      <RowMenu label={`${session.goal || session.presetLabel} actions`}>
+                        <button type="button" role="menuitem" onClick={() => setSessionNoteEdit({ id: session.id, draft: session.learned })}>{session.learned ? "Edit note" : "Add note"}</button>
+                        <button type="button" role="menuitem" className="danger" onClick={() => removeSession(session.id)}>Delete session</button>
+                      </RowMenu>
+                    </div>
+                  );
+                })}
+              </div>
+            )) : <p className="wabi-empty">No sessions yet. Finish a timer block and it lands here.</p>}
+          </div>
+        </section>
+      </div>,
+      document.body,
+    );
+  }
+
+  function renderCalendarItemPopup() {
+    if (!calendarItemPopup) return null;
+    const event = state.timetableEvents.find((item) => item.id === calendarItemPopup.eventId);
+    if (!event) return null;
+    const course = courseLookup.get(event.courseId);
+    const done = event.completedOccurrences.includes(calendarItemPopup.date);
+        const close = () => setCalendarItemPopup(null);
+    // Same rule as the month/week grid and the day timeline: the label once, then its number in
+    // the series ("Lecture 3") when it has one - this popup is where Wabi-Sabi's own pills and
+    // timeline rows send you for detail, so it needs the count too, not just the bare label.
+    const popupDates = (scheduledUnits.get(event.taskId) ?? []).map((unit) => unit.date).sort();
+    const popupPosition = popupDates.indexOf(calendarItemPopup.date) + 1;
+    const popupTitle = `${event.label}${popupDates.length > 1 && popupPosition > 0 ? ` ${popupPosition}` : ""}`;
+    return createPortal(
+      <div className="calendar-item-popup-backdrop" onMouseDown={close}>
+        <section className="calendar-item-popup" role="dialog" aria-modal="true" aria-label={popupTitle} onMouseDown={(mouseEvent) => mouseEvent.stopPropagation()} style={{ "--entry-color": course?.color ?? "var(--accent)" } as CSSProperties}>
+          <p className="calendar-item-popup-eyebrow">{course?.name ?? "General"}</p>
+          <h3>{popupTitle}</h3>
+          <p className="calendar-item-popup-when">
+            {formatDate(calendarItemPopup.date)}{event.time ? ` · ${displayTime(event.time)}${event.endTime ? `–${displayTime(event.endTime)}` : ""}` : " · any time"}
+          </p>
+          <button
+            type="button"
+            className={`calendar-item-popup-done ${done ? "is-done" : ""}`}
+            aria-pressed={done}
+            onClick={() => toggleGeneratedRowDone({ kind: event.kind, refId: event.id, occurrenceDate: calendarItemPopup.date } as DailyTimelineRow)}
+          >
+            {done ? "\u2713 Completed \u00b7 undo" : "Mark as completed"}
+          </button>
+          <div className="calendar-item-popup-actions">
+            {event.url ? <button type="button" className="ghost-button small-button" onClick={() => openExternalLink(event.url!)}>Open link</button> : null}
+            <button type="button" className="ghost-button small-button" onClick={close}>Close</button>
+          </div>
+        </section>
+      </div>,
+      document.body,
+    );
+  }
+
   function renderCalendarDayOverlay() {
     const selectedDate = selectedCalendarDate ? parseCalendarDate(selectedCalendarDate) : null;
     if (!selectedCalendarDate || !selectedDate) return null;
@@ -9481,18 +9615,87 @@ function App() {
       .sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? ""));
     const unscheduledEntries = selectedEntries.filter((entry) => !entry.startTime);
 
+    // A semester's own startDate/endDate may be unset (quick "+ Add semester" doesn't ask for
+    // dates) - expandTimetableEvents already clamps gracefully when they're null, so occurrences
+    // are gathered across every active semester rather than gating on a single date-range match.
+    const dayEventOccurrences = activeSemesters.flatMap((semester) =>
+      expandTimetableEvents(state.timetableEvents, state.holidays, semester, selectedCalendarDate, selectedCalendarDate),
+    ).filter((occurrence) => occurrence.event.kind !== "sheet-release");
+    const generatedRows = buildDailyTimeline(selectedCalendarDate, {
+      eventOccurrences: dayEventOccurrences,
+      exams: [],
+      calendarEntries: [],
+      dailyTodos: state.dailyTodos,
+      // The month/week grid shows a repeating item's number in its series ("Lecture 3") instead
+      // of the label twice - opening the day carries that same number through, instead of the
+      // occurrence going back to a bare, count-less label the moment you click into the day.
+    }).map((row) => {
+      if ((row.kind !== "occurrence" && row.kind !== "sheet-deadline") || !row.taskId) return row;
+      const dates = (scheduledUnits.get(row.taskId) ?? []).map((unit) => unit.date).sort();
+      const position = dates.indexOf(row.occurrenceDate) + 1;
+      if (dates.length <= 1 || position <= 0) return row;
+      return { ...row, title: `${row.title} ${position}` };
+    });
+    // A to-do with no time set is backlog, not a timeline item - it belongs in the Unscheduled
+    // side panel next to unscheduled CalendarEntry items, not pinned to the top of the grid.
+    const unscheduledTodoRows = generatedRows.filter((row) => row.kind === "todo" && !row.time);
+    const gridGeneratedRows = generatedRows.filter((row) => !(row.kind === "todo" && !row.time));
+    // Both entry kinds share the same absolute-positioned timeline canvas, so overlap columns
+    // must be computed across both together - a CalendarEntry and a generated timetable row at
+    // the same time need to split columns with each other, not just within their own kind.
+    const timelineOverlapLayout = computeOverlapLayout([
+      ...timedEntries.map((entry) => ({
+        id: `entry:${entry.id}`,
+        startMinutes: timeToMinutes(entry.startTime!),
+        endMinutes: entry.endTime ? timeToMinutes(entry.endTime) : timeToMinutes(entry.startTime!) + 60,
+      })),
+      ...gridGeneratedRows.filter((row) => row.time).map((row) => ({
+        id: `row:${row.id}`,
+        startMinutes: timeToMinutes(row.time!),
+        endMinutes: row.endTime ? timeToMinutes(row.endTime) : timeToMinutes(row.time!) + 60,
+      })),
+    ]);
+    const dateRangeSemester = activeSemesters.find(
+      (semester) => semester.startDate && semester.endDate && selectedCalendarDate >= semester.startDate && selectedCalendarDate <= semester.endDate,
+    ) ?? null;
+    const weekNumber = dateRangeSemester ? getSemesterWeekNumber(dateRangeSemester, selectedCalendarDate) : null;
+    const modalSemesterId = dateRangeSemester?.id ?? dayEventOccurrences[0]?.event.semesterId ?? null;
+
+    function openCreateModalAt(hour: number, event: MouseEvent<HTMLDivElement>) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const fraction = clamp((event.clientY - rect.top) / rect.height, 0, 1);
+      const minutes = snapCalendarMinutes(Math.round(fraction * 60));
+      const time = `${String(hour).padStart(2, "0")}:${String(minutes === 60 ? 0 : minutes).padStart(2, "0")}`;
+      setTimetableModalState({ mode: "create", prefill: { date: selectedCalendarDate!, time, semesterId: modalSemesterId } });
+    }
+
+    // The day view's only creation trigger: both "+ Add task" buttons and clicking an empty
+    // timeline slot lead to this same to-do-only modal - subject-bound items can only be
+    // scheduled through the Manage Semesters portal now.
+    function openTodoCreateModal() {
+      setTimetableModalState({ mode: "create", prefill: { date: selectedCalendarDate!, time: "", semesterId: modalSemesterId } });
+    }
+
     return (
       <div className="calendar-drawer-backdrop calendar-day-view-backdrop" onMouseDown={closeCalendarDrawer}>
         <aside className="calendar-day-view" onMouseDown={(event) => event.stopPropagation()} aria-label="Calendar day view">
           <div className="calendar-day-view-head">
             <div>
-              <p className="eyebrow">Day view</p>
+              <p className="eyebrow">Day view{weekNumber ? ` · Week ${weekNumber}` : ""}</p>
               <h3>{new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(selectedDate)}</h3>
-              <p className="section-note">Click + to assign planner tasks or create calendar-only tasks.</p>
+              <p className="section-note">Click + to add a to-do, or click a time slot to add one at that time. Course items are scheduled from Manage Semesters.</p>
             </div>
             <div className="calendar-day-view-actions">
-              <button type="button" className="calendar-primary-button" onClick={openCalendarAddDrawer}>
-                + Add task
+              <button
+                type="button"
+                className={`ghost-button small-button timetable-edit-toggle ${timetableEditMode ? "active" : ""}`}
+                aria-pressed={timetableEditMode}
+                onClick={() => setTimetableEditMode((current) => !current)}
+              >
+                {timetableEditMode ? "Done editing" : "Edit"}
+              </button>
+              <button type="button" className="calendar-primary-button" onClick={openTodoCreateModal}>
+                + Add to-do
               </button>
               <button type="button" className="ghost-button small-button" onClick={closeCalendarDrawer}>
                 Done
@@ -9508,7 +9711,13 @@ function App() {
                 style={{ height: `${calendarTimelineHeight}px` }}
               >
                 {calendarTimelineHours.map((hour) => (
-                  <div key={hour} className="calendar-timeline-hour" style={{ height: `${calendarTimelineHourHeight}px` }}>
+                  <div
+                    key={hour}
+                    className="calendar-timeline-hour calendar-timeline-hour--clickable"
+                    style={{ height: `${calendarTimelineHourHeight}px` }}
+                    onClick={(event) => openCreateModalAt(hour, event)}
+                    title="Click to create a timetable item"
+                  >
                     <div className="calendar-timeline-time">{String(hour).padStart(2, "0")}:00</div>
                   </div>
                 ))}
@@ -9517,7 +9726,8 @@ function App() {
                     <span>{calendarMovePreview.time}</span>
                   </div>
                 ) : null}
-                {timedEntries.map(renderCalendarTimelineEntry)}
+                {timedEntries.map((entry) => renderCalendarTimelineEntry(entry, timelineOverlapLayout.get(`entry:${entry.id}`)))}
+                {gridGeneratedRows.map((row) => renderTimetableTimelineEntry(row, timelineOverlapLayout.get(`row:${row.id}`)))}
               </div>
             </div>
 
@@ -9528,7 +9738,12 @@ function App() {
                   <small>Entries without a time stay here.</small>
                 </div>
                 <div className="calendar-expanded-list drawer-list">
-                  {unscheduledEntries.length ? unscheduledEntries.map(renderCalendarTimelineEntry) : (
+                  {unscheduledEntries.length || unscheduledTodoRows.length ? (
+                    <>
+                      {unscheduledEntries.map((entry) => renderCalendarTimelineEntry(entry))}
+                      {unscheduledTodoRows.map((row) => renderTimetableTimelineEntry(row))}
+                    </>
+                  ) : (
                     <p className="empty-copy compact-empty">No unscheduled calendar tasks.</p>
                   )}
                 </div>
@@ -9560,164 +9775,16 @@ function App() {
               <section className="calendar-drawer-section">
                 <div>
                   <strong>Day controls</strong>
-                  <small>Move through days or add a new calendar block.</small>
+                  <small>Move through days.</small>
                 </div>
                 <div className="calendar-day-side-actions">
                   <button type="button" className="ghost-button" onClick={openNextCalendarDay}>
                     Next day
                   </button>
-                  <button type="button" className="calendar-primary-button" onClick={openCalendarAddDrawer}>
-                    + Add task
-                  </button>
                 </div>
               </section>
             </div>
 
-            {calendarAddOpen ? (
-              <aside className="calendar-drawer calendar-add-drawer" aria-label="Add calendar task">
-                <div className="calendar-drawer-head">
-                  <div>
-                    <p className="eyebrow">Add task</p>
-                    <h3>{calendarAddDraft.noTime ? "Add today's TODO" : "Plan a time block"}</h3>
-                  </div>
-                  <button type="button" className="ghost-button small-button" onClick={closeCalendarAddDrawer}>
-                    Close
-                  </button>
-                </div>
-
-                <div className="calendar-add-form">
-                  <label>
-                    <span>Semester</span>
-                    <select
-                      value={calendarAddDraft.semesterId}
-                      onChange={(event) => setCalendarAddDraft((current) => ({ ...current, semesterId: event.target.value, courseId: "", taskId: "" }))}
-                    >
-                      <option value="">No semester</option>
-                      {state.semesters.map((semester) => (
-                        <option key={semester.id} value={semester.id}>{semester.name}</option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label>
-                    <span>Subject</span>
-                    <select
-                      value={calendarAddDraft.courseId}
-                      onChange={(event) => setCalendarAddDraft((current) => ({ ...current, courseId: event.target.value, taskId: "" }))}
-                    >
-                      <option value="">General</option>
-                      {calendarAddCourses.map((course) => (
-                        <option key={course.id} value={course.id}>{course.name}</option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <div className="calendar-source-toggle" aria-label="Task source">
-                    {(["planner", "new"] as CalendarTaskSource[]).map((source) => (
-                      <button
-                        key={source}
-                        type="button"
-                        className={calendarAddDraft.source === source ? "active" : ""}
-                        onClick={() => setCalendarAddDraft((current) => ({ ...current, source }))}
-                      >
-                        {source === "planner" ? "From planner" : "New task"}
-                      </button>
-                    ))}
-                  </div>
-
-                  {calendarAddDraft.source === "planner" ? (
-                    <label>
-                      <span>Planner task</span>
-                      <select
-                        value={calendarAddDraft.taskId}
-                        onChange={(event) => setCalendarAddDraft((current) => ({ ...current, taskId: event.target.value }))}
-                      >
-                        <option value="">Pick a task</option>
-                        {calendarAddTasks.map((task) => (
-                          <option key={task.id} value={task.id}>{task.title}</option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : (
-                    <label>
-                      <span>New calendar task</span>
-                      <input
-                        value={calendarAddDraft.title}
-                        onChange={(event) => setCalendarAddDraft((current) => ({ ...current, title: event.target.value }))}
-                        placeholder="Watch Youtube video"
-                      />
-                    </label>
-                  )}
-
-                  <div className="calendar-unit-toggle" aria-label="Calendar unit amount">
-                    {([1, 0.5, 0.25] as CalendarUnitAmount[]).map((amount) => (
-                      <button
-                        key={amount}
-                        type="button"
-                        className={calendarAddDraft.unitAmount === amount ? "active" : ""}
-                        onClick={() => setCalendarAddDraft((current) => ({ ...current, unitAmount: amount }))}
-                      >
-                        {amount === 1 ? "1" : amount === 0.5 ? "1/2" : "1/4"}
-                      </button>
-                    ))}
-                  </div>
-
-                  {calendarAddDraft.noTime ? (
-                    <div className="calendar-schedule-panel">
-                      <p className="calendar-time-preview">This task will appear in Unscheduled.</p>
-                      <button type="button" className="ghost-button" onClick={() => setCalendarAddDraft((current) => ({ ...current, noTime: false }))}>
-                        Schedule
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="calendar-time-form-grid">
-                        <label>
-                          <span>Start</span>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-2][0-9]:[0-5][0-9]"
-                            placeholder="09:00"
-                            value={calendarAddDraft.startTime}
-                            onChange={(event) => setCalendarAddDraft((current) => ({ ...current, startTime: event.target.value }))}
-                          />
-                        </label>
-                        <label>
-                          <span>Duration</span>
-                          <select
-                            value={calendarAddDraft.durationMinutes}
-                            onChange={(event) => setCalendarAddDraft((current) => ({ ...current, durationMinutes: event.target.value }))}
-                          >
-                            {calendarDurationOptions.map((minutes) => (
-                              <option key={minutes} value={minutes}>{minutes < 60 ? `${minutes} min` : `${minutes / 60} h`}</option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-
-                      <div className="calendar-schedule-panel scheduled">
-                        <p className="calendar-time-preview">
-                          {calendarAddDraft.startTime} - {addMinutesToTime(calendarAddDraft.startTime, Number(calendarAddDraft.durationMinutes) || 60)}
-                        </p>
-                        <button type="button" className="ghost-button" onClick={() => setCalendarAddDraft((current) => ({ ...current, noTime: true }))}>
-                          Unschedule
-                        </button>
-                </div>
-              </>
-            )}
-          </div>
-
-                <div className="calendar-drawer-actions">
-                  <button type="button" className="ghost-button" onClick={closeCalendarAddDrawer}>
-                    Cancel
-                  </button>
-                  <button type="button" className="calendar-primary-button" onClick={addCalendarEntryFromDrawer}>
-                    Add to calendar
-                  </button>
-                </div>
-              </aside>
-            ) : null}
             {calendarMovePreview ? (() => {
               const previewEntry = selectedEntries.find((entry) => entry.id === calendarMovePreview.entryId);
               return (
@@ -9727,6 +9794,21 @@ function App() {
                 </div>
               );
             })() : null}
+            {timetableDragPreview ? (
+              <div className="calendar-drag-preview" style={{ left: timetableDragPreview.x + 14, top: timetableDragPreview.y + 14 }}>
+                <span>{timetableDragPreview.time}</span>
+              </div>
+            ) : null}
+            {timetableRecurrenceConfirm ? (
+              <div className="calendar-drag-preview timetable-recurrence-confirm">
+                <span>Repeats weekly. Apply to:</span>
+                <div className="timetable-recurrence-confirm-actions">
+                  <button type="button" className="ghost-button small-button" onClick={() => resolveTimetableRecurrenceConfirm("occurrence")}>This occurrence only</button>
+                  <button type="button" className="ghost-button small-button" onClick={() => resolveTimetableRecurrenceConfirm("future")}>All future occurrences</button>
+                  <button type="button" className="ghost-button small-button" onClick={() => setTimetableRecurrenceConfirm(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </aside>
       </div>
@@ -9740,9 +9822,9 @@ function App() {
       <article className="panel-card planner-calendar-card" data-tour="planner-calendar">
         <div className="section-head planner-calendar-head">
           <div>
-            <p className="eyebrow">Calendar</p>
+            <p className="eyebrow">Calendar{calendarWeekNumber ? ` · Week ${calendarWeekNumber}` : ""}</p>
             <h2>{calendarTitle}</h2>
-            <p className="section-note">Plan one task unit at a time. Exams and task deadlines appear automatically.</p>
+            <p className="section-note">Plan one task at a time. Exams and task deadlines appear automatically.</p>
           </div>
           <div className="planner-calendar-controls">
             <div className="calendar-view-toggle" aria-label="Calendar view">
@@ -9777,11 +9859,36 @@ function App() {
           ))}
         </div>
 
+        {(() => {
+          const overdueTodos = getOverdueTodos(state.dailyTodos, localIsoDate(new Date()));
+          if (!overdueTodos.length) return null;
+          return (
+            <div className="planner-overdue-banner" role="status">
+              <span>{overdueTodos.length} overdue to-do{overdueTodos.length === 1 ? "" : "s"}: {overdueTodos.slice(0, 2).map((todo) => todo.title).join(", ")}{overdueTodos.length > 2 ? ` +${overdueTodos.length - 2} more` : ""}</span>
+              <button
+                type="button"
+                className="ghost-button small-button"
+                onClick={() => {
+                  const todayIso = localIsoDate(new Date());
+                  const overdueIds = new Set(overdueTodos.map((todo) => todo.id));
+                  setState((current) => ({
+                    ...current,
+                    dailyTodos: current.dailyTodos.map((todo) => (overdueIds.has(todo.id) ? { ...todo, date: todayIso } : todo)),
+                  }));
+                }}
+              >
+                Move to today
+              </button>
+            </div>
+          );
+        })()}
         <div className={`calendar-grid ${calendarView === "week" ? "week-view" : "month-view"}`}>
           {calendarDays.map((day) => {
             const entries = calendarEntriesByDate.get(day.iso) ?? [];
             const exams = examsByDate.get(day.iso) ?? [];
             const deadlines = deadlinesByDate.get(day.iso) ?? [];
+            const timetableOccurrences = timetableOccurrencesByDate.get(day.iso) ?? [];
+            const todos = dailyTodosByDate.get(day.iso) ?? [];
             const isSelected = selectedCalendarDate === day.iso;
             const isToday = day.iso === calendarToday;
             const fieldNotebookWeek = appStyle === "field-notebook" && calendarView === "week";
@@ -9789,8 +9896,15 @@ function App() {
             const visibleEntryLimit = wabiWeek ? entries.length : fieldNotebookWeek ? 8 : 3;
             const visibleExamLimit = wabiWeek ? exams.length : fieldNotebookWeek ? 4 : 2;
             const visibleDeadlineLimit = wabiWeek ? deadlines.length : fieldNotebookWeek ? 4 : 2;
-            const visibleItemCount = Math.min(entries.length, visibleEntryLimit) + Math.min(exams.length, visibleExamLimit) + Math.min(deadlines.length, visibleDeadlineLimit);
-            const hiddenItemCount = entries.length + exams.length + deadlines.length - visibleItemCount;
+            const visibleTimetableLimit = wabiWeek ? timetableOccurrences.length : fieldNotebookWeek ? 6 : 3;
+            const visibleTodoLimit = wabiWeek ? todos.length : fieldNotebookWeek ? 6 : 3;
+            const visibleItemCount =
+              Math.min(todos.length, visibleTodoLimit) +
+              Math.min(entries.length, visibleEntryLimit) +
+              Math.min(exams.length, visibleExamLimit) +
+              Math.min(deadlines.length, visibleDeadlineLimit) +
+              Math.min(timetableOccurrences.length, visibleTimetableLimit);
+            const hiddenItemCount = todos.length + entries.length + exams.length + deadlines.length + timetableOccurrences.length - visibleItemCount;
 
             return (
               <section
@@ -9808,8 +9922,29 @@ function App() {
               >
                 <div className="calendar-day-top">
                   <span>{day.date.getDate()}</span>
-                  <small>{new Intl.DateTimeFormat("en", { month: "short", year: "numeric" }).format(day.date)}</small>
                 </div>
+
+                {todos.length ? (
+                  <div className="calendar-day-todos" aria-label="To-dos">
+                    {todos.slice(0, visibleTodoLimit).map(({ todo, occurrenceDate }) => {
+                      const isDone = todo.repeatWeekly ? todo.completedOccurrences.includes(occurrenceDate) : todo.completed;
+                      return (
+                        <div key={`${todo.id}:${occurrenceDate}`} className={`calendar-pill todo-pill ${isDone ? "completed" : ""}`}>
+                          <input
+                            className="calendar-task-checkbox"
+                            type="checkbox"
+                            checked={isDone}
+                            onChange={() => toggleDailyTodoOccurrence(todo.id, occurrenceDate)}
+                            onClick={(event) => event.stopPropagation()}
+                          />
+                          <span className="calendar-task-copy">
+                            <span className="calendar-task-title">{todo.title}{todo.repeatWeekly ? <em className="timetable-solved-badge">Weekly</em> : null}</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
 
                 <div className="calendar-day-items">
                   {entries.slice(0, visibleEntryLimit).map((entry) => {
@@ -9825,7 +9960,7 @@ function App() {
                         />
                         <span className="calendar-task-copy">
                           <span className="calendar-task-title">{getCalendarEntryTitle(entry)}</span>
-                          <span className="calendar-task-course">{getCalendarEntryUnitLabel(entry)} · {course?.name ?? "No course"}</span>
+                          <span className="calendar-task-course">{getCalendarEntryUnitLabel(entry)}{course ? ` · ${course.name}` : ""}</span>
                         </span>
                       </div>
                     );
@@ -9843,6 +9978,25 @@ function App() {
                     return (
                       <div key={task.id} className="calendar-pill deadline-pill" style={{ "--pill-color": course?.color ?? "var(--warn)" } as CSSProperties}>
                         <span>Due: {task.title}</span>
+                      </div>
+                    );
+                  })}
+                  {timetableOccurrences.slice(0, visibleTimetableLimit).map((occurrence) => {
+                    const course = courseLookup.get(occurrence.event.courseId);
+                    const unitLabel = taskLookup.get(occurrence.event.taskId)?.title ?? "Item";
+                    // The label once, then its number in the series if it has one ("Lecture 3"), not "Lecture: Lecture".
+                    const dates = (scheduledUnits.get(occurrence.event.taskId) ?? []).map((unit) => unit.date).sort();
+                    const position = dates.indexOf(occurrence.date) + 1;
+                    const pillText = `${occurrence.event.label || unitLabel}${dates.length > 1 && position > 0 ? ` ${position}` : ""}`;
+                    return (
+                      <div
+                        key={`${occurrence.event.id}:${occurrence.date}`}
+                        className={`calendar-pill timetable-pill timetable-pill--${occurrence.event.kind} ${appStyle === "wabi-sabi" && occurrence.event.completedOccurrences.includes(occurrence.date) ? "done" : ""}`}
+                        style={{ "--pill-color": course?.color ?? "var(--accent)" } as CSSProperties}
+                        onClick={appStyle === "wabi-sabi" ? (event) => { event.stopPropagation(); setCalendarItemPopup({ eventId: occurrence.event.id, date: occurrence.date }); } : undefined}
+                      >
+                        <span className="calendar-task-title">{pillText}</span>
+                        {course ? <span className="calendar-task-course">{course.name}</span> : null}
                       </div>
                     );
                   })}
@@ -9874,7 +10028,7 @@ function App() {
 
         <div className="design-mini-metrics">
           <div>
-            <span>Units done</span>
+            <span>Tasks done</span>
             <strong>{formatCompletedUnits(unitsCompletedToday)}</strong>
           </div>
           <div>
@@ -9885,6 +10039,17 @@ function App() {
             <span>Momentum</span>
             <strong>{focusMomentum}</strong>
           </div>
+          {(() => {
+            const todayIso = localIsoDate(new Date());
+            const todayTodos = state.dailyTodos.filter((todo) => expandDailyTodoDates(todo, todayIso, todayIso).length > 0);
+            const doneTodos = todayTodos.filter((todo) => (todo.repeatWeekly ? todo.completedOccurrences.includes(todayIso) : todo.completed)).length;
+            return todayTodos.length ? (
+              <div>
+                <span>To-dos</span>
+                <strong>{doneTodos}/{todayTodos.length}</strong>
+              </div>
+            ) : null;
+          })()}
         </div>
 
         <div className="design-goal-meter">
@@ -10128,25 +10293,31 @@ function App() {
   }
 
   function renderGardenCard(heightClass = "") {
+    const modern = MODERN_GARDEN_VARIANTS.find((variant) => variant.id === gardenVariant);
+    const position = GARDEN_VARIANT_ORDER.indexOf(gardenVariant) + 1;
+    // Courses and milestones from archived semesters no longer grow in the garden.
+    const gardenState = { ...state, courses: activeCourses, tasks: activeTasks };
     return (
       <article className={`panel-card design-card design-garden-card ${heightClass}`} data-tour="dashboard-garden">
         <div className="section-head compact-headline">
           <div>
             <p className="eyebrow">Knowledge Garden</p>
-            <h3>{gardenVariant === "japanese" ? "Japanese Garden of Knowledge" : "Growth from focus"}</h3>
+            <h3>{modern ? `Modern · ${modern.name}` : gardenVariant === "japanese" ? "Japanese Garden of Knowledge" : "Growth from focus"}</h3>
           </div>
           <button
             type="button"
             className="dashboard-todo-button"
-            onClick={() => setGardenVariant((variant) => (variant === "japanese" ? "western" : "japanese"))}
+            onClick={() => setGardenVariant((variant) => GARDEN_VARIANT_ORDER[(GARDEN_VARIANT_ORDER.indexOf(variant) + 1) % GARDEN_VARIANT_ORDER.length])}
           >
-            {gardenVariant === "japanese" ? "switch to Garden" : "switch to Japanese Garden"}
+            next style · {position}/{GARDEN_VARIANT_ORDER.length}
           </button>
         </div>
-        {gardenVariant === "japanese" ? (
-          <JapaneseGardenWidget appState={state} weeklyMinutes={weeklyTotalMinutes} />
+        {modern ? (
+          <ModernGarden variant={modern.id} courses={activeCourses} sessions={state.sessions} weeklyMinutes={weeklyTotalMinutes} streak={getStreakDays(state)} />
+        ) : gardenVariant === "japanese" ? (
+          <JapaneseGardenWidget appState={gardenState} weeklyMinutes={weeklyTotalMinutes} />
         ) : (
-          <KnowledgeGardenWidget appState={state} weeklyMinutes={weeklyTotalMinutes} />
+          <KnowledgeGardenWidget appState={gardenState} weeklyMinutes={weeklyTotalMinutes} />
         )}
       </article>
     );
@@ -10162,10 +10333,30 @@ function App() {
             <h3>Planned today</h3>
             <p className="section-note">From your calendar schedule.</p>
           </div>
-          <button type="button" className="dashboard-todo-button" onClick={openTodayTodoDrawer}>
-            TODO
-          </button>
+          <div className="dpick-head-actions">
+            <button type="button" className="dashboard-todo-button" onClick={() => setWabiPickerOpen(true)}>
+              SOMETHING ELSE
+            </button>
+            <button type="button" className="dashboard-todo-button" onClick={openDashboardTodoModal}>
+              TODO
+            </button>
+          </div>
         </div>
+
+        {(() => {
+          const picked = options?.onSelectEntry ? null : getPickedDashboardRow();
+          return picked ? (
+            <div className="dpick-current">
+              <div>
+                <span>Working on</span>
+                <strong>{picked.title}</strong>
+                <em>{picked.meta}</em>
+              </div>
+              <button type="button" className="ghost-button small-button" onClick={() => startPickedRow(picked)}>Focus</button>
+              <button type="button" className="ghost-button small-button" onClick={() => setWabiOneThingPick(null)} aria-label="Clear">×</button>
+            </div>
+          ) : null;
+        })()}
 
         <div className="design-task-list">
           {entries.length ? (
@@ -10237,8 +10428,8 @@ function App() {
         </div>
 
         <div className="design-course-list">
-          {state.courses.length ? (
-            state.courses.map((course) => {
+          {activeCourses.length ? (
+            activeCourses.map((course) => {
               // Non-null: courseHealthByCourseId/courseTasksByCourseId are built by iterating
               // this same state.courses/state.tasks, so every course.id is guaranteed a key.
               const health = courseHealthByCourseId.get(course.id)!;
@@ -10546,6 +10737,7 @@ function App() {
       ? `${getCalendarEntryUnitLabel(selectedQuietEntry)} · ${selectedQuietCourse?.name ?? "General focus"} · ${selectedQuietTask?.dueDate ? `due ${formatDate(selectedQuietTask.dueDate)}` : formatTimeRange(selectedQuietEntry)}`
       : "Select a task below, or place one in the planner calendar.";
     const quietExams = upcomingExams.slice(0, 4);
+    const quietPick = getPickedDashboardRow();
 
     return (
       <section className="fn-dashboard fn-quiet-dashboard fade-up">
@@ -10553,7 +10745,7 @@ function App() {
           <div>
             <p className="fn-stamp-line">{todayLabel} · semester desk · week {weekNumber}</p>
             <h2>On the desk</h2>
-            <p><strong>{selectedQuietTitle}</strong> · {selectedQuietMeta}</p>
+            <p><strong>{quietPick ? quietPick.title : selectedQuietTitle}</strong> · {quietPick ? quietPick.meta : selectedQuietMeta}</p>
           </div>
           {renderFieldDashboardSwitch()}
         </header>
@@ -10561,8 +10753,8 @@ function App() {
         <div className="fn-quiet-grid">
           <main className="fn-quiet-main">
             <div className="fn-quiet-action-row">
-              {selectedQuietTask ? <button type="button" onClick={() => focusTaskFromDashboard(selectedQuietTask)}>Start focus</button> : null}
-              <button type="button" className="ghost-button" onClick={openTodayTodoDrawer}>Something else</button>
+              {quietPick ? <button type="button" onClick={() => startPickedRow(quietPick)}>Start focus</button> : selectedQuietTask ? <button type="button" onClick={() => focusTaskFromDashboard(selectedQuietTask)}>Start focus</button> : null}
+              <button type="button" className="ghost-button" onClick={() => setWabiPickerOpen(true)}>Something else</button>
               <span>{formatMinutes(todayMinutes)} of {formatMinutes(dailyGoalMinutes)} done today.</span>
             </div>
 
@@ -10572,7 +10764,7 @@ function App() {
               {quietTasks.length ? quietTasks.map((entry) => {
                 const task = taskLookup.get(entry.taskId);
                 const course = task ? courseLookup.get(task.courseId) : entry.adHocCourseId ? courseLookup.get(entry.adHocCourseId) : null;
-                const active = selectedQuietEntry?.id === entry.id;
+                const active = !quietPick && selectedQuietEntry?.id === entry.id;
                 return (
                   <div
                     key={entry.id}
@@ -10589,7 +10781,7 @@ function App() {
                     <button
                       type="button"
                       className="fn-quiet-row-body"
-                      onClick={() => setSelectedQuietDashboardEntryId(entry.id)}
+                      onClick={() => { setWabiOneThingPick(null); setSelectedQuietDashboardEntryId(entry.id); }}
                     >
                       <i />
                       <span>{task?.title ?? entry.adHocTitle ?? "Calendar task"} <em>{course?.name ?? "General"}</em></span>
@@ -10644,6 +10836,7 @@ function App() {
     const selectedFullMeta = selectedFullEntry
       ? `${getCalendarEntryUnitLabel(selectedFullEntry)} · ${selectedFullCourse?.name ?? "General focus"} · ${selectedFullTask?.dueDate ? `due ${formatDate(selectedFullTask.dueDate)}` : formatTimeRange(selectedFullEntry)}`
       : "Select one planned task from the queue.";
+    const fullPick = getPickedDashboardRow();
 
     return (
       <section className="fn-dashboard fn-full-dashboard fade-up">
@@ -10673,15 +10866,15 @@ function App() {
                 <div>
                   <span className="fn-course-code">{selectedFullCourse ? selectedFullCourse.name.slice(0, 4).toUpperCase() : "DESK"}</span>
                   <span className="fn-pressure">Selected block</span>
-                  <h3>{selectedFullTitle}</h3>
-                  <p>{selectedFullMeta}</p>
+                  <h3>{fullPick ? fullPick.title : selectedFullTitle}</h3>
+                  <p>{fullPick ? fullPick.meta : selectedFullMeta}</p>
                 </div>
                 <div className="fn-next-actions">
-                  {selectedFullTask ? <button type="button" onClick={() => focusTaskFromDashboard(selectedFullTask)}>Start focus</button> : null}
-                  <button type="button" className="ghost-button" onClick={openTodayTodoDrawer}>Something else</button>
+                  {fullPick ? <button type="button" onClick={() => startPickedRow(fullPick)}>Start focus</button> : selectedFullTask ? <button type="button" onClick={() => focusTaskFromDashboard(selectedFullTask)}>Start focus</button> : null}
+                  <button type="button" className="ghost-button" onClick={() => setWabiPickerOpen(true)}>Something else</button>
                 </div>
               </article>
-              {renderUrgentTasks(5, { selectedEntryId: selectedFullEntry?.id ?? null, onSelectEntry: (entry) => setSelectedQuietDashboardEntryId(entry.id) })}
+              {renderUrgentTasks(5, { selectedEntryId: selectedFullEntry?.id ?? null, onSelectEntry: (entry) => { setWabiOneThingPick(null); setSelectedQuietDashboardEntryId(entry.id); } })}
             </section>
           </main>
 
@@ -10750,7 +10943,7 @@ function App() {
             }}
           >
             <option value="">Any semester</option>
-            {state.semesters.map((semester) => (
+            {activeSemesters.map((semester) => (
               <option key={semester.id} value={semester.id}>{semester.name}</option>
             ))}
           </select>
@@ -10846,7 +11039,7 @@ function App() {
                   }}
                 >
                   <option value="">Any semester</option>
-                  {state.semesters.map((semester) => (
+                  {activeSemesters.map((semester) => (
                     <option key={semester.id} value={semester.id}>
                       {semester.name}
                     </option>
@@ -10964,7 +11157,7 @@ function App() {
                   data-tour="timer-learned"
                   value={state.timer.learned}
                   onChange={(event) => setState((current) => ({ ...current, timer: { ...current.timer, learned: event.target.value } }))}
-                  placeholder="Short reflection that can go straight into Obsidian later."
+                  placeholder="Short reflection that can go straight into your vault later."
                 />
               </label>
               <label className="field">
@@ -11014,16 +11207,21 @@ function App() {
       : state.timer.mode === "exam" ? state.timer.examMinutes
       : state.timer.studyMinutes;
     const phaseDetail = state.timer.phase === "stopwatch" ? "COUNTING UP" : `${phaseMinutes} MIN`;
-    const todaySessions = state.sessions.filter((session) => isoDate(new Date(session.endedAt)) === calendarToday);
+
+    // "Serie 2" rather than just "Serie": the sheet/lecture/session number is the next unit to do.
+    const unitBased = timerTask && timerTask.totalUnits > 0 && timerTask.subtype !== "Other";
+    const unitNumber = timerTask ? Math.min(timerTask.totalUnits, Math.max(1, Math.floor(timerTask.completedUnits) + 1)) : 0;
+    const timerHeading = timerTask ? (unitBased ? `${timerTask.title} ${unitNumber}` : timerTask.title) : (state.timer.goal.trim() || timerCourse?.name || "General focus");
+    const timerSubline = timerTask ? [timerCourse?.name, unitBased ? `${unitNumber} of ${timerTask.totalUnits}` : null].filter(Boolean).join(" \u00b7 ") : "";
 
     return (
       <section className="wabi-timer-grid fade-up">
         <div className="wabi-timer-head">
           <p className="wabi-eyebrow">TIMER</p>
-          <h2>{timerTask?.title ?? timerCourse?.name ?? "General focus"}</h2>
+          <h2>{timerHeading}</h2>
+          {timerSubline ? <p className="wabi-timer-subline">{timerSubline}</p> : null}
         </div>
 
-        {renderTimerLinkStrip()}
 
         <div className="wabi-timer-body">
           <div className="wabi-timer-clock-col">
@@ -11056,6 +11254,42 @@ function App() {
                 <TimerClockDigits timer={state.timer} formatClock={formatClock} />
               </button>
             )}
+            <div className="wabi-timer-actions">
+              <button type="button" className="wabi-btn-solid" onClick={state.timer.phase === "idle" ? startTimer : pauseTimer}>
+                {state.timer.phase === "idle" ? (state.timer.mode === "endless" ? "START TRACKING" : "START") : state.timer.running ? "PAUSE" : "RESUME"}
+              </button>
+              <button type="button" className="wabi-btn-outline" onClick={resetTimer}>RESET</button>
+              <button type="button" className="wabi-btn-outline" onClick={completeSessionManually} disabled={state.timer.phase === "idle" || state.timer.phase === "break"}>
+                LOG AND CLOSE
+              </button>
+              {state.timer.mode !== "exam" && state.timer.mode !== "endless" ? (
+                <button
+                  type="button"
+                  className="wabi-text-link"
+                  onClick={() => {
+                    if (state.timer.phase === "study" && getTimerMinutes(state.timer) > 0) {
+                      setMessage("Save or reset the current study session before switching to break.");
+                      return;
+                    }
+                    setState((current) => ({
+                      ...current,
+                      timer: {
+                        ...current.timer,
+                        running: false,
+                        phase: current.timer.phase === "break" ? "study" : "break",
+                        remainingSeconds: (current.timer.phase === "break" ? current.timer.studyMinutes : current.timer.breakMinutes) * 60,
+                        startedAt: null,
+                        endsAt: null,
+                        loggedSplitSeconds: 0,
+                        activeSegments: [],
+                      },
+                    }));
+                  }}
+                >
+                  Switch to {state.timer.phase === "break" ? "study" : "break"} →
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <div className="wabi-timer-modes-col">
@@ -11066,7 +11300,7 @@ function App() {
                   key={preset.label}
                   type="button"
                   className={`wabi-timer-mode-card ${state.timer.presetLabel === preset.label ? "active" : ""}`}
-                  disabled={state.timer.running}
+                  disabled={state.timer.phase !== "idle"}
                   onClick={() => applyPreset(preset.label, preset.study, preset.breakMinutes, preset.mode)}
                 >
                   <strong>{preset.label.replace(" 25/5", "").replace(" 52/17", "").replace(" 90/20", "")}</strong>
@@ -11076,7 +11310,7 @@ function App() {
               <button
                 type="button"
                 className={`wabi-timer-mode-card ${isCustomTimerPreset ? "active" : ""}`}
-                disabled={state.timer.running}
+                disabled={state.timer.phase !== "idle"}
                 onClick={() =>
                   setState((current) => ({
                     ...current,
@@ -11109,7 +11343,7 @@ function App() {
                     type="number"
                     min="1"
                     value={state.timer.mode === "exam" ? state.timer.examMinutes : state.timer.studyMinutes}
-                    disabled={state.timer.running}
+                    disabled={state.timer.phase !== "idle"}
                     onChange={(event) => {
                       const next = Math.max(1, Number(event.target.value) || 1);
                       setState((current) => {
@@ -11133,7 +11367,7 @@ function App() {
                     <input
                       type="number"
                       min="0"
-                      disabled={state.timer.running}
+                      disabled={state.timer.phase !== "idle"}
                       value={state.timer.breakMinutes}
                       onChange={(event) =>
                         setState((current) => ({
@@ -11149,65 +11383,13 @@ function App() {
           </div>
         </div>
 
-        <div className="wabi-timer-actions">
-          <button type="button" className="wabi-btn-solid" onClick={state.timer.phase === "idle" ? startTimer : pauseTimer}>
-            {state.timer.phase === "idle" ? (state.timer.mode === "endless" ? "START TRACKING" : "START") : state.timer.running ? "PAUSE" : "RESUME"}
-          </button>
-          <button type="button" className="wabi-btn-outline" onClick={resetTimer}>RESET</button>
-          <button type="button" className="wabi-btn-outline" onClick={completeSessionManually} disabled={state.timer.phase === "idle" || state.timer.phase === "break"}>
-            LOG AND CLOSE
-          </button>
-          {state.timer.mode !== "exam" && state.timer.mode !== "endless" ? (
-            <button
-              type="button"
-              className="wabi-text-link"
-              onClick={() => {
-                if (state.timer.phase === "study" && getTimerMinutes(state.timer) > 0) {
-                  setMessage("Save or reset the current study session before switching to break.");
-                  return;
-                }
-                setState((current) => ({
-                  ...current,
-                  timer: {
-                    ...current.timer,
-                    running: false,
-                    phase: current.timer.phase === "break" ? "study" : "break",
-                    remainingSeconds: (current.timer.phase === "break" ? current.timer.studyMinutes : current.timer.breakMinutes) * 60,
-                    startedAt: null,
-                    endsAt: null,
-                    loggedSplitSeconds: 0,
-                    activeSegments: [],
-                  },
-                }));
-              }}
-            >
-              Switch to {state.timer.phase === "break" ? "study" : "break"} →
-            </button>
-          ) : null}
-        </div>
 
-        {renderTimerAdvancedPanel()}
-
-        <div className="wabi-timer-log">
-          <p className="wabi-eyebrow">LOGGED TODAY</p>
-          {todaySessions.length ? (
-            todaySessions.map((session) => (
-              <div className="wabi-timer-log-row" key={session.id}>
-                <span className="wabi-timer-log-time">{new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(session.endedAt))}</span>
-                <span className="wabi-timer-log-title">{session.goal || session.presetLabel}</span>
-                <span className="wabi-timer-log-mins">{formatMinutes(session.minutes)}</span>
-                <button type="button" className="wabi-timer-log-remove" aria-label={`Delete session ${session.goal || session.presetLabel}`} onClick={() => removeSession(session.id)}>×</button>
-              </div>
-            ))
-          ) : (
-            <p className="wabi-empty">Nothing logged yet today.</p>
-          )}
-        </div>
       </section>
     );
   }
 
   function renderWabiBreakRoom() {
+    // earnedAchievements is memoised at the top of the component - see there for why.
     const breakMM = String(Math.floor(breakTimerRemaining / 60)).padStart(2, "0");
     const breakSS = String(breakTimerRemaining % 60).padStart(2, "0");
     const breakTotalSeconds = Math.max(1, breakTimerMinutes * 60);
@@ -11229,11 +11411,6 @@ function App() {
         : 170 - ((breathStep - 11) / 8) * 110;
     return (
       <section className="wabi-break-grid">
-        <div className="wabi-rest-room-tabs" role="tablist" aria-label="Break room">
-          <button type="button" role="tab" aria-selected={wabiRestRoom === "games"} className={wabiRestRoom === "games" ? "active" : ""} onClick={() => setWabiRestRoom("games")}>GAMES</button>
-          <button type="button" role="tab" aria-selected={wabiRestRoom === "meditation"} className={wabiRestRoom === "meditation" ? "active" : ""} onClick={() => setWabiRestRoom("meditation")}>MEDITATION</button>
-        </div>
-
         {wabiRestRoom === "games" ? <>
           <div className="wabi-rest-card">
             <WabiRestFluidRing progress={breakProgress} running={breakTimerRunning} dark={theme === "dark"} />
@@ -11263,29 +11440,56 @@ function App() {
               <div className="wabi-games-grid" data-tour="break-games">
                 {studyBreakGames.map((game) => {
                   const unlocked = effectiveUnlocked.includes(game.name);
-                  return <div key={game.name} className={`wabi-game-card ${unlocked ? "unlocked" : "locked"} ${celebrating === game.name ? "celebrating" : ""}`} onAnimationEnd={() => setCelebrating(null)}>
-                    <div className="wabi-game-head"><strong>{game.name}</strong>{unlocked ? <span className="wabi-game-tag">READY</span> : null}</div>
-                    <span className="wabi-game-desc">{game.desc}</span>
-                    <div className="wabi-game-foot">
-                      {unlocked ? (
-                        game.name === "Daily Durak" ? <><span className="wabi-game-progress">{(state.durakPuzzle.solvedCount || 0)}/3</span><button type="button" className="wabi-text-link" data-tour="break-game-action" onClick={() => { logPlayedBreak(game.name); setShowDurakPuzzle(true); }}>PLAY</button></>
-                          : game.name === "Wordle" ? <>{wordlePuzzleIsToday && state.wordlePuzzle.completed ? <span className="wabi-game-progress">{state.wordlePuzzle.won ? "Solved" : "Failed"}</span> : <span />}<button type="button" className="wabi-text-link" data-tour="break-game-action" onClick={() => { logPlayedBreak(game.name); setShowWordlePuzzle(true); }}>PLAY</button></>
-                            : game.name === "Travle" ? <>{travlePuzzleIsToday && state.travlePuzzle.completed ? <span className="wabi-game-progress">{state.travlePuzzle.won ? "Solved" : "Failed"}</span> : <span />}<button type="button" className="wabi-text-link" data-tour="break-game-action" onClick={() => { logPlayedBreak(game.name); setShowTravlePuzzle(true); }}>PLAY</button></>
-                              : game.name === "Geodle" ? <>{geodlePuzzleIsToday && state.geodlePuzzle.completed ? <span className="wabi-game-progress">{state.geodlePuzzle.won ? "Solved" : "Failed"}</span> : <span />}<button type="button" className="wabi-text-link" data-tour="break-game-action" onClick={() => { logPlayedBreak(game.name); setShowGeodlePuzzle(true); }}>PLAY</button></>
-                                : game.name === "Flaggle" ? <>{flagglePuzzleIsToday && state.flagglePuzzle.completed ? <span className="wabi-game-progress">{state.flagglePuzzle.won ? "Solved" : "Failed"}</span> : <span />}<button type="button" className="wabi-text-link" data-tour="break-game-action" onClick={() => { logPlayedBreak(game.name); setShowFlagglePuzzle(true); }}>PLAY</button></>
-                                  : <a href={game.url} target="_blank" rel="noreferrer" className="wabi-text-link" data-tour="break-game-action" onClick={() => logPlayedBreak(game.name)}>PLAY</a>
-                      ) : canUnlockMore ? <button type="button" className="wabi-text-link" data-tour="break-game-action" onClick={() => { unlockGame(game.name); setCelebrating(game.name); }}>UNLOCK</button> : <span className="wabi-game-progress">~{minsUntilNext} min</span>}
+                  const playable = unlocked;
+                  const card = (
+                    <div key={game.name} className={`wabi-game-card ${playable ? "unlocked" : "locked"} ${celebrating === game.name ? "celebrating" : ""}`} onAnimationEnd={() => setCelebrating(null)}>
+                      <div className="wabi-game-head"><strong>{game.name}</strong>{playable ? <span className="wabi-game-tag">READY</span> : null}</div>
+                      <span className="wabi-game-desc">{game.desc}</span>
+                      <div className="wabi-game-foot">
+                        {playable ? (
+                          game.name === "Daily Durak" ? <><span className="wabi-game-progress">{(state.durakPuzzle.solvedCount || 0)}/3</span><button type="button" className="wabi-text-link" data-tour="break-game-action" onClick={() => { logPlayedBreak(game.name); setShowDurakPuzzle(true); }}>PLAY</button></>
+                            : game.name === "Wordle" ? <>{wordlePuzzleIsToday && state.wordlePuzzle.completed ? <span className="wabi-game-progress">{state.wordlePuzzle.won ? "Solved" : "Failed"}</span> : <span />}<button type="button" className="wabi-text-link" data-tour="break-game-action" onClick={() => { logPlayedBreak(game.name); setShowWordlePuzzle(true); }}>PLAY</button></>
+                              : game.name === "Travle" ? <>{travlePuzzleIsToday && state.travlePuzzle.completed ? <span className="wabi-game-progress">{state.travlePuzzle.won ? "Solved" : "Failed"}</span> : <span />}<button type="button" className="wabi-text-link" data-tour="break-game-action" onClick={() => { logPlayedBreak(game.name); setShowTravlePuzzle(true); }}>PLAY</button></>
+                                : game.name === "Geodle" ? <>{geodlePuzzleIsToday && state.geodlePuzzle.completed ? <span className="wabi-game-progress">{state.geodlePuzzle.won ? "Solved" : "Failed"}</span> : <span />}<button type="button" className="wabi-text-link" data-tour="break-game-action" onClick={() => { logPlayedBreak(game.name); setShowGeodlePuzzle(true); }}>PLAY</button></>
+                                  : game.name === "Flaggle" ? <>{flagglePuzzleIsToday && state.flagglePuzzle.completed ? <span className="wabi-game-progress">{state.flagglePuzzle.won ? "Solved" : "Failed"}</span> : <span />}<button type="button" className="wabi-text-link" data-tour="break-game-action" onClick={() => { logPlayedBreak(game.name); setShowFlagglePuzzle(true); }}>PLAY</button></>
+                                    : game.name === "Daily Skribbl" ? <><span className="wabi-game-progress">Daily</span><button type="button" className="wabi-text-link" data-tour="break-game-action" onClick={() => { logPlayedBreak(game.name); setShowSkribblPuzzle(true); }}>PLAY</button></>
+                                      : <a href={game.url} target="_blank" rel="noreferrer" className="wabi-text-link" data-tour="break-game-action" onClick={() => logPlayedBreak(game.name)}>PLAY</a>
+                        ) : canUnlockMore ? <button type="button" className="wabi-text-link" data-tour="break-game-action" onClick={() => { unlockGame(game.name); setCelebrating(game.name); }}>UNLOCK</button> : <span className="wabi-game-progress">~{minsUntilNext} min</span>}
+                      </div>
                     </div>
-                  </div>;
+                  );
+                  return card;
                 })}
               </div>
             </div>
           </div>
+          <button
+            type="button"
+            className="wabi-rest-tree"
+            aria-label="Next tree"
+            title="Next tree"
+            onClick={() => setRestTreeIndex((current) => {
+              const next = (current + 1) % restTrees.length;
+              try { localStorage.setItem("study-tracker-rest-tree", String(next)); } catch { /* storage unavailable */ }
+              return next;
+            })}
+          >
+            <img src={`/${restTrees[restTreeIndex].file}`} alt="" draggable={false} style={{ width: restTrees[restTreeIndex].width }} />
+          </button>
           <div className="wabi-pet-rock" data-tour="break-rock" onClick={patRock} role="button" tabIndex={0} onKeyDown={(event) => { if (!event.repeat && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); patRock(); } }}>
             <div className="rock-area"><span className={`rock ${rockBounce ? "bounce" : ""} ${rockCelebrating ? "celebrate" : ""}`} onAnimationEnd={() => setRockCelebrating(false)}>{'\u{1FAA8}'}</span>{rockStage.plant ? <span className="rock-plant">{rockStage.plant}</span> : null}</div>
             <span className="wabi-faint-text">{rockStage.label} · {state.petRockPats} pat{state.petRockPats !== 1 ? "s" : ""}</span>
           </div>
-        </> : (
+        </> : wabiRestRoom === "achievements" ? (
+          <div className="wabi-ach-host">
+            {/* The album is the only achievement display now. The picker that used to sit above it
+                (Plaques / Shelf / Scroll / Book / Wall) is gone along with the strip of space it
+                took, so the book gets the full height of the room. The other displays' code is
+                still in the repo - AchievementBoard, graffiti.ts and InkGallery's ema/shelf/scroll
+                layouts - just not reachable from here. */}
+            <InkGallery variant="book" achievements={earnedAchievements} />
+          </div>
+        ) : (
           <div className="wabi-meditation-room">
             <div className="wabi-breath-orbit" aria-live="polite">
               <span className="wabi-breath-ring" style={{ width: `${breathOn ? breathSize : 60}px`, height: `${breathOn ? breathSize : 60}px` }} />
@@ -11307,17 +11511,25 @@ function App() {
     );
   }
 
+  /** "Serie 2" / "2 of 13": the next unit to do, for tasks that count units. */
+  function getWabiUnitInfo(task: Task) {
+    const unitBased = task.totalUnits > 0 && task.subtype !== "Other";
+    const number = Math.min(task.totalUnits, Math.max(1, Math.floor(task.completedUnits) + 1));
+    return { heading: unitBased ? `${task.title} ${number}` : task.title, position: unitBased ? `${number} of ${task.totalUnits}` : null };
+  }
+
   function renderWabiQuietMode() {
-    const { nextTask, nextEntry, nextTitle, nextMeta } = getFieldDashboardData();
+    const { nextTask, nextTitle, nextMeta } = getFieldDashboardData();
     // The active Timer task is authoritative; a quiet-mode pick is only a fallback.
     const quietTask = timerTask ?? (wabiQuietTaskId ? taskLookup.get(wabiQuietTaskId) ?? null : null);
     const quietEntry = quietTask ? todayCalendarEntries.find((entry) => entry.taskId === quietTask.id) ?? null : null;
     const useQuietTask = quietTask !== null && (quietTask.id === timerTask?.id || !quietEntry?.completed);
     const focusTask = useQuietTask ? quietTask : nextTask;
-    const focusEntry = useQuietTask ? quietEntry : nextEntry;
-    const focusTitle = useQuietTask && quietTask ? quietTask.title : nextTitle;
-    const focusMeta = useQuietTask && quietTask
-      ? `${focusEntry ? getCalendarEntryUnitLabel(focusEntry) + " · " : ""}${courseLookup.get(quietTask.courseId)?.name ?? "General focus"}${quietTask.dueDate ? ` · due ${formatDate(quietTask.dueDate)}` : ""}`
+    // A to-do started from the dashboard has no task behind it, only the session goal: show that.
+    const goalOnly = !timerTask && (state.timer.running || state.timer.phase !== "idle") && state.timer.goal.trim() !== "";
+    const focusTitle = goalOnly ? state.timer.goal.trim() : focusTask ? getWabiUnitInfo(focusTask).heading : nextTitle;
+    const focusMeta = goalOnly ? "To-do" : useQuietTask && quietTask
+      ? [courseLookup.get(quietTask.courseId)?.name ?? "General focus", getWabiUnitInfo(quietTask).position, quietTask.dueDate ? `due ${formatDate(quietTask.dueDate)}` : null].filter(Boolean).join(" \u00b7 ")
       : nextMeta;
     const otherOpenTasks = todayCalendarEntries
       .filter((entry) => !entry.completed && entry.taskId !== focusTask?.id)
@@ -11326,6 +11538,7 @@ function App() {
 
     return (
       <div className="wabi-quiet-overlay">
+        {palette === "sakura" ? <SakuraScatter /> : null}
         <div className="wabi-quiet-inner">
           <span className="wabi-eyebrow">NOW</span>
           <div className="wabi-quiet-task-picker">
@@ -11368,17 +11581,8 @@ function App() {
         role="menu"
         style={{ position: "fixed", top: wabiMenuPosition.top, left: wabiMenuPosition.left, right: "auto" }}
       >
-        <button
-          type="button"
-          role="menuitem"
-          onClick={() => {
-            downloadBackup(state);
-            setMenuOpen(false);
-          }}
-        >
-          Backup JSON
-        </button>
-        <button type="button" role="menuitem" onClick={() => openMenuPanel("theme")}>Change theme</button>
+        <button type="button" role="menuitem" onClick={() => openMenuPanel("theme", "themes")}>Change theme</button>
+        <button type="button" role="menuitem" onClick={() => openMenuPanel("theme", "styles")}>Change style</button>
         <button type="button" role="menuitem" onClick={() => openMenuPanel("personal")}>Personal</button>
         <button type="button" role="menuitem" onClick={() => openMenuPanel("options")}>Options</button>
         <button type="button" role="menuitem" onClick={() => openMenuPanel("settings")}>Settings</button>
@@ -11391,30 +11595,43 @@ function App() {
     const wabiTabLabels: Record<TabKey, string> = { dashboard: "Today", planner: "Plan", timer: "Timer", vault: "Notes", break: "Rest", friends: "Circle" };
     const wabiTabKanji: Record<TabKey, string> = { dashboard: "今日", planner: "計画", timer: "時計", vault: "記録", break: "休み", friends: "仲間" };
     const { goalProgress } = getFieldDashboardData();
+    const wabiHealth = wabiScheduleHealth?.score ?? overallHealth;
+    const wabiHealthLabel = wabiHealth >= 75 ? "Strong" : wabiHealth >= 55 ? "Steady" : wabiHealth >= 35 ? "Watch" : "Critical";
+    const wabiScoreColor = wabiHealth >= 75 ? "var(--ok)" : wabiHealth >= 55 ? "var(--steady)" : wabiHealth >= 35 ? "var(--watch)" : "var(--critical)";
     const visibleTabs = state.settings.visibleTabs ?? defaultState.settings.visibleTabs;
+    // "Current" semester: the active one whose date range contains today, else the first active one.
+    const currentSemester = activeSemesters.find((semester) => semester.startDate && semester.endDate && calendarToday >= semester.startDate && calendarToday <= semester.endDate) ?? activeSemesters[0] ?? null;
+    const currentSemesterCourses = currentSemester ? getSemesterCourses(state, currentSemester.id) : [];
+    function openSemesterManager(semesterId: string | null, courseId: string | null) {
+      // Wabi-Sabi: "Manage semesters" is semester-level only; "Edit semester" / a course is that semester's courses.
+      setManageSemestersMode(semesterId ? "courses" : "semesters");
+      setManageSemestersInitialSemesterId(semesterId);
+      setManageSemestersInitialCourseId(courseId);
+      setManageSemestersOpen(true);
+    }
     return (
       <aside className="wabi-sidebar">
         <div className="wabi-brand">
           <span className="wabi-brand-mark" />
           <span className="wabi-brand-name">Kokoro</span>
         </div>
-        <div className="wabi-health" title="Heuristic score based on task progress, overdue work, and exam pressure.">
+        <div className="wabi-health" title={wabiScheduleHealth ? `On schedule: ${wabiScheduleHealth.onTime} done, ${wabiScheduleHealth.missed} missed of everything dated before today.` : "Heuristic score based on task progress, overdue work, and exam pressure."}>
           <div className="wabi-health-ring">
             <svg width="36" height="36" style={{ transform: "rotate(-90deg)" }}>
               <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--ring-track)" strokeWidth="4" />
               <circle
-                cx="18" cy="18" r="15.5" fill="none" stroke={scoreColor} strokeWidth="4"
+                cx="18" cy="18" r="15.5" fill="none" stroke={wabiScoreColor} strokeWidth="4"
                 strokeDasharray="97.39"
-                strokeDashoffset={97.39 - (overallHealth / 100) * 97.39}
+                strokeDashoffset={97.39 - (wabiHealth / 100) * 97.39}
                 strokeLinecap="round"
                 style={{ transition: "stroke-dashoffset 0.7s cubic-bezier(0.2,0.7,0.3,1)" }}
               />
             </svg>
-            <div className="wabi-health-ring-value">{overallHealth}</div>
+            <div className="wabi-health-ring-value">{wabiHealth}</div>
           </div>
           <div>
             <div className="wabi-eyebrow">Overall</div>
-            <span className="wabi-health-label" style={{ color: scoreColor }}>{healthLabel}</span>
+            <span className="wabi-health-label" style={{ color: wabiScoreColor }}>{wabiHealthLabel}</span>
           </div>
         </div>
 
@@ -11423,7 +11640,8 @@ function App() {
             type="button"
             className="wabi-toolbar-button"
             onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-            title="Toggle theme"
+            disabled={themeLocked}
+            title={themeLocked ? "Sakura is light-only" : "Toggle theme"}
           >
             {theme === "dark" ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -11466,12 +11684,26 @@ function App() {
           {primaryTabs.filter(({ id }) => visibleTabs[id] !== false).map(({ id: key }) => {
             const active = state.activeTab === key && !wabiQuietMode;
             return (
+              <Fragment key={key}>
               <button
-                key={key}
                 type="button"
                 className={`wabi-nav-item ${active ? "active" : ""}`}
                 onClick={() => {
                   setWabiQuietMode(false);
+                  // Only the item you are on keeps its dropdown open.
+                  if (key !== "planner") setWabiPlanMenuOpen(false);
+                  if (key !== "timer") setWabiTimerMenuOpen(false);
+                  if (key !== "vault") setWabiNotesMenuOpen(false);
+                  if (key !== "break") setWabiRestMenuOpen(false);
+                  if (key !== "friends") setWabiCircleMenuOpen(false);
+                  if (key === "planner") {
+                    // Already on Plan: toggle the submenu. Coming from elsewhere: open it.
+                    setWabiPlanMenuOpen(active ? (open) => !open : true);
+                  }
+                  if (key === "timer") setWabiTimerMenuOpen(active ? (open) => !open : true);
+                  if (key === "vault") setWabiNotesMenuOpen(active ? (open) => !open : true);
+                  if (key === "friends") setWabiCircleMenuOpen(active ? (open) => !open : true);
+                  if (key === "break") setWabiRestMenuOpen(active ? (open) => !open : true);
                   setActiveTab(key);
                 }}
               >
@@ -11482,6 +11714,141 @@ function App() {
                 </span>
                 <span className="wabi-nav-sub">{key}</span>
               </button>
+              {key === "break" && wabiRestMenuOpen ? (
+                <div className="wabi-plan-menu wabi-notes-menu">
+                  {([["games", "Games"], ["meditation", "Meditation"], ["achievements", "Achievements"]] as const).map(([room, label]) => (
+                    <button
+                      key={room}
+                      type="button"
+                      className={`wabi-plan-task wabi-notes-menu-item ${state.activeTab === "break" && wabiRestRoom === room ? "selected" : ""}`}
+                      onClick={() => { setWabiQuietMode(false); setWabiRestRoom(room); setActiveTab("break"); }}
+                    >
+                      <span className="wabi-plan-course-name">{label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {key === "friends" && wabiCircleMenuOpen ? (
+                <div className="wabi-plan-menu wabi-notes-menu">
+                  {socialSubtabs.filter((space) => space.id !== "leaderboard" || wabiCircleCompetitive).map((space) => (
+                    <button
+                      key={space.id}
+                      type="button"
+                      className={`wabi-plan-task wabi-notes-menu-item ${state.activeTab === "friends" && socialSubtab === space.id ? "selected" : ""}`}
+                      onClick={() => { setWabiQuietMode(false); setSocialSubtab(space.id); setActiveTab("friends"); }}
+                    >
+                      <span className="wabi-plan-course-name">{space.id === "leaderboard" ? "Standings" : space.label}</span>
+                      {space.id === "friends" && incomingFriendRequestCount > 0 ? <span className="nav-badge" aria-label={`${incomingFriendRequestCount} incoming friend requests`} /> : null}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="wabi-plan-link"
+                    onClick={() => setWabiCircleCompetitive((current) => {
+                      const next = !current;
+                      if (!next && socialSubtab === "leaderboard") setSocialSubtab("feed");
+                      return next;
+                    })}
+                  >
+                    {wabiCircleCompetitive ? "Competitive on \u00b7 turn off" : "Turn on competitive"}
+                  </button>
+                </div>
+              ) : null}
+              {key === "vault" && wabiNotesMenuOpen ? (
+                <div className="wabi-plan-menu wabi-notes-menu">
+                  {([["references", "References"], ["summaries", "Summaries"], ["daily", "Notes"]] as const).map(([space, label]) => (
+                    <button
+                      key={space}
+                      type="button"
+                      className={`wabi-plan-task wabi-notes-menu-item ${state.activeTab === "vault" && wabiVaultSpace === space ? "selected" : ""}`}
+                      onClick={() => { setWabiQuietMode(false); setWabiVaultSpace(space); setActiveTab("vault"); }}
+                    >
+                      <span className="wabi-plan-course-name">{label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {key === "timer" && wabiTimerMenuOpen ? (
+                <div className="wabi-plan-menu">
+                  {currentSemester ? (
+                    <button type="button" className="wabi-plan-semester" aria-expanded={wabiTimerSemesterOpen} onClick={() => setWabiTimerSemesterOpen((open) => !open)}>
+                      <span>{currentSemester.name}</span>
+                      <span className="wabi-plan-chevron" aria-hidden="true">{wabiTimerSemesterOpen ? "\u2212" : "+"}</span>
+                    </button>
+                  ) : (
+                    <span className="wabi-plan-empty">No semester yet.</span>
+                  )}
+                  {currentSemester && wabiTimerSemesterOpen ? (
+                    <>
+                      {currentSemesterCourses.map((course) => {
+                        const courseOpen = wabiTimerOpenCourseIds.includes(course.id);
+                        const courseTasks = getCourseTasks(state, course.id);
+                        return (
+                          <Fragment key={course.id}>
+                            <button
+                              type="button"
+                              className="wabi-plan-course"
+                              style={{ "--wabi-course": course.color } as CSSProperties}
+                              aria-expanded={courseOpen}
+                              title={course.name}
+                              onClick={() => setWabiTimerOpenCourseIds((current) => (current.includes(course.id) ? current.filter((id) => id !== course.id) : [...current, course.id]))}
+                            >
+                              <span className="wabi-plan-course-name">{course.name}</span>
+                              <span className="wabi-plan-chevron" aria-hidden="true">{courseOpen ? "\u2212" : "+"}</span>
+                            </button>
+                            {courseOpen ? (
+                              courseTasks.length ? courseTasks.map((task) => (
+                                <button
+                                  key={task.id}
+                                  type="button"
+                                  className={`wabi-plan-task ${state.timer.taskId === task.id ? "selected" : ""}`}
+                                  title={`Work on ${task.title}`}
+                                  onClick={() => selectTaskForNow(task)}
+                                >
+                                  <span className="wabi-plan-course-name">{task.title}</span>
+                                </button>
+                              )) : <span className="wabi-plan-empty wabi-plan-task-empty">No tasks yet.</span>
+                            ) : null}
+                          </Fragment>
+                        );
+                      })}
+                      {currentSemesterCourses.length === 0 ? <span className="wabi-plan-empty">No courses yet.</span> : null}
+                    </>
+                  ) : null}
+                  <button type="button" className="wabi-plan-link" onClick={() => setSessionLogsOpen(true)}>Session logs</button>
+                </div>
+              ) : null}
+              {key === "planner" && wabiPlanMenuOpen ? (
+                <div className="wabi-plan-menu">
+                  {currentSemester ? (
+                    <button type="button" className="wabi-plan-semester" aria-expanded={wabiSemesterMenuOpen} onClick={() => setWabiSemesterMenuOpen((open) => !open)}>
+                      <span>{currentSemester.name}</span>
+                      <span className="wabi-plan-chevron" aria-hidden="true">{wabiSemesterMenuOpen ? "−" : "+"}</span>
+                    </button>
+                  ) : null}
+                  {currentSemester && wabiSemesterMenuOpen ? (
+                    <>
+                      {currentSemesterCourses.map((course) => (
+                        <button
+                          key={course.id}
+                          type="button"
+                          className="wabi-plan-course"
+                          style={{ "--wabi-course": course.color } as CSSProperties}
+                          onClick={() => openSemesterManager(currentSemester.id, course.id)}
+                          title={course.name}
+                        >
+                          <span className="wabi-plan-course-name">{course.name}</span>
+                        </button>
+                      ))}
+                      {currentSemesterCourses.length === 0 ? <span className="wabi-plan-empty">No courses yet.</span> : null}
+                      <button type="button" className="wabi-plan-link" onClick={() => openSemesterManager(currentSemester.id, null)}>Edit semester</button>
+                    </>
+                  ) : (
+                    <button type="button" className="wabi-plan-link" onClick={() => openSemesterManager(null, null)}>Manage semesters</button>
+                  )}
+                </div>
+              ) : null}
+              </Fragment>
             );
           })}
         </nav>
@@ -11494,6 +11861,12 @@ function App() {
             if (!wabiQuietMode) {
               setWabiQuietTaskId(state.timer.taskId);
               setWabiQuietTaskMenuOpen(false);
+              // Entering quiet mode: fold every open sidebar dropdown away.
+              setWabiPlanMenuOpen(false);
+              setWabiTimerMenuOpen(false);
+              setWabiNotesMenuOpen(false);
+              setWabiRestMenuOpen(false);
+              setWabiCircleMenuOpen(false);
             }
             setWabiQuietMode((current) => !current);
           }}>
@@ -11504,10 +11877,254 @@ function App() {
     );
   }
 
+  /** Open (not ticked off) to-dos and course items on one date, sheets by their due entry only. */
+  function getOpenRowsForDate(date: string) {
+    return buildDailyTimeline(date, {
+      eventOccurrences: activeSemesters.flatMap((semester) => expandTimetableEvents(state.timetableEvents, state.holidays, semester, date, date)),
+      exams: [],
+      calendarEntries: [],
+      dailyTodos: state.dailyTodos,
+    }).filter((row) => row.kind !== "sheet-release" && !row.completed);
+  }
+
+  function describeTimelineRow(row: DailyTimelineRow) {
+    const task = row.taskId ? taskLookup.get(row.taskId) ?? null : null;
+    const course = row.courseId ? courseLookup.get(row.courseId)?.name ?? null : null;
+    return {
+      task,
+      title: task ? getWabiUnitInfo(task).heading : row.title,
+      course: row.kind === "todo" ? "To-do" : course,
+      when: row.kind === "sheet-deadline" ? "due" : row.time ? displayTime(row.time) : "any time",
+    };
+  }
+
+  function getPickedDashboardRow() {
+    if (!wabiOneThingPick) return null;
+    const row = getOpenRowsForDate(wabiOneThingPick.date).find((item) => item.refId === wabiOneThingPick.refId) ?? null;
+    if (!row) return null;
+    const info = describeTimelineRow(row);
+    const dayLabel = row.occurrenceDate === calendarToday ? null : new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric", month: "short" }).format(new Date(`${row.occurrenceDate}T00:00:00`));
+    return { row, task: info.task, title: info.title, meta: [info.course, dayLabel, info.when].filter(Boolean).join(" \u00b7 ") };
+  }
+
+  function startPickedRow(picked: NonNullable<ReturnType<typeof getPickedDashboardRow>>) {
+    if (picked.task) focusTaskFromDashboard(picked.task);
+    else focusTodoInTimer(picked.row.title);
+  }
+
+  /** "Something else" picker for the Modern and Field Notebook dashboards (Wabi-Sabi has its own). */
+  function renderDashboardPickerModal() {
+    if (!wabiPickerOpen) return null;
+    const close = () => setWabiPickerOpen(false);
+    const notebook = appStyle === "field-notebook";
+    const dayFormat = new Intl.DateTimeFormat("en", { weekday: "long", day: "numeric", month: "short" });
+    const openEntries = todayCalendarEntries.filter((entry) => !entry.completed);
+    const todayRows = getOpenRowsForDate(calendarToday);
+    const ahead: { date: string; rows: DailyTimelineRow[] }[] = [];
+    for (let offset = 1; offset <= 14; offset += 1) {
+      const date = localIsoDate(addCalendarDays(new Date(`${calendarToday}T00:00:00`), offset));
+      const rows = getOpenRowsForDate(date);
+      if (rows.length) ahead.push({ date, rows });
+    }
+    const chooseRow = (row: DailyTimelineRow) => { setWabiOneThingPick({ refId: row.refId, date: row.occurrenceDate }); setSelectedTaskId(null); close(); };
+    const renderRow = (row: DailyTimelineRow) => {
+      const info = describeTimelineRow(row);
+      return (
+        <button key={`${row.id}:${row.occurrenceDate}`} type="button" className="dpick-item" onClick={() => chooseRow(row)}>
+          <span>{info.title}</span>
+          <em>{[info.course, info.when].filter(Boolean).join(" \u00b7 ")}</em>
+        </button>
+      );
+    };
+    return createPortal(
+      <div className={`dpick-backdrop ${notebook ? "dpick-notebook" : "dpick-modern"}`} onMouseDown={close}>
+        <section className="dpick" role="dialog" aria-modal="true" aria-label="Choose what to work on" onMouseDown={(event) => event.stopPropagation()}>
+          <header className="dpick-head">
+            <div>
+              <p className="eyebrow">{notebook ? "Something else" : "Switch focus"}</p>
+              <h2>Choose what to work on</h2>
+            </div>
+            <button type="button" className="ghost-button small-button" onClick={close}>Close</button>
+          </header>
+          <div className="dpick-body">
+            <p className="dpick-label">Planned today</p>
+            {openEntries.length || todayRows.length ? (
+              <>
+                {openEntries.map((entry) => {
+                  const task = taskLookup.get(entry.taskId);
+                  const course = task ? courseLookup.get(task.courseId)?.name : entry.adHocCourseId ? courseLookup.get(entry.adHocCourseId)?.name : null;
+                  return (
+                    <button key={entry.id} type="button" className="dpick-item" onClick={() => { setWabiOneThingPick(null); setSelectedQuietDashboardEntryId(entry.id); setSelectedTaskId(entry.taskId); close(); }}>
+                      <span>{task?.title ?? entry.adHocTitle ?? "Study block"}</span>
+                      <em>{[course, formatTimeRange(entry)].filter(Boolean).join(" \u00b7 ")}</em>
+                    </button>
+                  );
+                })}
+                {todayRows.map(renderRow)}
+              </>
+            ) : <p className="dpick-empty">Nothing else open today.</p>}
+            {ahead.length ? (
+              <>
+                <p className="dpick-label dpick-ahead">Work ahead</p>
+                {ahead.map((group) => (
+                  <div key={group.date}>
+                    <p className="dpick-day">{dayFormat.format(new Date(`${group.date}T00:00:00`))}</p>
+                    {group.rows.map(renderRow)}
+                  </div>
+                ))}
+              </>
+            ) : null}
+          </div>
+          <footer className="dpick-foot">
+            <button type="button" className="dashboard-todo-button" onClick={() => { close(); openDashboardTodoModal(); }}>+ New to-do or course task</button>
+          </footer>
+        </section>
+      </div>,
+      document.body,
+    );
+  }
+
+  function renderWabiPickerModal() {
+    if (!wabiPickerOpen) return null;
+    const close = () => setWabiPickerOpen(false);
+    const dayFormat = new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric", month: "short" });
+    const openEntries = todayCalendarEntries.filter((entry) => !entry.completed);
+    const todayRows = getOpenRowsForDate(calendarToday);
+    const ahead: { date: string; rows: DailyTimelineRow[] }[] = [];
+    for (let offset = 1; offset <= 14; offset += 1) {
+      const date = localIsoDate(addCalendarDays(new Date(`${calendarToday}T00:00:00`), offset));
+      const rows = getOpenRowsForDate(date);
+      if (rows.length) ahead.push({ date, rows });
+    }
+    const chooseRow = (row: DailyTimelineRow) => { setWabiOneThingPick({ refId: row.refId, date: row.occurrenceDate }); setSelectedTaskId(null); close(); };
+    const renderRow = (row: DailyTimelineRow) => {
+      const info = describeTimelineRow(row);
+      return (
+        <button key={`${row.id}:${row.occurrenceDate}`} type="button" className="wabi-picker-item" onClick={() => chooseRow(row)}>
+          <span>{info.title}</span>
+          <em>{[info.course, info.when].filter(Boolean).join(" \u00b7 ")}</em>
+        </button>
+      );
+    };
+    return createPortal(
+      <div className="wabi-logs-backdrop" onMouseDown={close}>
+        <section className="wabi-logs wabi-picker" role="dialog" aria-modal="true" aria-label="Choose what to work on" onMouseDown={(event) => event.stopPropagation()}>
+          <header className="wabi-logs-head">
+            <div>
+              <p className="wabi-eyebrow">SOMETHING ELSE</p>
+              <h2>Choose what to work on</h2>
+            </div>
+            <button type="button" className="ghost-button small-button" onClick={close}>Close</button>
+          </header>
+          <div className="wabi-logs-body">
+            <p className="wabi-logs-day-label">Planned today</p>
+            {openEntries.length || todayRows.length ? (
+              <>
+                {openEntries.map((entry) => {
+                  const task = taskLookup.get(entry.taskId);
+                  const course = task ? courseLookup.get(task.courseId)?.name : entry.adHocCourseId ? courseLookup.get(entry.adHocCourseId)?.name : null;
+                  return (
+                    <button key={entry.id} type="button" className="wabi-picker-item" onClick={() => { setWabiOneThingPick(null); setSelectedTaskId(entry.taskId); close(); }}>
+                      <span>{task?.title ?? entry.adHocTitle ?? "Study block"}</span>
+                      <em>{[course, formatTimeRange(entry)].filter(Boolean).join(" \u00b7 ")}</em>
+                    </button>
+                  );
+                })}
+                {todayRows.map(renderRow)}
+              </>
+            ) : <p className="wabi-empty">Nothing else open today.</p>}
+
+            {ahead.length ? (
+              <>
+                <p className="wabi-logs-day-label wabi-picker-ahead">Work ahead</p>
+                {ahead.map((group) => (
+                  <div key={group.date}>
+                    <p className="wabi-picker-day">{dayFormat.format(new Date(`${group.date}T00:00:00`))}</p>
+                    {group.rows.map(renderRow)}
+                  </div>
+                ))}
+              </>
+            ) : null}
+          </div>
+          <footer className="wabi-picker-foot">
+            <button type="button" className="wabi-text-link" onClick={() => { close(); openDashboardTodoModal(); }}>+ NEW TO-DO OR COURSE TASK</button>
+          </footer>
+        </section>
+      </div>,
+      document.body,
+    );
+  }
+
   function renderWabiSabiDashboard() {
     const { todayLabel, dailyGoalMinutes, nextEntry, nextTask, nextTitle, nextMeta, queueCount } = getFieldDashboardData();
     const minutesToGoal = Math.max(0, dailyGoalMinutes - todayMinutes);
-    const remainingLabel = queueCount > 0 ? `${queueCount} open · ${minutesToGoal > 0 ? `${formatMinutes(minutesToGoal)} to today's goal` : "goal met"}` : "goal met";
+    // "Goal met" only when the daily goal is actually reached, not merely when nothing is queued.
+    const remainingLabel = `${queueCount > 0 ? `${queueCount} open · ` : ""}${minutesToGoal > 0 ? `${formatMinutes(minutesToGoal)} to today's goal` : "goal met"}`;
+
+    // Coming-up deadlines: every unsolved sheet due date in the next ~two months, nearest first.
+    // A sheet counts as "released" once its release for that week has passed.
+    const horizonEnd = localIsoDate(addCalendarDays(new Date(`${calendarToday}T00:00:00`), 60));
+    const horizonStart = localIsoDate(addCalendarDays(new Date(`${calendarToday}T00:00:00`), -14));
+    const horizonOccurrences = activeSemesters.flatMap((semester) => expandTimetableEvents(state.timetableEvents, state.holidays, semester, horizonStart, horizonEnd));
+    const comingDeadlines = horizonOccurrences
+      .filter((occurrence) => occurrence.event.kind === "sheet-deadline" && occurrence.date >= calendarToday && !occurrence.event.completedOccurrences.includes(occurrence.date))
+      .map((occurrence) => {
+        // A sheet's release belongs to its due date by the gap between the two series' first dates
+        // (released the 17th, due the 24th => 7 days). Matching "the latest release before the due
+        // date" is wrong for weekly series, where a new copy is released on every due date.
+        const releaseEvent = state.timetableEvents.find((item) => item.kind === "sheet-release" && item.taskId === occurrence.event.taskId) ?? null;
+        const gapDays = releaseEvent ? Math.round((new Date(`${occurrence.event.date}T00:00:00`).getTime() - new Date(`${releaseEvent.date}T00:00:00`).getTime()) / 86400000) : 0;
+        const releaseDate = releaseEvent ? localIsoDate(addCalendarDays(new Date(`${occurrence.date}T00:00:00`), -gapDays)) : null;
+        const daysLeft = Math.round((new Date(`${occurrence.date}T00:00:00`).getTime() - new Date(`${calendarToday}T00:00:00`).getTime()) / 86400000);
+        return { occurrence, task: taskLookup.get(occurrence.event.taskId) ?? null, releaseDate, daysLeft };
+      })
+      // Only sheets that are already out (no release scheduled counts as out).
+      .filter((item) => item.releaseDate === null || item.releaseDate <= calendarToday)
+      .sort((a, b) => (a.occurrence.date + (a.occurrence.event.time || "99:99")).localeCompare(b.occurrence.date + (b.occurrence.event.time || "99:99")))
+      .slice(0, 6);
+
+    // Today's to-dos and course items (lectures etc.) placed on the calendar. Sheets show under
+    // COMING UP instead, so they are left out here.
+    const todayRows = buildDailyTimeline(calendarToday, {
+      eventOccurrences: activeSemesters.flatMap((semester) => expandTimetableEvents(state.timetableEvents, state.holidays, semester, calendarToday, calendarToday)),
+      exams: [],
+      calendarEntries: [],
+      dailyTodos: state.dailyTodos,
+    }).filter((row) => row.kind !== "sheet-release" && row.kind !== "sheet-deadline");
+
+    // ONE THING: today's study block if there is one, otherwise the first open item planned today
+    // (a to-do or lecture), otherwise the nearest released sheet.
+    let oneTitle = nextTitle;
+    let oneMeta = nextMeta;
+    let oneTask: Task | null = nextTask;
+    let oneRow: DailyTimelineRow | null = null;
+    const pickedRow = wabiOneThingPick
+      ? getOpenRowsForDate(wabiOneThingPick.date).find((row) => row.refId === wabiOneThingPick.refId) ?? null
+      : null;
+    if (pickedRow) {
+      const info = describeTimelineRow(pickedRow);
+      oneRow = pickedRow;
+      oneTask = info.task;
+      oneTitle = info.title;
+      const dayLabel = pickedRow.occurrenceDate === calendarToday ? null : new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric", month: "short" }).format(new Date(`${pickedRow.occurrenceDate}T00:00:00`));
+      oneMeta = [info.course, dayLabel, info.when].filter(Boolean).join(" \u00b7 ");
+    } else if (!nextEntry) {
+      const openRow = todayRows.find((row) => !row.completed) ?? null;
+      const rowEvent = openRow && openRow.kind !== "todo" ? state.timetableEvents.find((item) => item.id === openRow.refId) ?? null : null;
+      const rowTask = rowEvent ? taskLookup.get(rowEvent.taskId) ?? null : null;
+      if (openRow) {
+        oneRow = openRow;
+        oneTask = rowTask;
+        oneTitle = rowTask ? getWabiUnitInfo(rowTask).heading : openRow.title;
+        const rowCourse = openRow.courseId ? courseLookup.get(openRow.courseId)?.name : null;
+        oneMeta = [openRow.kind === "todo" ? "To-do" : rowCourse, openRow.time ? displayTime(openRow.time) : "any time today"].filter(Boolean).join(" \u00b7 ");
+      } else if (comingDeadlines[0]) {
+        const next = comingDeadlines[0];
+        oneTask = next.task;
+        oneTitle = next.task ? getWabiUnitInfo(next.task).heading : next.occurrence.event.label;
+        oneMeta = [courseLookup.get(next.occurrence.event.courseId)?.name, `due ${formatDate(next.occurrence.date)}`].filter(Boolean).join(" \u00b7 ");
+      }
+    }
 
     return (
       <section className="wabi-dashboard fade-up">
@@ -11521,25 +12138,92 @@ function App() {
 
         <div className="wabi-one-thing">
           <p className="wabi-eyebrow accent">ONE THING</p>
-          <h3>{nextTitle}</h3>
-          <p className="wabi-meta">{nextMeta}</p>
+          <h3>{oneTitle}</h3>
+          <p className="wabi-meta">{oneMeta}</p>
           <div className="wabi-one-thing-actions">
-            {nextTask ? (
-              <button type="button" className="wabi-btn-solid" onClick={() => focusTaskFromDashboard(nextTask)}>START</button>
+            {oneTask ? (
+              <button type="button" className="wabi-btn-solid" onClick={() => focusTaskFromDashboard(oneTask)}>START</button>
+            ) : oneRow?.kind === "todo" ? (
+              <button type="button" className="wabi-btn-solid" onClick={() => focusTodoInTimer(oneRow.title)}>START</button>
             ) : null}
-            {nextEntry ? (
+            {oneRow ? (
+              <button type="button" className="wabi-btn-outline" onClick={() => toggleGeneratedRowDone(oneRow)}>MARK DONE</button>
+            ) : nextEntry ? (
               <button type="button" className="wabi-btn-outline" onClick={() => toggleCalendarEntry(nextEntry.id)}>MARK DONE</button>
             ) : null}
-            <button type="button" className="wabi-text-link" onClick={openTodayTodoDrawer}>SOMETHING ELSE</button>
+            <button type="button" className="wabi-text-link" onClick={() => setWabiPickerOpen(true)}>SOMETHING ELSE</button>
           </div>
         </div>
+
+        {comingDeadlines.length ? (
+          <>
+            <div className="wabi-task-list-head">
+              <span className="wabi-eyebrow">COMING UP</span>
+            </div>
+            <div className="wabi-deadline-list">
+              {comingDeadlines.map(({ occurrence, task, releaseDate, daysLeft }, index) => {
+                const course = courseLookup.get(occurrence.event.courseId);
+                const dueLabel = daysLeft === 0 ? "today" : daysLeft === 1 ? "tomorrow" : `in ${daysLeft} days`;
+                return (
+                  <div className={`wabi-deadline-row ${index === 0 ? "next" : ""}`} key={`${occurrence.event.id}:${occurrence.date}`}>
+                    <button
+                      type="button"
+                      className="wabi-task-dot"
+                      onClick={() => toggleGeneratedRowDone({ kind: "sheet-deadline", refId: occurrence.event.id, occurrenceDate: occurrence.date } as DailyTimelineRow)}
+                      aria-label="Mark solved"
+                      title="Mark solved"
+                    />
+                    <div className="wabi-deadline-main">
+                      <button type="button" className="wabi-task-title" onClick={() => (task ? selectTaskForNow(task) : openCalendarDrawer(occurrence.date))}>
+                        {occurrence.event.label}
+                      </button>
+                      <span className="wabi-deadline-status">
+                        {index === 0 ? <em className="wabi-deadline-next">NEXT</em> : null}
+                        {course?.name ?? "General"}{releaseDate ? ` · released ${formatDate(releaseDate)}` : ""}
+                      </span>
+                    </div>
+                    <span className="wabi-task-due">
+                      {formatDate(occurrence.date)}{occurrence.event.time ? ` · ${displayTime(occurrence.event.time)}` : ""}
+                      <small>{dueLabel}</small>
+                    </span>
+                    {task ? <button type="button" className="wabi-btn-outline wabi-deadline-focus" onClick={() => focusTaskFromDashboard(task)}>FOCUS</button> : <span />}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
 
         <div className="wabi-task-list-head">
           <span className="wabi-eyebrow">PLANNED TODAY</span>
         </div>
         <div className="wabi-task-list" data-tour="dashboard-urgent">
-          {todayCalendarEntries.length ? (
-            todayCalendarEntries.map((entry) => {
+          {todayCalendarEntries.length || todayRows.length ? (
+            <>
+            {todayRows.map((row) => {
+              const rowCourse = row.courseId ? courseLookup.get(row.courseId) : null;
+              return (
+                <div className="wabi-task-row" key={row.id}>
+                  <button
+                    type="button"
+                    className={`wabi-task-dot ${row.completed ? "done" : ""}`}
+                    onClick={() => toggleGeneratedRowDone(row)}
+                    aria-label={row.completed ? "Mark not done" : "Mark done"}
+                  />
+                  <button
+                    type="button"
+                    className={`wabi-task-title ${row.completed ? "done" : ""}`}
+                    onClick={() => openCalendarDrawer(calendarToday)}
+                  >
+                    {row.title}
+                  </button>
+                  <span className="wabi-task-subject">{row.kind === "todo" ? "To-do" : (rowCourse?.name ?? "General")}</span>
+                  <span className="wabi-task-amount" />
+                  <span className="wabi-task-due">{row.time ? `${displayTime(row.time)}${row.endTime ? `–${displayTime(row.endTime)}` : ""}` : "any time"}</span>
+                </div>
+              );
+            })}
+            {todayCalendarEntries.map((entry) => {
               const task = taskLookup.get(entry.taskId);
               const course = task ? courseLookup.get(task.courseId) : entry.adHocCourseId ? courseLookup.get(entry.adHocCourseId) : null;
               const title = task?.title ?? entry.adHocTitle ?? "Calendar task";
@@ -11563,7 +12247,8 @@ function App() {
                   <span className="wabi-task-due">{task?.dueDate ? formatDate(task.dueDate) : formatTimeRange(entry)}</span>
                 </div>
               );
-            })
+            })}
+            </>
           ) : (
             <p className="wabi-empty">Nothing planned today. Add tasks from the planner calendar.</p>
           )}
@@ -11573,53 +12258,6 @@ function App() {
     );
   }
 
-  function renderWabiVaultCourseShelf(space: "references" | "summaries") {
-    const selectedCourseId = space === "references" ? referenceCourseId : summaryCourseId;
-    return (
-      <aside className="wabi-vault-shelf" aria-label={`${space} by semester`}>
-        {state.semesters.map((semester) => {
-          const courses = getSemesterCourses(state, semester.id);
-          const expanded = expandedSemesterIds.includes(semester.id);
-          return (
-            <div key={semester.id} className={`wabi-vault-semester ${expanded ? "open" : ""}`}>
-              <button type="button" className="wabi-vault-semester-toggle" onClick={() => toggleSemester(semester.id)}>
-                <span>{semester.name}</span>
-                <small>{courses.length} courses</small>
-              </button>
-              {expanded ? (
-                <div className="wabi-vault-course-list">
-                  {courses.map((course) => (
-                    <button
-                      key={course.id}
-                      type="button"
-                      className={course.id === selectedCourseId ? "active" : ""}
-                      onClick={() => {
-                        if (space === "references") {
-                          if (referenceDirty) {
-                            setMessage("Save the current reference note before switching courses.");
-                            return;
-                          }
-                          setReferenceSemesterId(semester.id);
-                          setReferenceCourseId(course.id);
-                          setReferenceEditing(false);
-                        } else {
-                          setSummarySemesterId(semester.id);
-                          setSummaryCourseId(course.id);
-                          setSelectedSummaryPath(null);
-                        }
-                      }}
-                    >
-                      <span style={{ background: course.color }} />{course.name}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </aside>
-    );
-  }
 
   function renderFieldPlannerTaskModal() {
     if (!fieldPlannerTaskMode) return null;
@@ -11630,17 +12268,22 @@ function App() {
 
     const modalCourse = creating ? courseLookup.get(taskDraft.courseId) ?? null : task ? courseLookup.get(task.courseId) ?? null : null;
     const modalSemester = creating ? semesterLookup.get(taskDraft.semesterId) ?? null : task ? semesterLookup.get(task.semesterId) ?? null : null;
-    const calc = task ? calculateDailyWork(task) : null;
+    const calc = task ? taskDailyWork(task) : null;
     const progress = task ? getTaskProgress(task) : 0;
     const editing = fieldPlannerTaskMode === "edit" && task;
     const closeModal = () => {
       setFieldPlannerTaskMode(null);
       setFieldPlannerTaskId(null);
       setEditingTaskId(null);
+      setTaskScheduleOpen(false);
     };
+    const wabiScheduling = appStyle === "wabi-sabi" && Boolean(editing && task && modalCourse);
     const renderTaskForm = () => {
       const draft = creating ? taskDraft : taskEditDraft;
       const setDraft = creating ? setTaskDraft : setTaskEditDraft;
+      const hideDueDate = subtypeHidesDueDate(draft.subtype);
+      const ScheduleWrap = appStyle === "wabi-sabi" ? "details" : "div";
+      const showRestOfForm = !creating || taskSubtypeChosen;
       const submit = (event: FormEvent<HTMLFormElement>) => {
         if (creating) {
           addTask(event);
@@ -11649,32 +12292,50 @@ function App() {
           setFieldPlannerTaskMode("view");
         }
       };
+      function chooseSubtype(subtype: TaskSubtype) {
+        setDraft((current) => {
+          const shouldRelabel = !current.unitLabel.trim() || current.unitLabel === subtypeToUnitLabel(current.subtype);
+          return { ...current, subtype, unitLabel: shouldRelabel ? subtypeToUnitLabel(subtype) : current.unitLabel };
+        });
+        if (creating) setTaskSubtypeChosen(true);
+      }
 
       return (
         <form className="fn-task-form" onSubmit={submit}>
+          <div className="fn-task-form-subtype-picker" role="radiogroup" aria-label="Subtype">
+            {(["Lecture", "Session", "Sheet", "Other"] as TaskSubtype[]).map((subtype) => (
+              <button
+                key={subtype}
+                type="button"
+                role="radio"
+                aria-checked={draft.subtype === subtype}
+                className={draft.subtype === subtype && (showRestOfForm || !creating) ? "active" : ""}
+                onClick={() => chooseSubtype(subtype)}
+              >
+                {taskSubtypeDisplayLabel[subtype]}
+              </button>
+            ))}
+          </div>
+
+          {!showRestOfForm ? (
+            <p className="section-note">Pick a subtype to continue.</p>
+          ) : (
+          <>
           <div className="fn-task-form-grid">
             <label className="field fn-task-form-title">
               <span>Task title</span>
               <input value={draft.title} onChange={(event) => {
+                // The subtype picker above is now the single source of truth for the default
+                // progress label (see chooseSubtype) - typing a title no longer overwrites it.
                 const title = event.target.value;
-                setDraft((current) => {
-                  const shouldInfer = !current.unitLabel.trim() || current.unitLabel === "Unit" || current.unitLabel === inferUnitLabel(current.title);
-                  return { ...current, title, unitLabel: shouldInfer ? inferUnitLabel(title) : current.unitLabel };
-                });
+                setDraft((current) => ({ ...current, title }));
               }} placeholder="Lecture, exercise sheet, reading..." autoFocus />
             </label>
             <label className="field">
-              <span>Unit label</span>
+              <span>Progress label</span>
               <input value={draft.unitLabel} onChange={(event) => setDraft((current) => ({ ...current, unitLabel: event.target.value }))} />
             </label>
-            <label className="field">
-              <span>Total units</span>
-              <input type="number" min="1" value={draft.totalUnits} onChange={(event) => setDraft((current) => ({ ...current, totalUnits: event.target.value }))} />
-            </label>
-            <label className="field">
-              <span>Done</span>
-              <input type="number" min="0" value={draft.completedUnits} onChange={(event) => setDraft((current) => ({ ...current, completedUnits: event.target.value }))} />
-            </label>
+            <p className="section-note fn-task-form-notice">Totals are counted automatically from the items scheduled on the calendar.</p>
             <label className="field">
               <span>Priority</span>
               <select value={draft.priority} onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value as Priority }))}>
@@ -11683,27 +12344,92 @@ function App() {
                 <option value="low">Low</option>
               </select>
             </label>
-            <label className="field">
-              <span>Due date</span>
-              <input type="date" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} onKeyDown={confirmTaskDueDate} />
-            </label>
+            {wabiScheduling ? (
+              <div className="field">
+                <span>Schedule</span>
+                <button type="button" className="ghost-button" aria-expanded={taskScheduleOpen} onClick={() => setTaskScheduleOpen((open) => !open)}>
+                  {taskScheduleOpen ? "Hide schedule" : "Schedule"}
+                </button>
+              </div>
+            ) : null}
+            {hideDueDate ? null : (
+              <label className="field">
+                <span>Due date (optional)</span>
+                <input type="date" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} onKeyDown={confirmTaskDueDate} />
+              </label>
+            )}
             <label className="field fn-task-form-notes">
               <span>Notes</span>
               <textarea value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Definition of done, rubric hints, professor notes..." />
             </label>
           </div>
+
+          {wabiScheduling && task && modalCourse ? (
+            <TaskScheduleEditor
+              key={task.id}
+              state={state}
+              setState={setState}
+              setMessage={setMessage}
+              onDeleteWithUndo={performDelete}
+              task={task}
+              course={modalCourse}
+              open={taskScheduleOpen}
+              onClose={() => setTaskScheduleOpen(false)}
+            />
+          ) : null}
+
+          {creating ? (
+            <ScheduleWrap className="fn-task-form-schedule">
+              {appStyle === "wabi-sabi" ? <summary>Schedule first occurrence (optional)</summary> : <p className="section-note">Schedule its first occurrence now (optional) - or leave blank and schedule later from Manage Semesters.</p>}
+              {draft.subtype === "Sheet" ? (
+                <div className="manage-semesters-schedule-row manage-semesters-sheet-schedule">
+                  <div className="manage-semesters-sheet-schedule-section">
+                    <span className="section-note">Release</span>
+                    <input type="date" value={draft.scheduleReleaseDate} onChange={(event) => setDraft((current) => ({ ...current, scheduleReleaseDate: event.target.value }))} />
+                    <TimeSpanFields time={draft.scheduleReleaseTime} duration={draft.scheduleReleaseDuration} hideDuration={appStyle === "wabi-sabi"} onTimeChange={(scheduleReleaseTime) => setDraft((current) => ({ ...current, scheduleReleaseTime }))} onDurationChange={(scheduleReleaseDuration) => setDraft((current) => ({ ...current, scheduleReleaseDuration }))} />
+                    <label className="timetable-modal-toggle compact">
+                      <input type="checkbox" checked={draft.scheduleReleaseWeekly} onChange={(event) => setDraft((current) => ({ ...current, scheduleReleaseWeekly: event.target.checked }))} />
+                      <span>Weekly</span>
+                    </label>
+                  </div>
+                  <div className="manage-semesters-sheet-schedule-section">
+                    <span className="section-note">Due</span>
+                    <input type="date" value={draft.scheduleDueDate} onChange={(event) => setDraft((current) => ({ ...current, scheduleDueDate: event.target.value }))} />
+                    <TimeSpanFields time={draft.scheduleDueTime} duration={draft.scheduleDueDuration} hideDuration={appStyle === "wabi-sabi"} onTimeChange={(scheduleDueTime) => setDraft((current) => ({ ...current, scheduleDueTime }))} onDurationChange={(scheduleDueDuration) => setDraft((current) => ({ ...current, scheduleDueDuration }))} />
+                    <label className="timetable-modal-toggle compact">
+                      <input type="checkbox" checked={draft.scheduleDueWeekly} onChange={(event) => setDraft((current) => ({ ...current, scheduleDueWeekly: event.target.checked }))} />
+                      <span>Weekly</span>
+                    </label>
+                  </div>
+                  <input value={draft.scheduleUrl} onChange={(event) => setDraft((current) => ({ ...current, scheduleUrl: event.target.value }))} placeholder="https://... (optional, shared by both)" />
+                </div>
+              ) : (
+                <div className="manage-semesters-schedule-row">
+                  <input type="date" value={draft.scheduleDate} onChange={(event) => setDraft((current) => ({ ...current, scheduleDate: event.target.value }))} />
+                  <TimeSpanFields time={draft.scheduleTime} duration={draft.scheduleDuration} onTimeChange={(scheduleTime) => setDraft((current) => ({ ...current, scheduleTime }))} onDurationChange={(scheduleDuration) => setDraft((current) => ({ ...current, scheduleDuration }))} />
+                  <label className="timetable-modal-toggle compact">
+                    <input type="checkbox" checked={draft.scheduleRepeatWeekly} onChange={(event) => setDraft((current) => ({ ...current, scheduleRepeatWeekly: event.target.checked }))} />
+                    <span>Weekly</span>
+                  </label>
+                </div>
+              )}
+            </ScheduleWrap>
+          ) : null}
+          </>
+          )}
           <footer className="fn-task-modal-footer">
-            <button type="submit">{creating ? "Create task" : "Save task"}</button>
+            {appStyle === "wabi-sabi" && message ? <p className="wabi-task-message" role="alert">{message}</p> : null}
+            {showRestOfForm ? <button type="submit">{creating ? "Create task" : "Save task"}</button> : null}
             <button type="button" className="ghost-button" onClick={creating ? closeModal : () => setFieldPlannerTaskMode("view")}>Cancel</button>
-            {draft.dueDate ? <button type="button" className="ghost-button" onClick={() => setDraft((current) => ({ ...current, dueDate: "" }))}>Clear due date</button> : null}
+            {showRestOfForm && !hideDueDate && draft.dueDate ? <button type="button" className="ghost-button" onClick={() => setDraft((current) => ({ ...current, dueDate: "" }))}>Clear due date</button> : null}
           </footer>
         </form>
       );
     };
 
-    return (
+    return createPortal(
       <div className="fn-task-modal-backdrop" onMouseDown={closeModal}>
-        <section className="fn-task-modal" role="dialog" aria-modal="true" aria-labelledby="fn-task-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+        <section className={`fn-task-modal ${appStyle === "wabi-sabi" ? "wabi-task-modal" : ""}`} role="dialog" aria-modal="true" aria-labelledby="fn-task-modal-title" onMouseDown={(event) => event.stopPropagation()}>
           <header className="fn-task-modal-head">
             <div>
               <p className="fn-stamp-line">Task file · {modalSemester?.name ?? "No semester"} · {modalCourse?.name ?? "No course"}</p>
@@ -11722,8 +12448,6 @@ function App() {
               <div className="fn-task-modal-progress"><div className="health-track tight wide"><div className="health-fill" style={{ width: `${progress}%`, background: modalCourse?.color ?? "var(--fn-course-blue)" }} /></div></div>
               {task.notes ? <p className="fn-task-modal-note">{task.notes}</p> : null}
               <div className="fn-task-modal-actions">
-                <button type="button" onClick={() => adjustTask(task.id, -1)}>-</button>
-                <button type="button" onClick={() => adjustTask(task.id, 1)}>+</button>
                 <button type="button" className="ghost-button" onClick={() => { startEditingTask(task); setFieldPlannerTaskMode("edit"); }}>Edit</button>
                 <button type="button" className="ghost-button" onClick={() => focusTaskFromDashboard(task)}>Focus</button>
                 <button type="button" className="mini-danger" onClick={() => removeTask(task.id)}>Remove</button>
@@ -11731,7 +12455,8 @@ function App() {
             </>
           ) : null}
         </section>
-      </div>
+      </div>,
+      document.body,
     );
   }
 
@@ -11772,29 +12497,17 @@ function App() {
           <div className="settings-panel-head">
             <div>
               <p className="eyebrow">Menu</p>
-              <h2>{activeMenuPanel === "theme" ? "Theme" : activeMenuPanel === "personal" ? "Personal" : activeMenuPanel === "options" ? "Options" : "Settings"}</h2>
+              <h2>{activeMenuPanel === "theme" ? (themePanelView === "styles" ? "Style" : "Theme") : activeMenuPanel === "personal" ? "Personal" : activeMenuPanel === "options" ? "Options" : "Settings"}</h2>
             </div>
             <button type="button" className="ghost-button small-button" onClick={closeMenuPanel}>Close</button>
           </div>
 
           {activeMenuPanel === "theme" ? (
             <div className="settings-panel-body">
-              <div className="theme-panel-switch" aria-label="Appearance picker">
-                {(["themes", "styles"] as const).map((view) => (
-                  <button key={view} type="button" className={themePanelView === view ? "active" : ""} onClick={() => setThemePanelView(view)}>
-                    {view === "themes" ? "Themes" : "Styles"}
-                  </button>
-                ))}
-              </div>
               {themePanelView === "themes" ? (
-                appStyle !== "modern" ? (
-                  <div className="arena-empty">
-                    <strong>Coming soon</strong>
-                    <span>{appStyle === "field-notebook" ? "Field Notebook" : "Wabi-Sabi"} doesn't support color themes yet. Switch back to Modern in Styles to pick a palette.</span>
-                  </div>
-                ) : (
+                (
                   <div className="theme-choice-grid">
-                    {themePalettes.map((p) => (
+                    {(appStyle === "field-notebook" || appStyle === "wabi-sabi" ? themePalettes.filter((p) => p.id === "sakura" || p.id === "default") : themePalettes.filter((p) => p.id !== "sakura")).map((p) => (
                       <button
                         key={p.id}
                         type="button"
@@ -11802,10 +12515,10 @@ function App() {
                         onClick={() => setPalette(p.id)}
                       >
                         <div className="theme-choice-main">
-                          <span className="theme-choice-swatch" style={{ background: p.swatch }} />
+                          <span className="theme-choice-swatch" style={{ background: appStyle === "wabi-sabi" && p.id === "default" ? "#4f6b4a" : p.swatch }} />
                           <div>
                             <strong>{p.name}</strong>
-                            <span>{p.desc}</span>
+                            <span>{appStyle === "wabi-sabi" ? ({ default: "Moss, paper and ink at rest.", sakura: "Petals loved for falling." } as Record<string, string>)[p.id] ?? p.desc : p.desc}</span>
                           </div>
                         </div>
                         {palette === p.id ? <span className="design-chip">Active</span> : null}
@@ -11841,6 +12554,8 @@ function App() {
                     type="button"
                     className={theme === mode ? "active" : ""}
                     onClick={() => setTheme(mode)}
+                    disabled={themeLocked && mode === "dark"}
+                    title={themeLocked && mode === "dark" ? "Sakura is light-only" : undefined}
                   >
                     {mode === "light" ? "Light" : "Dark"}
                   </button>
@@ -11902,6 +12617,18 @@ function App() {
                     type="checkbox"
                     checked={!state.settings.hideFeedImages}
                     onChange={toggleFeedImages}
+                  />
+                  <span className="ios-switch" aria-hidden="true" />
+                </label>
+                <label className="tab-toggle-row">
+                  <span>
+                    <strong>Profile pictures</strong>
+                    <small>{state.settings.hideProfilePictures ? "Hidden" : "Shown"} · pictures in the feed and standings on this device</small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={!state.settings.hideProfilePictures}
+                    onChange={toggleProfilePictures}
                   />
                   <span className="ios-switch" aria-hidden="true" />
                 </label>
@@ -11986,6 +12713,16 @@ function App() {
                   />
                   <span className="ios-switch" aria-hidden="true" />
                 </label>
+              </div>
+              <div className="linux-update-command-card">
+                <div>
+                  <strong>Backup and restore</strong>
+                  <span>Save all your data (study time, semesters, deadlines, achievements, settings, account) to a file, or restore from one. Restoring replaces everything on this device.</span>
+                </div>
+                <div className="update-actions">
+                  <button type="button" className="ghost-button" onClick={() => void handleBackupClick()}>Backup to file</button>
+                  <button type="button" className="ghost-button" onClick={() => restoreBackupInputRef.current?.click()}>Restore from file</button>
+                </div>
               </div>
               <div className="linux-update-command-card">
                 <div>
@@ -12108,12 +12845,25 @@ function App() {
   }
 
   // Keep macOS traffic lights native; Linux and Windows use the compact app bar.
-  const showWindowTitlebar = isTauriApp() && !/Macintosh|Mac OS X/.test(navigator.userAgent);
-  const openHelp = helpTab ? pageHelp[helpTab] : null;
+  // Hidden while the timer's real fullscreen overlay is active — there's no window chrome to control then.
+  const showWindowTitlebar = isTauriApp() && !/Macintosh|Mac OS X/.test(navigator.userAgent) && !fullscreen;
+  // On the Dashboard the question mark reopens the introduction, so it should not promise a guide.
+  const pageHelpButtonLabel = state.activeTab === "dashboard"
+    ? "Open the introduction"
+    : `${pageHelp[state.activeTab].title} guide`;
+  // Dashboard is excluded from PAGE_GUIDES - openPageHelp sends it to the introduction instead.
+  const openHelp = helpTab && helpTab !== "dashboard" ? PAGE_GUIDES[helpTab] : null;
   const activeTourHelp = tourState ? pageHelp[tourState.tab] : null;
 
   return (
     <>
+      {startupAnnounce?.kind === "welcome" ? (
+        <WelcomeTourModal onClose={() => { markWelcomeTourSeen(); setStartupAnnounce(null); }} />
+      ) : null}
+      {startupAnnounce?.kind === "notes" ? (
+        <WhatsNewModal releases={startupAnnounce.releases} onClose={() => setStartupAnnounce(null)} />
+      ) : null}
+      <input ref={restoreBackupInputRef} type="file" accept="application/json,.json" hidden onChange={(event) => void handleRestoreBackupFile(event)} />
       {showWindowTitlebar ? (
         <div className="window-titlebar" onMouseDown={() => void startWindowDrag()}>
           <div className="window-titlebar-title">Study Tracker</div>
@@ -12124,9 +12874,6 @@ function App() {
             <button type="button" onClick={() => void toggleMaximizeWindow()} aria-label={windowMaximized ? "Restore window" : "Maximize window"} title={windowMaximized ? "Restore window" : "Maximize window"}>
               <span aria-hidden="true">{windowMaximized ? "❐" : "□"}</span>
             </button>
-            <button type="button" onClick={() => void toggleFullscreenWindow()} aria-label="Enter or exit fullscreen" title="Enter or exit fullscreen">
-              <span aria-hidden="true">⛶</span>
-            </button>
             <button type="button" className="window-close-button" onClick={() => void closeWindow()} aria-label="Close window" title="Close">
               <span aria-hidden="true">×</span>
             </button>
@@ -12135,6 +12882,7 @@ function App() {
       ) : null}
 
       <div className={`shell ${showWindowTitlebar ? "with-window-titlebar" : ""}`} style={{ "--accent": state.settings.accent } as CSSProperties}>
+      {(appStyle === "field-notebook" || appStyle === "wabi-sabi") && palette === "sakura" ? <SakuraScatter /> : null}
       {appStyle === "wabi-sabi" ? renderWabiSidebar() : null}
       {appStyle === "wabi-sabi" && wabiQuietMode ? renderWabiQuietMode() : null}
       <header className="topbar">
@@ -12179,7 +12927,8 @@ function App() {
             className="theme-toggle"
             onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
             type="button"
-            title="Toggle theme"
+            disabled={themeLocked}
+            title={themeLocked ? "Sakura is light-only" : "Toggle theme"}
             style={{ display: "grid", placeItems: "center" }}
           >
             {theme === "dark" ? (
@@ -12212,17 +12961,8 @@ function App() {
             </button>
             {menuOpen ? (
               <div className="topbar-menu" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    downloadBackup(state);
-                    setMenuOpen(false);
-                  }}
-                >
-                  Backup JSON
-                </button>
-                <button type="button" role="menuitem" onClick={() => openMenuPanel("theme")}>Change theme</button>
+                <button type="button" role="menuitem" onClick={() => openMenuPanel("theme", "themes")}>Change theme</button>
+                <button type="button" role="menuitem" onClick={() => openMenuPanel("theme", "styles")}>Change style</button>
                 <button type="button" role="menuitem" onClick={() => openMenuPanel("personal")}>Personal</button>
                 <button type="button" role="menuitem" onClick={() => openMenuPanel("options")}>Options</button>
                 <button type="button" role="menuitem" onClick={() => openMenuPanel("settings")}>Settings</button>
@@ -12324,7 +13064,7 @@ function App() {
           ))}
         </div>
         {state.settings.showHelpButton !== false ? (
-          <button type="button" className="page-help-button tab-help-button" onClick={() => openPageHelp(state.activeTab)} aria-label={`Open ${pageHelp[state.activeTab].title} help`} title={`${pageHelp[state.activeTab].title} help`}>
+          <button type="button" className="page-help-button tab-help-button" onClick={() => openPageHelp(state.activeTab)} aria-label={pageHelpButtonLabel} title={pageHelpButtonLabel}>
             ?
           </button>
         ) : null}
@@ -12332,30 +13072,101 @@ function App() {
 
       {message ? <div className="message-banner">{message}</div> : null}
 
+      {undoState ? createPortal(
+        // Portaled straight onto document.body, like the modals themselves - the app root wrapper
+        // has its own z-index:1 stacking context, which would otherwise trap this toast below any
+        // portaled modal backdrop (e.g. Manage Semesters, z-index 5000) no matter how high its own
+        // z-index is set, since z-index only competes within the same stacking context.
+        <div className="undo-toast" role="status">
+          <span>{undoState.label}</span>
+          <button type="button" onClick={undoLastDelete}>Undo</button>
+        </div>,
+        document.body,
+      ) : null}
+
       {renderCalendarDayOverlay()}
 
-      {openHelp ? (
-        <div className="help-modal-backdrop" onMouseDown={() => setHelpTab(null)}>
-          <section className="help-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={`${openHelp.title} help`}>
+      {timetableModalState ? (
+        <TimetableEventModal
+          state={state}
+          setState={setState}
+          setMessage={setMessage}
+          target={timetableModalState}
+          onClose={() => setTimetableModalState(null)}
+          onOpenManageSemesters={() => { setTimetableModalState(null); if (appStyle === "wabi-sabi") setManageSemestersMode("semesters"); setManageSemestersOpen(true); }}
+          wabi={appStyle === "wabi-sabi"}
+          allowCourseTask
+          message={message ?? ""}
+          onDeleteWithUndo={performDelete}
+        />
+      ) : null}
+
+      {appStyle === "wabi-sabi" ? renderCalendarItemPopup() : null}
+      {appStyle === "wabi-sabi" ? renderSessionLogsModal() : null}
+      {appStyle === "wabi-sabi" ? renderWabiPickerModal() : renderDashboardPickerModal()}
+
+      {manageSemestersOpen ? (
+        appStyle === "wabi-sabi" ? (
+          <WabiManageSemestersModal
+            state={state}
+            setState={setState}
+            setMessage={setMessage}
+            onClose={closeManageSemesters}
+            onDeleteWithUndo={performDelete}
+            onRemoveSemester={removeSemester}
+            onRemoveCourse={removeCourse}
+            onRemoveTask={removeTask}
+            onAddTask={openAddTaskModalFor}
+            onEditTask={openTaskEditor}
+            initialSemesterId={manageSemestersInitialSemesterId}
+            mode={manageSemestersMode}
+            initialCourseId={manageSemestersInitialCourseId}
+          />
+        ) : (
+          <ManageSemestersModal
+            state={state}
+            setState={setState}
+            setMessage={setMessage}
+            onClose={closeManageSemesters}
+            onDeleteWithUndo={performDelete}
+            onRemoveSemester={removeSemester}
+            onRemoveCourse={removeCourse}
+            onRemoveTask={removeTask}
+            onAddTask={openAddTaskModalFor}
+            onEditTask={openTaskEditor}
+            initialCourseId={manageSemestersInitialCourseId}
+          />
+        )
+      ) : null}
+
+      {openHelp && helpTab ? (
+        <PageGuideModal
+          guide={openHelp}
+          onClose={() => setHelpTab(null)}
+          onStartTutorial={() => startPageTour(helpTab)}
+        />
+      ) : null}
+
+      {introReplayOpen ? <WelcomeTourModal onClose={() => setIntroReplayOpen(false)} /> : null}
+
+      {socialNamePromptOpen ? (
+        <div className="help-modal-backdrop" onMouseDown={() => setSocialNamePromptOpen(false)}>
+          <section className="help-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Set your name">
             <div className="help-modal-head">
               <div>
-                <p className="eyebrow">Page guide</p>
-                <h2>{openHelp.title}</h2>
+                <p className="eyebrow">Social</p>
+                <h2>Set your name</h2>
               </div>
-              <button type="button" className="ghost-button small-button" onClick={() => setHelpTab(null)} aria-label="Close page guide">X</button>
+              <button type="button" className="ghost-button small-button" onClick={() => setSocialNamePromptOpen(false)} aria-label="Close">X</button>
             </div>
-            <p className="help-purpose">{openHelp.purpose}</p>
-            <div className="help-section">
-              <h3>Start here</h3>
-              <ol>
-                {openHelp.steps.map((step) => <li key={step}>{step}</li>)}
-              </ol>
-            </div>
-            {helpTab === "planner" ? <HelpExampleCards examples={helpExamples.planner} /> : null}
-            <div className="help-modal-actions">
-              <button type="button" className="ghost-button" onClick={() => setHelpTab(null)}>Close</button>
-              <button type="button" className="help-tutorial-button" onClick={() => startPageTour(helpTab!)}>Start tutorial <span aria-hidden="true">-&gt;</span></button>
-            </div>
+            <p className="help-purpose">You are still using the default name. Pick a name so your friends know who you are.</p>
+            <form onSubmit={saveSocialName}>
+              <input value={socialNameDraft} onChange={(event) => setSocialNameDraft(event.target.value)} maxLength={48} placeholder="Your name" autoFocus />
+              <div className="help-modal-actions">
+                <button type="button" className="ghost-button" onClick={() => setSocialNamePromptOpen(false)}>Later</button>
+                <button type="submit" className="primary-button" disabled={!socialNameDraft.trim()}>Save name</button>
+              </div>
+            </form>
           </section>
         </div>
       ) : null}
@@ -12690,123 +13501,74 @@ function App() {
           {appStyle === "field-notebook" ? (
             <aside className="fn-planner-rail" aria-label="Planner folders">
               <div className="fn-rail-section">
+                <button type="button" className="ghost-button fn-manage-semesters-button" onClick={() => setManageSemestersOpen(true)}>Manage Semesters</button>
                 <div className="fn-rail-label">Semesters</div>
-                {state.semesters.map((semester) => {
+                {activeSemesters.map((semester) => {
                   const courses = getSemesterCourses(state, semester.id);
                   const tasks = getSemesterTasks(state, semester.id);
                   const active = expandedSemesterIds.includes(semester.id);
                   return (
                     <div key={semester.id} className="fn-semester-tree">
-                      <button type="button" className={`fn-rail-row fn-semester-folder ${active ? "active" : ""}`} onClick={() => toggleSemester(semester.id)}>
-                        <strong>{semester.name}</strong>
-                        <span>{courses.length} courses · {tasks.length} tasks</span>
-                      </button>
+                      <div className={`fn-rail-row fn-semester-folder ${active ? "active" : ""}`}>
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          className="fn-semester-folder-toggle"
+                          onClick={() => toggleSemester(semester.id)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              toggleSemester(semester.id);
+                            }
+                          }}
+                        >
+                          <strong>{semester.name}</strong>
+                          <span>{courses.length} courses · {tasks.length} tasks</span>
+                        </div>
+                      </div>
                       {active ? (
                         <div className="fn-course-tree">
                           {courses.map((course) => {
                             const courseTasks = getCourseTasks(state, course.id);
-                            const courseActive = expandedCourseIds.includes(course.id);
                             return (
                               <div key={course.id} className="fn-course-tree-item">
-                                <button type="button" className={`fn-course-folder ${courseActive ? "active" : ""}`} style={{ "--fn-course": course.color } as CSSProperties} onClick={() => toggleCourse(course.id)}>
+                                <button
+                                  type="button"
+                                  className="fn-course-folder"
+                                  style={{ "--fn-course": course.color } as CSSProperties}
+                                  onClick={() => { setManageSemestersInitialCourseId(course.id); setManageSemestersOpen(true); }}
+                                  title="Edit this subject"
+                                >
                                   <strong>{course.name}</strong>
-                                  <span>{courseTasks.length}</span>
+                                  <span>{courseTasks.length} tasks</span>
                                 </button>
-                                {courseActive ? (
-                                  <div className="fn-task-tree">
-                                    {courseTasks.length ? courseTasks.map((task) => (
-                                      <button key={task.id} type="button" className={`fn-sidebar-task ${fieldPlannerTaskId === task.id ? "active" : ""}`} onClick={() => {
-                                        setSelectedTaskId(task.id);
-                                        setFieldPlannerTaskId(task.id);
-                                        setFieldPlannerTaskMode("view");
-                                      }}>
-                                        <span>{task.title}</span>
-                                        <em>{task.completedUnits}/{task.totalUnits}</em>
-                                      </button>
-                                    )) : <p className="fn-sidebar-empty">No tasks yet.</p>}
-                                    <button type="button" className="fn-rail-link fn-sidebar-add-task" onClick={() => {
-                                      setTaskDraft((current) => ({ ...current, semesterId: semester.id, courseId: course.id, title: "", unitLabel: "Unit", totalUnits: "10", completedUnits: "0", dueDate: "", priority: "medium", notes: "" }));
-                                      setFieldPlannerTaskId(null);
-                                      setFieldPlannerTaskMode("create");
-                                    }}>+ add task</button>
-                                    <div className="fn-sidebar-actions">
-                                      <button type="button" onClick={() => startEditingCourse(course)}>edit course</button>
-                                      <button type="button" className="danger" onClick={() => setFieldPlannerDeleteTarget({ type: "course", id: course.id, name: course.name })}>remove course</button>
-                                    </div>
-                                    {editingCourseId === course.id ? (
-                                      <form className="fn-sidebar-form" onSubmit={updateCourse}>
-                                        <input value={courseEditDraft.name} onChange={(event) => setCourseEditDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Course name" />
-                                        <div className="fn-sidebar-form-grid">
-                                          <select value={courseEditDraft.targetGrade} onChange={(event) => setCourseEditDraft((current) => ({ ...current, targetGrade: event.target.value }))}>
-                                            {swissGrades.map((grade) => <option key={grade} value={grade.toString()}>{formatSwissGrade(grade)}</option>)}
-                                          </select>
-                                          <input aria-label="Course color" type="color" value={courseEditDraft.color} onChange={(event) => setCourseEditDraft((current) => ({ ...current, color: event.target.value }))} />
-                                        </div>
-                                        <div className="fn-sidebar-form-actions">
-                                          <button type="submit">Save</button>
-                                          <button type="button" onClick={() => setEditingCourseId(null)}>Cancel</button>
-                                        </div>
-                                      </form>
-                                    ) : null}
-                                  </div>
-                                ) : null}
+                                <div className="fn-task-tree">
+                                  {courseTasks.length ? courseTasks.map((task) => (
+                                    <button key={task.id} type="button" className={`fn-sidebar-task ${fieldPlannerTaskId === task.id ? "active" : ""}`} onClick={() => {
+                                      setSelectedTaskId(task.id);
+                                      setFieldPlannerTaskId(task.id);
+                                      setFieldPlannerTaskMode("view");
+                                    }}>
+                                      <span>{task.title}</span>
+                                      <em>{task.completedUnits}/{task.totalUnits}</em>
+                                    </button>
+                                  )) : <p className="fn-sidebar-empty">No tasks yet.</p>}
+                                </div>
                               </div>
                             );
                           })}
-                          {addingCourseSemesterId === semester.id ? (
-                            <form className="fn-sidebar-form" onSubmit={addCourse}>
-                              <input value={courseDraft.name} onChange={(event) => setCourseDraft((current) => ({ ...current, semesterId: semester.id, name: event.target.value }))} placeholder="Course name" />
-                              <div className="fn-sidebar-form-grid">
-                                <select value={courseDraft.targetGrade} onChange={(event) => setCourseDraft((current) => ({ ...current, semesterId: semester.id, targetGrade: event.target.value }))}>
-                                  {swissGrades.map((grade) => <option key={grade} value={grade.toString()}>{formatSwissGrade(grade)}</option>)}
-                                </select>
-                                <input aria-label="Course color" type="color" value={courseDraft.color} onChange={(event) => setCourseDraft((current) => ({ ...current, semesterId: semester.id, color: event.target.value }))} />
-                              </div>
-                              <div className="fn-sidebar-form-actions">
-                                <button type="submit">Add</button>
-                                <button type="button" onClick={() => setAddingCourseSemesterId(null)}>Cancel</button>
-                              </div>
-                            </form>
-                          ) : null}
-                          <button type="button" className="fn-rail-link fn-sidebar-add-course" onClick={() => {
-                            setCourseDraft((current) => ({ ...current, semesterId: semester.id }));
-                            setAddingCourseSemesterId((current) => (current === semester.id ? null : semester.id));
-                          }}>+ add course</button>
-                          <div className="fn-sidebar-actions fn-semester-actions">
-                            <button type="button" onClick={() => startEditingSemester(semester)}>edit semester</button>
-                            <button type="button" className="danger" onClick={() => setFieldPlannerDeleteTarget({ type: "semester", id: semester.id, name: semester.name })}>remove semester</button>
-                          </div>
-                          {editingSemesterId === semester.id ? (
-                            <form className="fn-sidebar-form" onSubmit={updateSemester}>
-                              <input value={semesterEditName} onChange={(event) => setSemesterEditName(event.target.value)} placeholder="Semester name" />
-                              <div className="fn-sidebar-form-actions">
-                                <button type="submit">Save</button>
-                                <button type="button" onClick={() => setEditingSemesterId(null)}>Cancel</button>
-                              </div>
-                            </form>
-                          ) : null}
                         </div>
                       ) : null}
                     </div>
                   );
                 })}
-                {showSemesterForm ? (
-                  <form className="fn-sidebar-form" onSubmit={addSemester}>
-                    <input value={semesterName} onChange={(event) => setSemesterName(event.target.value)} placeholder="Semester name" />
-                    <div className="fn-sidebar-form-actions">
-                      <button type="submit">Add</button>
-                      <button type="button" onClick={() => setShowSemesterForm(false)}>Cancel</button>
-                    </div>
-                  </form>
-                ) : null}
-                <button type="button" className="fn-rail-link" onClick={() => setShowSemesterForm((current) => !current)}>+ new semester</button>
                 <section className="fn-sidebar-workload" aria-label="Workload calculator">
                   <div className="fn-rail-label">Workload</div>
                   <label>
                     <span>Selection</span>
                     <select value={fieldPlannerWorkloadId} onChange={(event) => setFieldPlannerWorkloadId(event.target.value)}>
                       <option value={TOTAL_WORKLOAD_ID}>Total workload</option>
-                      {state.courses.map((course) => (
+                      {activeCourses.map((course) => (
                         <option key={course.id} value={course.id}>{course.name}</option>
                       ))}
                     </select>
@@ -12829,19 +13591,26 @@ function App() {
               </div>
             </aside>
           ) : null}
-          {appStyle === "wabi-sabi" ? renderPlannerCalendar() : null}
           <article className="panel-card planner-board-panel" data-tour="planner-semesters">
             <div className="section-head planner-header">
               <div>
                 <p className="eyebrow">{appStyle === "wabi-sabi" ? "Plan" : "Planner"}</p>
                 <h2>{appStyle === "wabi-sabi" ? `${openTaskCount} thing${openTaskCount === 1 ? "" : "s"} growing` : "Semesters, courses, and tasks"}</h2>
-                <p className="section-note">{appStyle === "wabi-sabi" ? "Open a semester to manage its courses. Select a course to edit it." : "Click a semester or course to expand it. Click it again to collapse."}</p>
+                {appStyle === "wabi-sabi" ? null : <p className="section-note">Click a semester or course to expand it. Click it again to collapse.</p>}
               </div>
+              {appStyle === "wabi-sabi" ? (
+                <span className="wabi-plan-current-semester">
+                  {(activeSemesters.find((semester) => semester.startDate && semester.endDate && calendarToday >= semester.startDate && calendarToday <= semester.endDate) ?? activeSemesters[0])?.name ?? ""}
+                </span>
+              ) : null}
+              {appStyle === "wabi-sabi" ? null : (
               <div className="page-head-actions">
+                <button type="button" className="ghost-button" onClick={() => { setManageSemestersMode("full"); setManageSemestersOpen(true); }}>Manage Semesters</button>
                 <button type="button" className="ghost-button" data-tour="planner-add-semester" onClick={() => setShowSemesterForm((current) => !current)}>
                   {showSemesterForm ? "Close" : "+ Add semester"}
                 </button>
               </div>
+              )}
             </div>
 
             {showSemesterForm ? (
@@ -12854,9 +13623,9 @@ function App() {
               </form>
             ) : null}
 
-            <div className="semester-board roomy-top">
-              {state.semesters.length ? (
-                state.semesters.map((semester) => {
+            <div className="semester-board roomy-top" hidden={appStyle === "wabi-sabi"}>
+              {activeSemesters.length ? (
+                activeSemesters.map((semester) => {
                   const courses = getSemesterCourses(state, semester.id);
                   const tasks = semesterTasksBySemesterId.get(semester.id) ?? [];
                   // Non-null: semesterHealthBySemesterId is built by iterating this same
@@ -12864,6 +13633,7 @@ function App() {
                   const semesterHealth = semesterHealthBySemesterId.get(semester.id)!;
                   const semesterExpanded = expandedSemesterIds.includes(semester.id);
                   const semesterExams = state.exams.filter((exam) => exam.semesterId === semester.id);
+                  const semesterWeekNumber = getSemesterWeekNumber(semester, calendarToday);
 
                   return (
                     <section key={semester.id} className={`semester-card ${semesterExpanded ? "open" : ""}`} data-tour={semester.id === TUTORIAL_SEMESTER_ID ? "planner-tutorial-semester" : undefined}>
@@ -12871,9 +13641,12 @@ function App() {
                         <button type="button" className="accordion-toggle semester-toggle" onClick={() => toggleSemester(semester.id)}>
                           <span className="accordion-title-group">
                             <strong>{semester.name}</strong>
+                            {appStyle === "wabi-sabi" ? null : (
                             <small>
                               {courses.length} courses • {tasks.length} tasks • {tasks.filter((task) => getRemainingUnits(task) > 0).length} active • {semesterHealth.label}
+                              {semester.phase === "exam-prep" ? " • Exam Prep" : semesterWeekNumber ? ` • Week ${semesterWeekNumber}` : ""}
                             </small>
+                            )}
                           </span>
                         </button>
 
@@ -12978,7 +13751,9 @@ function App() {
                                            <span className="accordion-title-group">
                                              <strong>{course.name}</strong>
                                              <small>
-                                              {appStyle === "wabi-sabi" ? `${completedCourseTasks} of ${courseTasks.length} done` : `Target ${formatSwissGrade(course.targetGrade)} • ${courseTasks.length} tasks • ${health.label}`}
+                                              {appStyle === "wabi-sabi"
+                                                ? `${completedCourseTasks} of ${courseTasks.length} done`
+                                                : `Target ${formatSwissGrade(course.targetGrade)} • ${courseTasks.length} tasks • ${health.label}`}
                                              </small>
                                            </span>
                                            {appStyle === "wabi-sabi" ? <span className="wabi-course-progress" aria-label={`${courseProgress}% complete`}><i style={{ width: `${courseProgress}%`, background: course.color }} /></span> : null}
@@ -13067,24 +13842,26 @@ function App() {
                                                   value={taskDraft.title}
                                                   onChange={(event) => setTaskDraft((current) => {
                                                     const title = event.target.value;
-                                                    const shouldInfer = !current.unitLabel.trim() || current.unitLabel === "Unit" || current.unitLabel === inferUnitLabel(current.title);
+                                                    const shouldInfer = !current.unitLabel.trim() || current.unitLabel === "Task" || current.unitLabel === inferUnitLabel(current.title);
                                                     return { ...current, semesterId: semester.id, courseId: course.id, title, unitLabel: shouldInfer ? inferUnitLabel(title) : current.unitLabel };
                                                   })}
                                                   placeholder="Sheet 4, reading pack, chapter summary..."
                                                 />
                                               </label>
                                               <label className="field">
-                                                <span>Unit label</span>
+                                                <span>Subtype</span>
+                                                <select data-tour="planner-task-subtype" value={taskDraft.subtype} onChange={(event) => setTaskDraft((current) => ({ ...current, semesterId: semester.id, courseId: course.id, subtype: event.target.value as TaskSubtype }))}>
+                                                  <option value="Lecture">Lecture</option>
+                                                  <option value="Session">Session</option>
+                                                  <option value="Sheet">Sheet</option>
+                                                  <option value="Other">Other</option>
+                                                </select>
+                                              </label>
+                                              <label className="field">
+                                                <span>Progress label</span>
                                                 <input data-tour="planner-task-unit-label" value={taskDraft.unitLabel} onChange={(event) => setTaskDraft((current) => ({ ...current, semesterId: semester.id, courseId: course.id, unitLabel: event.target.value }))} placeholder="Lecture, Sheet, Exam..." />
                                               </label>
-                                              <label className="field">
-                                                <span>Total units</span>
-                                                <input data-tour="planner-task-total" type="number" min="1" value={taskDraft.totalUnits} onChange={(event) => setTaskDraft((current) => ({ ...current, semesterId: semester.id, courseId: course.id, totalUnits: event.target.value }))} />
-                                              </label>
-                                              <label className="field">
-                                                <span>Done</span>
-                                                <input data-tour="planner-task-done" type="number" min="0" value={taskDraft.completedUnits} onChange={(event) => setTaskDraft((current) => ({ ...current, semesterId: semester.id, courseId: course.id, completedUnits: event.target.value }))} />
-                                              </label>
+                                              <p className="section-note task-notes-field">Totals are counted automatically from the items scheduled on the calendar.</p>
                                               <label className="field">
                                                 <span>Priority</span>
                                                 <select data-tour="planner-task-priority" value={taskDraft.priority} onChange={(event) => setTaskDraft((current) => ({ ...current, semesterId: semester.id, courseId: course.id, priority: event.target.value as Priority }))}>
@@ -13093,16 +13870,18 @@ function App() {
                                                   <option value="low">Low</option>
                                                 </select>
                                               </label>
-                                              <label className="field">
-                                                <span>Due date (optional)</span>
-                                                <input
-                                                  type="date"
-                                                  data-tour="planner-task-due"
-                                                  value={taskDraft.dueDate}
-                                                  onChange={(event) => setTaskDraft((current) => ({ ...current, semesterId: semester.id, courseId: course.id, dueDate: event.target.value }))}
-                                                  onKeyDown={confirmTaskDueDate}
-                                                />
-                                              </label>
+                                              {subtypeHidesDueDate(taskDraft.subtype) ? null : (
+                                                <label className="field">
+                                                  <span>Due date (optional)</span>
+                                                  <input
+                                                    type="date"
+                                                    data-tour="planner-task-due"
+                                                    value={taskDraft.dueDate}
+                                                    onChange={(event) => setTaskDraft((current) => ({ ...current, semesterId: semester.id, courseId: course.id, dueDate: event.target.value }))}
+                                                    onKeyDown={confirmTaskDueDate}
+                                                  />
+                                                </label>
+                                              )}
                                               <label className="field task-notes-field">
                                                 <span>Notes</span>
                                                 <textarea data-tour="planner-task-notes" value={taskDraft.notes} onChange={(event) => setTaskDraft((current) => ({ ...current, semesterId: semester.id, courseId: course.id, notes: event.target.value }))} placeholder="Definition of done, rubric hints, professor notes..." />
@@ -13114,7 +13893,7 @@ function App() {
                                               <button type="button" className="ghost-button" onClick={() => setAddingTaskCourseId(null)}>
                                                 Cancel
                                               </button>
-                                              {taskDraft.dueDate ? (
+                                              {!subtypeHidesDueDate(taskDraft.subtype) && taskDraft.dueDate ? (
                                                 <button type="button" className="ghost-button" onClick={() => setTaskDraft((current) => ({ ...current, dueDate: "" }))}>
                                                   Clear due date
                                                 </button>
@@ -13155,7 +13934,7 @@ function App() {
                                         <div className="task-table">
                                           {courseTasks.length ? (
                                             courseTasks.map((task) => {
-                                              const calc = calculateDailyWork(task);
+                                              const calc = taskDailyWork(task);
                                               const progress = getTaskProgress(task);
                                               return (
                                                 <div key={task.id}>
@@ -13178,12 +13957,6 @@ function App() {
                                                       </div>
                                                     </div>
                                                     <div className="task-row-actions" data-tour={task.id === TUTORIAL_TASK_ID ? "planner-tutorial-task-progress" : "planner-task-progress"}>
-                                                      <button type="button" onClick={() => adjustTask(task.id, -1)}>
-                                                        -
-                                                      </button>
-                                                      <button type="button" onClick={() => adjustTask(task.id, 1)}>
-                                                        +
-                                                      </button>
                                                       <button type="button" className="ghost-button small-button" onClick={() => startEditingTask(task)}>
                                                         Edit
                                                       </button>
@@ -13220,22 +13993,24 @@ function App() {
                                                           <span>Task title</span>
                                                           <input value={taskEditDraft.title} onChange={(event) => setTaskEditDraft((current) => {
                                                             const title = event.target.value;
-                                                            const shouldInfer = !current.unitLabel.trim() || current.unitLabel === "Unit" || current.unitLabel === inferUnitLabel(current.title);
+                                                            const shouldInfer = !current.unitLabel.trim() || current.unitLabel === "Task" || current.unitLabel === inferUnitLabel(current.title);
                                                             return { ...current, title, unitLabel: shouldInfer ? inferUnitLabel(title) : current.unitLabel };
                                                           })} />
                                                         </label>
                                                         <label className="field">
-                                                          <span>Unit label</span>
+                                                          <span>Subtype</span>
+                                                          <select value={taskEditDraft.subtype} onChange={(event) => setTaskEditDraft((current) => ({ ...current, subtype: event.target.value as TaskSubtype }))}>
+                                                            <option value="Lecture">Lecture</option>
+                                                            <option value="Session">Session</option>
+                                                            <option value="Sheet">Sheet</option>
+                                                            <option value="Other">Other</option>
+                                                          </select>
+                                                        </label>
+                                                        <label className="field">
+                                                          <span>Progress label</span>
                                                           <input value={taskEditDraft.unitLabel} onChange={(event) => setTaskEditDraft((current) => ({ ...current, unitLabel: event.target.value }))} placeholder="Lecture, Sheet, Exam..." />
                                                         </label>
-                                                        <label className="field">
-                                                          <span>Total units</span>
-                                                          <input type="number" min="1" value={taskEditDraft.totalUnits} onChange={(event) => setTaskEditDraft((current) => ({ ...current, totalUnits: event.target.value }))} />
-                                                        </label>
-                                                        <label className="field">
-                                                          <span>Done</span>
-                                                          <input type="number" min="0" value={taskEditDraft.completedUnits} onChange={(event) => setTaskEditDraft((current) => ({ ...current, completedUnits: event.target.value }))} />
-                                                        </label>
+                                                        <p className="section-note task-notes-field">Totals are counted automatically from the items scheduled on the calendar.</p>
                                                         <label className="field">
                                                           <span>Priority</span>
                                                           <select value={taskEditDraft.priority} onChange={(event) => setTaskEditDraft((current) => ({ ...current, priority: event.target.value as Priority }))}>
@@ -13244,27 +14019,28 @@ function App() {
                                                             <option value="low">Low</option>
                                                           </select>
                                                         </label>
-                                                        <label className="field">
-                                                          <span>Due date (optional)</span>
-                                                          <input
-                                                            type="date"
-                                                            value={taskEditDraft.dueDate}
-                                                            onChange={(event) => setTaskEditDraft((current) => ({ ...current, dueDate: event.target.value }))}
-                                                            onKeyDown={confirmTaskDueDate}
-                                                          />
-                                                        </label>
+                                                        {subtypeHidesDueDate(taskEditDraft.subtype) ? null : (
+                                                          <label className="field">
+                                                            <span>Due date (optional)</span>
+                                                            <input
+                                                              type="date"
+                                                              value={taskEditDraft.dueDate}
+                                                              onChange={(event) => setTaskEditDraft((current) => ({ ...current, dueDate: event.target.value }))}
+                                                              onKeyDown={confirmTaskDueDate}
+                                                            />
+                                                          </label>
+                                                        )}
                                                         <label className="field task-notes-field">
                                                           <span>Notes</span>
                                                           <textarea value={taskEditDraft.notes} onChange={(event) => setTaskEditDraft((current) => ({ ...current, notes: event.target.value }))} />
                                                         </label>
                                                       </div>
-                                                      <p className="unit-label-hint">This controls labels like {cleanUnitLabel(taskEditDraft.unitLabel, taskEditDraft.title)} {Math.min(Math.max(1, Number(taskEditDraft.completedUnits) + 1 || 1), Math.max(1, Number(taskEditDraft.totalUnits) || 1))} of {Math.max(1, Number(taskEditDraft.totalUnits) || 1)}.</p>
-                                                      <div className="inline-form-actions">
+                                                                                                            <div className="inline-form-actions">
                                                         <button type="submit">Save task</button>
                                                         <button type="button" className="ghost-button" onClick={() => setEditingTaskId(null)}>
                                                           Cancel
                                                         </button>
-                                                        {taskEditDraft.dueDate ? (
+                                                        {!subtypeHidesDueDate(taskEditDraft.subtype) && taskEditDraft.dueDate ? (
                                                           <button type="button" className="ghost-button" onClick={() => setTaskEditDraft((current) => ({ ...current, dueDate: "" }))}>
                                                             Clear due date
                                                           </button>
@@ -13300,19 +14076,34 @@ function App() {
                             <div className="stack-list compact">
                               {semesterExams.length ? (
                                 semesterExams.map((exam) => (
-                                  <div key={exam.id} className="exam-row detailed">
-                                    <div>
-                                      <strong>{exam.title}</strong>
-                                      <p>{courseLookup.get(exam.courseId)?.name ?? "No course"}</p>
+                                  editingExamId === exam.id ? (
+                                    <form key={exam.id} className="exam-row detailed exam-row-edit" onSubmit={saveExamEdit}>
+                                      <input value={examEditDraft.title} onChange={(event) => setExamEditDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Exam title" />
+                                      <input type="date" value={examEditDraft.examDate} onChange={(event) => setExamEditDraft((current) => ({ ...current, examDate: event.target.value }))} />
+                                      <input type="number" min="0" max="100" value={examEditDraft.weight} onChange={(event) => setExamEditDraft((current) => ({ ...current, weight: event.target.value }))} placeholder="Weight %" />
+                                      <input type="number" min="0" max="100" value={examEditDraft.preparedness} onChange={(event) => setExamEditDraft((current) => ({ ...current, preparedness: event.target.value }))} placeholder="Prepared %" />
+                                      <input value={examEditDraft.location} onChange={(event) => setExamEditDraft((current) => ({ ...current, location: event.target.value }))} placeholder="Location" />
+                                      <button type="submit">Save</button>
+                                      <button type="button" className="ghost-button" onClick={() => setEditingExamId(null)}>Cancel</button>
+                                    </form>
+                                  ) : (
+                                    <div key={exam.id} className="exam-row detailed">
+                                      <div>
+                                        <strong>{exam.title}</strong>
+                                        <p>{courseLookup.get(exam.courseId)?.name ?? "No course"}{exam.location ? ` · ${exam.location}` : ""}</p>
+                                      </div>
+                                      <div className="exam-side">
+                                        <span>{daysUntil(exam.examDate)} days</span>
+                                        <small>{exam.weight}% of grade</small>
+                                      </div>
+                                      <button type="button" className="ghost-button" onClick={() => startEditingExam(exam)}>
+                                        Edit
+                                      </button>
+                                      <button type="button" className="mini-danger" onClick={() => removeExam(exam.id)}>
+                                        Remove
+                                      </button>
                                     </div>
-                                    <div className="exam-side">
-                                      <span>{daysUntil(exam.examDate)} days</span>
-                                      <small>{exam.weight}% of grade</small>
-                                    </div>
-                                    <button type="button" className="mini-danger" onClick={() => removeExam(exam.id)}>
-                                      Remove
-                                    </button>
-                                  </div>
+                                  )
                                 ))
                               ) : (
                                 <p className="empty-copy compact-empty">No exams added for this semester.</p>
@@ -13330,7 +14121,7 @@ function App() {
             </div>
           </article>
 
-          {appStyle !== "wabi-sabi" ? renderPlannerCalendar() : null}
+          {renderPlannerCalendar()}
 
           <div className="planner-support-grid">
             <article className="panel-card calculator-card">
@@ -13348,7 +14139,7 @@ function App() {
                     <select value={selectedTaskId ?? ""} onChange={(event) => setSelectedTaskId(event.target.value)}>
                       <option value="">Select task</option>
                       <option value={TOTAL_WORKLOAD_ID}>Total workload</option>
-                      {state.tasks.map((task) => (
+                      {activeTasks.map((task) => (
                         <option key={task.id} value={task.id}>
                           {task.title}
                         </option>
@@ -13464,8 +14255,8 @@ function App() {
             </div>
 
             <div className="stack-list compact">
-              {state.semesters.length ? (
-                state.semesters.map((semester) => {
+              {activeSemesters.length ? (
+                activeSemesters.map((semester) => {
                   const courses = getSemesterCourses(state, semester.id);
                   const exams = state.exams.filter((exam) => exam.semesterId === semester.id);
                   const nextExam = [...exams].filter((exam) => daysUntil(exam.examDate) >= 0).sort((a, b) => daysUntil(a.examDate) - daysUntil(b.examDate))[0] ?? null;
@@ -13489,7 +14280,7 @@ function App() {
               )}
             </div>
           </article>
-          {appStyle === "field-notebook" ? renderFieldPlannerTaskModal() : null}
+          {renderFieldPlannerTaskModal()}
           {appStyle === "field-notebook" ? renderFieldPlannerDeleteDialog() : null}
         </section>
       ) : null}
@@ -13516,7 +14307,7 @@ function App() {
                     key={preset.label}
                     type="button"
                     className={`timer-preset-card ${state.timer.presetLabel === preset.label ? "active" : ""}`}
-                    disabled={state.timer.running}
+                    disabled={state.timer.phase !== "idle"}
                     onClick={() => applyPreset(preset.label, preset.study, preset.breakMinutes, preset.mode)}
                   >
                     <strong>{preset.label.replace(" 25/5", "").replace(" 52/17", "").replace(" 90/20", "")}</strong>
@@ -13526,7 +14317,7 @@ function App() {
                 <button
                   type="button"
                   className={`timer-preset-card ${isCustomTimerPreset ? "active" : ""}`}
-                  disabled={state.timer.running}
+                  disabled={state.timer.phase !== "idle"}
                   onClick={() =>
                     setState((current) => ({
                       ...current,
@@ -13562,7 +14353,7 @@ function App() {
                       type="number"
                       min="1"
                       value={state.timer.mode === "exam" ? state.timer.examMinutes : state.timer.studyMinutes}
-                      disabled={state.timer.running}
+                      disabled={state.timer.phase !== "idle"}
                       onChange={(event) => {
                         const next = Math.max(1, Number(event.target.value) || 1);
                         setState((current) => {
@@ -13589,7 +14380,7 @@ function App() {
                       <input
                         type="number"
                         min="0"
-                        disabled={state.timer.running}
+                        disabled={state.timer.phase !== "idle"}
                         value={state.timer.breakMinutes}
                         onChange={(event) =>
                           setState((current) => ({
@@ -13732,1658 +14523,16 @@ function App() {
       ) : null}
 
       {state.activeTab === "vault" ? (
-        <section className={`vault-shell ${appStyle === "field-notebook" ? "fn-vault" : appStyle === "wabi-sabi" ? "wabi-vault" : ""}`}>
-          {appStyle === "field-notebook" ? (
-            <aside className="fn-vault-rail" aria-label="Vault drawers">
-              <div className="fn-vault-status">
-                <span className={state.settings.vaultPath ? "linked" : ""} />
-                <strong>{state.settings.vaultName || "StudyTrackerVault"}</strong>
-                <em>{state.settings.vaultPath ? "SYNCED" : "NOT LINKED"}</em>
-              </div>
-              <div className="fn-vault-tabs">
-                {vaultSpaces.map((space) => (
-                  <button key={space.id} type="button" className={vaultSpace === space.id ? "active" : ""} onClick={() => setVaultSpace(space.id)}>{space.label}</button>
-                ))}
-              </div>
-              <div className="fn-vault-tools">
-                <button type="button" onClick={() => setMarkdownCheatsheetOpen(true)}>Markdown</button>
-                <button type="button" onClick={() => setVaultSetupOpen((current) => !current)}>{vaultSetupOpen ? "Close setup" : "Vault setup"}</button>
-              </div>
-              {vaultSpace === "daily" ? (
-                <>
-                  <div className="fn-rail-section">
-                    <div className="fn-rail-label">Recent daily notes</div>
-                    <button type="button" className="fn-rail-row active" onClick={() => setVaultNoteDate(calendarToday)}>
-                      <strong>{calendarToday}</strong>
-                      <span>{state.sessions.filter((session) => isoDate(new Date(session.endedAt)) === calendarToday).length} sessions · today</span>
-                    </button>
-                    {state.exports.slice(0, 5).map((item) => (
-                      <button key={item.id} type="button" className="fn-rail-row" onClick={() => setVaultNoteDate(item.noteDate)}>
-                        <strong>{item.noteDate}</strong>
-                        <span>{item.notePath}</span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="fn-rail-section fn-vault-tree">
-                  <div className="fn-rail-label">Course drawers</div>
-                  {state.semesters.map((semester) => {
-                    const courses = getSemesterCourses(state, semester.id);
-                    const activeSemester = expandedSemesterIds.includes(semester.id);
-                    return (
-                      <div key={semester.id} className="fn-semester-tree">
-                        <button type="button" className={`fn-rail-row fn-semester-folder ${activeSemester ? "active" : ""}`} onClick={() => toggleSemester(semester.id)}>
-                          <strong>{semester.name}</strong>
-                          <span>{activeSemester ? "close" : "open"} · {courses.length} courses</span>
-                        </button>
-                        {activeSemester ? (
-                          <div className="fn-course-tree">
-                            {courses.map((course) => {
-                              const activeCourse = vaultSpace === "references" ? course.id === referenceCourseId : course.id === summaryCourseId;
-                              return (
-                                <div key={course.id} className="fn-course-tree-item">
-                                  <button type="button" className={`fn-course-folder ${activeCourse ? "active" : ""}`} style={{ "--fn-course": course.color } as CSSProperties} onClick={() => {
-                                    if (vaultSpace === "references") {
-                                      if (referenceDirty) {
-                                        setMessage("Save the current reference note before switching courses.");
-                                        return;
-                                      }
-                                      setReferenceSemesterId(semester.id);
-                                      setReferenceCourseId(course.id);
-                                    } else {
-                                      setSummarySemesterId(semester.id);
-                                      setSummaryCourseId(course.id);
-                                    }
-                                  }}>
-                                    <strong>{course.name}</strong>
-                                    <span>{vaultSpace === "references" ? "note" : vaultSpace === "summaries" && activeCourse ? summaryFiles.length : "files"}</span>
-                                  </button>
-                                  {vaultSpace === "summaries" && activeCourse ? (
-                                    <div className="fn-task-tree fn-summary-files-tree">
-                                      <div className="fn-sidebar-actions fn-summary-file-actions">
-                                        <button type="button" onClick={() => loadSummaryFileList()} disabled={summaryLoading}>{summaryLoading ? "loading" : "refresh"}</button>
-                                        <button type="button" onClick={handleAddSummaryFiles} disabled={summaryLoading}>add files</button>
-                                      </div>
-                                      {summaryFiles.length ? summaryFiles.map((file) => (
-                                        <button key={file.path} type="button" className={`fn-sidebar-task ${file.path === selectedSummaryFile?.path ? "active" : ""}`} onClick={() => setSelectedSummaryPath(file.path)}>
-                                          <span>{file.name}</span>
-                                          <em>{file.kind.toUpperCase()}</em>
-                                        </button>
-                                      )) : <p className="fn-sidebar-empty">No files yet.</p>}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </aside>
-          ) : null}
-          {appStyle !== "field-notebook" ? <div className="vault-hero">
-            <div>
-              <h1>Vault</h1>
-              <p>Your Obsidian-compatible markdown knowledge base.</p>
-            </div>
-            <div className="vault-hero-actions">
-              {state.settings.vaultPath ? (
-                <span className="vault-status-pill"><span />{state.settings.vaultName || "Linked vault"}</span>
-              ) : null}
-              <button type="button" className="ghost-button" data-tour="vault-markdown" onClick={() => setMarkdownCheatsheetOpen(true)}>
-                Markdown
-              </button>
-              <button type="button" className="ghost-button vault-settings-button" data-tour="vault-setup" onClick={() => setVaultSetupOpen((current) => !current)}>
-                {vaultSetupOpen ? "Close setup" : "Vault setup"}
-              </button>
-            </div>
-          </div> : null}
-
-          {markdownCheatsheetOpen ? (
-            <div className="markdown-cheatsheet-backdrop" onMouseDown={() => setMarkdownCheatsheetOpen(false)}>
-              <section className="markdown-cheatsheet-panel" onMouseDown={(event) => event.stopPropagation()} aria-label="Markdown cheatsheet">
-                <div className="markdown-cheatsheet-head">
-                  <div>
-                    <p className="eyebrow">Vault markdown</p>
-                    <h2>Cheatsheet</h2>
-                    <p>These are the markdown features Study Tracker currently previews.</p>
-                  </div>
-                  <button type="button" className="ghost-button small-button" onClick={() => setMarkdownCheatsheetOpen(false)} aria-label="Close markdown cheatsheet">
-                    X
-                  </button>
-                </div>
-
-                <div className="markdown-cheatsheet-grid">
-                  <div className="markdown-cheatsheet-example">
-                    <h3>Headings</h3>
-                    <pre><code>{"# Title\n## Section\n### Subsection"}</code></pre>
-                  </div>
-                  <div className="markdown-cheatsheet-example">
-                    <h3>Emphasis</h3>
-                    <pre><code>{"**bold**\n*italic*\n`inline code`"}</code></pre>
-                  </div>
-                  <div className="markdown-cheatsheet-example">
-                    <h3>Lists</h3>
-                    <pre><code>{"- bullet item\n* another bullet\n\n1. first\n2. second"}</code></pre>
-                  </div>
-                  <div className="markdown-cheatsheet-example">
-                    <h3>Quotes</h3>
-                    <pre><code>{"> Important note or reminder"}</code></pre>
-                  </div>
-                  <div className="markdown-cheatsheet-example">
-                    <h3>Links</h3>
-                    <pre><code>{"[ETH Video](https://video.ethz.ch/...)\nhttps://video.ethz.ch/..."}</code></pre>
-                  </div>
-                  <div className="markdown-cheatsheet-example">
-                    <h3>Code Blocks</h3>
-                    <pre><code>{"```\nconst topic = \"series\";\n```"}</code></pre>
-                  </div>
-                </div>
-
-                <div className="markdown-cheatsheet-note">
-                  <strong>Not supported in preview yet:</strong> tables, images, LaTeX/math rendering, nested lists, and interactive task checkboxes.
-                </div>
-              </section>
-            </div>
-          ) : null}
-
-          {!state.settings.vaultPath ? (
-            <article className="panel-card vault-empty-card">
-              <p className="eyebrow">No vault linked</p>
-              <h2>Connect your markdown vault</h2>
-              <p className="section-note">Notes are saved as standard `.md` files you can open in Obsidian or any editor.</p>
-              <div className="control-row roomy-top">
-                <button type="button" data-tour="vault-link" onClick={handleLinkVault}>Link existing vault</button>
-                <button type="button" className="ghost-button" data-tour="vault-create" onClick={handleCreateVault}>Create new vault</button>
-              </div>
-            </article>
-          ) : null}
-
-          {vaultSetupOpen ? (
-            <article className="panel-card vault-settings-panel">
-              <div className="section-head">
-                <div>
-                  <p className="eyebrow">Obsidian vault</p>
-                  <h2>Vault configuration</h2>
-                </div>
-              </div>
-              <div className="form-grid compact-grid">
-                <label className="field">
-                  <span>Vault name</span>
-                  <input
-                    data-tour="vault-name"
-                    value={state.settings.vaultName}
-                    onChange={(event) => setState((current) => ({ ...current, settings: { ...current.settings, vaultName: event.target.value } }))}
-                    placeholder="StudyTrackerVault"
-                  />
-                </label>
-                <label className="field wide">
-                  <span>Current vault path</span>
-                  <input data-tour="vault-path" value={state.settings.vaultPath ?? "Not created yet"} readOnly />
-                </label>
-              </div>
-              <div className="vault-folder-strip" aria-label="Vault folders">
-                {["Daily", "References", "Summaries"].map((folder) => <span key={folder}>{folder}</span>)}
-              </div>
-              <div className="control-row left roomy-top">
-                <button type="button" data-tour="vault-create" onClick={handleCreateVault}>Create new vault</button>
-                <button type="button" className="ghost-button" data-tour="vault-link" onClick={handleLinkVault}>Link existing vault</button>
-              </div>
-            </article>
-          ) : null}
-
-          {state.settings.vaultPath ? (
-            <>
-              {appStyle !== "wabi-sabi" ? (
-                <nav className="vault-nav" aria-label="Vault spaces" data-tour="vault-spaces">
-                  {vaultSpaces.map((space) => {
-                    const active = space.id === vaultSpace;
-                    return (
-                      <button
-                        key={space.id}
-                        type="button"
-                        className={`vault-nav-item ${active ? "active" : ""}`}
-                        onClick={() => setVaultSpace(space.id)}
-                      >
-                        {space.label}
-                      </button>
-                    );
-                  })}
-                </nav>
-              ) : null}
-
-              {appStyle === "wabi-sabi" ? (
-                <nav className="wabi-notes-nav wabi-vault-space-nav" aria-label="Vault spaces" data-tour="vault-spaces">
-                  {vaultSpaces.map((space) => (
-                    <button key={space.id} type="button" className={vaultSpace === space.id ? "active" : ""} onClick={() => setVaultSpace(space.id)}>
-                      {space.id === "daily" ? "Notes" : space.label}
-                    </button>
-                  ))}
-                </nav>
-              ) : null}
-
-              {vaultSpace === "daily" ? (
-                appStyle === "wabi-sabi" ? (
-                  <div className="wabi-notes-layout" data-tour="vault-editor">
-                    <aside className="wabi-notes-shelf">
-                      <div className="wabi-notes-shelf-head">
-                        <p className="wabi-notes-count">{vaultNotes.length} in this shelf</p>
-                        <button type="button" onClick={startNewVaultNote}>New note</button>
-                      </div>
-                      {vaultNotes.map((note) => (
-                        <button key={note.path} type="button" className={`wabi-note-shelf-row ${vaultNotePath === note.path ? "active" : ""}`} onClick={() => void openVaultNote(note)}>
-                          <strong>{note.title}</strong>
-                          <span>{new Intl.DateTimeFormat("en", { year: "numeric", month: "short", day: "numeric" }).format(new Date(note.savedAt))}</span>
-                        </button>
-                      ))}
-                      {!vaultNotes.length && !vaultNotesLoading ? <p className="wabi-notes-empty">Create your first note.</p> : null}
-                      <div className="wabi-notes-actions">
-                        <button type="button" onClick={() => void loadVaultNotes()} disabled={vaultNotesLoading}>{vaultNotesLoading ? "Loading..." : "Refresh"}</button>
-                        {vaultDailyEditing ? <button type="button" onClick={() => void handleSaveWabiVaultNote()} disabled={vaultNotesLoading}>Save</button> : <button type="button" onClick={() => setVaultDailyEditing(true)} disabled={!vaultNoteTitle}>Edit</button>}
-                        <button type="button" className="wabi-note-delete" onClick={() => void handleDeleteWabiVaultNote()} disabled={!vaultNotePath || vaultNotesLoading}>Delete</button>
-                      </div>
-                    </aside>
-                    <article className="wabi-note-reader">
-                      <header>
-                        {vaultDailyEditing ? (
-                          <input
-                            className="wabi-note-title-input"
-                            value={vaultNoteTitle}
-                            onChange={(event) => {
-                              setVaultNoteTitle(event.target.value);
-                              setVaultNoteDirty(true);
-                            }}
-                            placeholder="Note title"
-                          />
-                        ) : <h2>{vaultNoteTitle || "Untitled note"}</h2>}
-                        <p>{vaultNoteDirty ? "unsaved changes" : vaultNoteSavedAt ? new Intl.DateTimeFormat("en", { year: "numeric", month: "short", day: "numeric" }).format(new Date(vaultNoteSavedAt)) : "not saved"}</p>
-                      </header>
-                      {vaultDailyEditing ? (
-                        <textarea
-                          className="wabi-note-editor"
-                          value={vaultNoteContent}
-                          onChange={(event) => {
-                            setVaultNoteContent(event.target.value);
-                            setVaultNoteDirty(true);
-                          }}
-                          placeholder="Write your note."
-                        />
-                      ) : (
-                        <div className="markdown-preview wabi-note-prose">{renderMarkdownPreview(vaultNoteContent)}</div>
-                      )}
-                    </article>
-                  </div>
-                ) : <div className="vault-space-panel" data-tour="vault-editor">
-                  <div className="vault-toolbar">
-                    <div className="vault-toolbar-main">
-                      <label className="vault-compact-field">
-                        <span>Daily</span>
-                        <input
-                          type="date"
-                          data-tour="vault-daily-date"
-                          value={vaultNoteDate}
-                          onChange={(event) => {
-                            setVaultNoteDate(event.target.value || localIsoDate());
-                            setVaultNotePath(null);
-                            setVaultNoteContent("");
-                            setVaultNoteDirty(false);
-                            setVaultDailyEditing(false);
-                          }}
-                        />
-                      </label>
-                      <span className="vault-path-chip">{vaultNotePath ?? `Daily/${vaultNoteDate}.md`}</span>
-                    </div>
-                    <div className="vault-toolbar-actions">
-                      <button type="button" className="ghost-button" data-tour="vault-load" onClick={() => loadVaultNote()} disabled={vaultNoteLoading}>{vaultNoteLoading ? "Working..." : "Load"}</button>
-                      <button type="button" className="ghost-button" data-tour="vault-session-draft" onClick={handleUseGeneratedNote}>Use session draft</button>
-                      {vaultDailyEditing ? (
-                        <button type="button" className="ghost-button" data-tour="vault-save" onClick={handleSaveVaultNote} disabled={vaultNoteLoading}>Save</button>
-                      ) : (
-                        <button type="button" className="ghost-button" data-tour="vault-edit" onClick={() => setVaultDailyEditing(true)}>Edit</button>
-                      )}
-                      <span className="design-chip">{vaultNoteDirty ? "Unsaved" : "Saved"}</span>
-                    </div>
-                  </div>
-
-                  {vaultDailyEditing ? (
-                    <div className="vault-split">
-                      <div className="vault-editor-pane">
-                        <div className="vault-pane-head"><span className="eyebrow">Editor</span></div>
-                        <textarea
-                          className="vault-markdown-editor"
-                          value={vaultNoteContent || notePreview}
-                          onChange={(event) => {
-                            setVaultNoteContent(event.target.value);
-                            setVaultNoteDirty(true);
-                          }}
-                          placeholder="Write today's markdown note."
-                        />
-                      </div>
-                      <div className="vault-preview-pane">
-                        <div className="vault-pane-head"><span className="eyebrow">Preview</span></div>
-                        <div className="markdown-preview vault-prose compact">{renderMarkdownPreview(dailyPreviewContent)}</div>
-                      </div>
-                    </div>
-                  ) : (
-                      <div className="vault-document-wrap">
-                        <article className="panel-card vault-document">
-                          <div className="vault-document-meta">
-                            <span>Daily</span>
-                            <code>{vaultNotePath ?? `Daily/${vaultNoteDate}.md`}</code>
-                          </div>
-                          <div className="markdown-preview vault-prose">{renderMarkdownPreview(dailyPreviewContent)}</div>
-                        </article>
-
-                        {appStyle !== "field-notebook" ? <div className="vault-recent-list" data-tour="vault-recent">
-                          <p className="eyebrow">Recent exports</p>
-                          {state.exports.length ? state.exports.slice(0, 4).map((item) => (
-                            <div key={item.id} className="vault-recent-row">
-                            <span>{item.noteDate}</span>
-                            <code>{item.notePath}</code>
-                            </div>
-                          )) : <p className="empty-copy">Exports will appear here once you save a daily note.</p>}
-                        </div> : null}
-                      </div>
-                  )}
-                </div>
-              ) : vaultSpace === "references" ? (
-                <div className="vault-space-panel">
-                  {appStyle === "wabi-sabi" ? renderWabiVaultCourseShelf("references") : null}
-                  <div className="vault-toolbar">
-                    {appStyle !== "field-notebook" ? <div className="vault-toolbar-main references-toolbar-main">
-                      <label className="vault-compact-field">
-                        <span>Semester</span>
-                        <select
-                          value={referenceSemesterId}
-                          onChange={(event) => {
-                            if (referenceDirty) {
-                              setMessage("Save the current reference note before switching courses.");
-                              return;
-                            }
-                            setReferenceSemesterId(event.target.value);
-                            setReferenceCourseId("");
-                          }}
-                        >
-                          {state.semesters.map((semester) => <option key={semester.id} value={semester.id}>{semester.name}</option>)}
-                        </select>
-                      </label>
-                      <div className="vault-course-chips">
-                        {referenceCourses.map((course) => (
-                          <button
-                            key={course.id}
-                            type="button"
-                            className={`vault-course-chip ${course.id === referenceCourseId ? "active" : ""}`}
-                            onClick={() => {
-                              if (referenceDirty) {
-                                setMessage("Save the current reference note before switching courses.");
-                                return;
-                              }
-                              setReferenceCourseId(course.id);
-                            }}
-                          >
-                            <span style={{ background: course.color }} />{course.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div> : <div className="vault-toolbar-main references-toolbar-main fn-vault-selection-title">
-                      <p className="eyebrow">References</p>
-                      <h2>{selectedReferenceCourse ? selectedReferenceCourse.name : "Choose a course"}</h2>
-                    </div>}
-                    <div className="vault-toolbar-actions">
-                      {referenceEditing ? (
-                        <button type="button" className="ghost-button" onClick={handleSaveReferenceNote} disabled={referenceLoading || !selectedReferenceCourse}>{referenceLoading ? "Saving..." : "Save"}</button>
-                      ) : (
-                        <button type="button" className="ghost-button" onClick={handleEditReferenceNote} disabled={!selectedReferenceCourse}>Edit</button>
-                      )}
-                      <span className="design-chip">{referenceDirty ? "Unsaved" : "Saved"}</span>
-                    </div>
-                  </div>
-
-                  {selectedReferenceSemester && selectedReferenceCourse ? (
-                    referenceEditing ? (
-                      <div className="vault-split">
-                        <div className="vault-editor-pane">
-                          <div className="vault-pane-head"><span className="eyebrow">Markdown</span></div>
-                          <textarea
-                            className="vault-markdown-editor"
-                            value={referenceContent}
-                            onChange={(event) => {
-                              setReferenceContent(event.target.value);
-                              setReferenceDirty(true);
-                            }}
-                            placeholder="Add useful markdown links for this course."
-                          />
-                        </div>
-                        <div className="vault-preview-pane">
-                          <div className="vault-pane-head"><span className="eyebrow">Preview</span></div>
-                          <div className="markdown-preview vault-prose compact">{renderMarkdownPreview(referencePreview)}</div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="vault-document-wrap">
-                        <article className="panel-card vault-document">
-                          <div className="vault-document-meta">
-                            <button type="button" className="vault-document-meta-button" onClick={() => setReferencePathVisible((current) => !current)}>
-                              References
-                            </button>
-                            {referencePathVisible ? <code>{referencePath ?? `References/${selectedReferenceSemester.name}/${selectedReferenceCourse.name}.md`}</code> : null}
-                          </div>
-                          <div className="markdown-preview vault-prose">{renderMarkdownPreview(referencePreview)}</div>
-                        </article>
-                      </div>
-                    )
-                  ) : (
-                    <article className="panel-card vault-empty-card">
-                      <p className="eyebrow">No courses yet</p>
-                      <h2>References need courses</h2>
-                      <p className="section-note">Create at least one semester and course in Planner before adding course reference notes.</p>
-                    </article>
-                  )}
-                </div>
-              ) : (
-                <div className="vault-space-panel">
-                  {appStyle === "wabi-sabi" ? renderWabiVaultCourseShelf("summaries") : null}
-                  <div className="vault-toolbar">
-                    {appStyle !== "field-notebook" ? <div className="vault-toolbar-main references-toolbar-main">
-                      <label className="vault-compact-field">
-                        <span>Semester</span>
-                        <select
-                          value={summarySemesterId}
-                          onChange={(event) => {
-                            setSummarySemesterId(event.target.value);
-                            setSummaryCourseId("");
-                          }}
-                        >
-                          {state.semesters.map((semester) => <option key={semester.id} value={semester.id}>{semester.name}</option>)}
-                        </select>
-                      </label>
-                      <div className="vault-course-chips">
-                        {summaryCourses.map((course) => (
-                          <button
-                            key={course.id}
-                            type="button"
-                            className={`vault-course-chip ${course.id === summaryCourseId ? "active" : ""}`}
-                            onClick={() => setSummaryCourseId(course.id)}
-                          >
-                            <span style={{ background: course.color }} />{course.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div> : <div className="vault-toolbar-main references-toolbar-main fn-vault-selection-title">
-                      <p className="eyebrow">Summaries</p>
-                      <h2>{selectedSummaryCourse ? selectedSummaryCourse.name : "Choose a course"}</h2>
-                    </div>}
-                    {appStyle !== "field-notebook" ? <div className="vault-toolbar-actions">
-                      <button type="button" className="ghost-button" onClick={() => loadSummaryFileList()} disabled={summaryLoading || !selectedSummaryCourse}>{summaryLoading ? "Loading..." : "Refresh"}</button>
-                      <button type="button" onClick={handleAddSummaryFiles} disabled={summaryLoading || !selectedSummaryCourse}>Add files</button>
-                    </div> : null}
-                  </div>
-
-                  {selectedSummarySemester && selectedSummaryCourse ? (
-                    <div className="summaries-layout">
-                      {appStyle !== "field-notebook" && (appStyle !== "wabi-sabi" || summaryFiles.length > 1) ? <aside className="panel-card summary-file-list">
-                        <div className="summary-file-list-head">
-                          <div>
-                            <p className="eyebrow">Summaries</p>
-                            <h2>{selectedSummaryCourse.name}</h2>
-                          </div>
-                          <span>{summaryFiles.length}</span>
-                        </div>
-                        {summaryFiles.length ? (
-                          <div className="summary-file-links">
-                            {summaryFiles.map((file) => (
-                              <button
-                                key={file.path}
-                                type="button"
-                                className={`summary-file-link ${file.path === selectedSummaryFile?.path ? "active" : ""}`}
-                                onClick={() => setSelectedSummaryPath(file.path)}
-                              >
-                                <span>{file.name}</span>
-                                <small>{file.kind.toUpperCase()} • {formatFileSize(file.sizeBytes)}</small>
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="empty-copy">No summaries yet. Add PDFs, formula sheets, or cheatsheet images for this course.</p>
-                        )}
-                      </aside> : null}
-
-                      <section className="panel-card summary-viewer-card">
-                        {selectedSummaryFile && selectedSummaryUrl ? (
-                          <>
-                            <div className="summary-viewer-head">
-                              <div>
-                                <p className="eyebrow">Viewer</p>
-                                <h2>{selectedSummaryFile.name}</h2>
-                              </div>
-                              <button type="button" className="ghost-button small-button" onClick={() => revealItemInDir(selectedSummaryFile.path)}>Show file</button>
-                            </div>
-                            {selectedSummaryFile.kind === "pdf" ? (
-                              <SummaryPdfViewer vaultPath={state.settings.vaultPath} path={selectedSummaryFile.path} title={selectedSummaryFile.name} />
-                            ) : (
-                              <div className="summary-image-viewer">
-                                <img src={selectedSummaryUrl} alt={selectedSummaryFile.name} />
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <div className="summary-viewer-empty">
-                            <p className="eyebrow">Viewer</p>
-                            <h2>Select a summary</h2>
-                            <p className="section-note">Choose a file from the list, or add PDFs/images to this course.</p>
-                          </div>
-                        )}
-                      </section>
-                    </div>
-                  ) : (
-                    <article className="panel-card vault-empty-card">
-                      <p className="eyebrow">No courses yet</p>
-                      <h2>Summaries need courses</h2>
-                      <p className="section-note">Create at least one semester and course in Planner before adding summary files.</p>
-                    </article>
-                  )}
-                </div>
-              )}
-            </>
-          ) : null}
-        </section>
+        <Suspense fallback={<section className="vault-shell"><p className="summary-pdf-status">Loading Vault...</p></section>}>
+          <LazyVaultScreen ref={vaultScreenRef} state={state} setState={setState} appStyle={appStyle} calendarToday={calendarToday} setMessage={setMessage} controlledSpace={appStyle === "wabi-sabi" ? wabiVaultSpace : undefined} onSpaceChange={appStyle === "wabi-sabi" ? setWabiVaultSpace : undefined} />
+        </Suspense>
       ) : null}
+
 
       {state.activeTab === "friends" ? (
-        <section className={`arena-root fade-up ${appStyle === "field-notebook" ? "study-circle-root" : appStyle === "wabi-sabi" ? "wabi-circle-root" : ""}`}>
-          {appStyle === "modern" ? <ArenaBg /> : null}
-          <div className="arena-hero-header">
-            <span className="arena-hero-title">{appStyle === "field-notebook" ? "Study Circle" : appStyle === "wabi-sabi" ? "Circle" : "Study Arena"}</span>
-            <span className="arena-hero-sub">{appStyle === "field-notebook" ? "Attendance sheet · friends · squads · quiet accountability" : appStyle === "wabi-sabi" ? "Who is sitting down today. Attendance, not a leaderboard." : "Compete. Focus. Rise."}</span>
-            {appStyle === "wabi-sabi" ? (
-              <button
-                type="button"
-                className={`wabi-competitive-toggle ${wabiCircleCompetitive ? "active" : ""}`}
-                onClick={() => setWabiCircleCompetitive((current) => {
-                  const next = !current;
-                  if (!next && socialSubtab === "leaderboard") setSocialSubtab("feed");
-                  return next;
-                })}
-              >
-                {wabiCircleCompetitive ? "COMPETITIVE ON · SHOWING LEADERBOARD" : "TURN ON COMPETITIVE →"}
-              </button>
-            ) : null}
-          </div>
-
-          <nav className="social-nav" aria-label="Social spaces" data-tour="social-nav">
-            {socialSubtabs.filter((space) => appStyle !== "wabi-sabi" || space.id !== "leaderboard" || wabiCircleCompetitive).map((space) => {
-              const active = space.id === socialSubtab;
-              return (
-                <button key={space.id} type="button" data-tour={`social-${space.id}-tab`} className={`social-nav-item ${active ? "active" : ""}`} onClick={() => setSocialSubtab(space.id)}>
-                  {appStyle === "wabi-sabi" && space.id === "leaderboard" ? "Standings" : space.label}
-                  {space.id === "friends" && incomingFriendRequestCount > 0 ? (
-                    <span className="social-nav-request-badge" aria-label={`${incomingFriendRequestCount} incoming friend request${incomingFriendRequestCount === 1 ? "" : "s"}`}>
-                      {incomingFriendRequestCount > 9 ? "9+" : incomingFriendRequestCount}
-                    </span>
-                  ) : null}
-                  {space.badge ? <span className="social-nav-item-badge">{space.badge}</span> : null}
-                </button>
-              );
-            })}
-          </nav>
-
-          {appStyle === "wabi-sabi" && socialSubtab === "feed" ? (
-            <div className="wabi-attendance" data-tour="social-live">
-              {wabiAttendanceFriends.length ? (
-                wabiAttendanceFriends.map((friend) => {
-                  const sitting = isRecentlyActive(friend.lastSeenAt);
-                  return (
-                    <div key={friend.userId} className="wabi-attendance-row" onClick={() => void openFriendProfile(friend)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openFriendProfile(friend); } }}>
-                      <span className="wabi-attendance-name">{friend.displayName}</span>
-                      <span className={`wabi-attendance-state ${sitting ? "sitting" : "resting"}`}>{sitting ? "sitting" : "resting"}</span>
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="wabi-empty">No friends seen in the last 48 hours. Add friends from the Friends tab below.</p>
-              )}
-            </div>
-          ) : null}
-
-          {socialSubtab === "feed" ? (
-            <div className={`social-feed-shell ${appStyle === "wabi-sabi" ? "wabi-feed-shell" : ""}`}>
-              <div className="social-feed-sidebar">
-                <div className="arena-scope-toggle social-feed-scope" aria-label="Feed scope" data-tour="social-feed-scope">
-                  {(["friends", "global"] as SocialFeedScope[]).map((scope) => (
-                    <button key={scope} type="button" className={feedScope === scope ? "arena-scope-btn arena-scope-btn--active" : "arena-scope-btn"} onClick={() => setFeedScope(scope)}>
-                      {appStyle === "field-notebook" ? (scope === "global" ? "Global log" : "Friends log") : (scope === "global" ? "Global Feed" : "Friends Feed")}
-                    </button>
-                  ))}
-                  <button type="button" className="arena-btn arena-btn--decline social-refresh-btn" data-tour="social-refresh" onClick={() => void runSocialSync()} disabled={socialSyncing || !socialConfigured}>
-                    {socialSyncing ? "Syncing..." : "Refresh"}
-                  </button>
-                </div>
-
-                <div className="stories" aria-label="Study circle stories" data-tour="social-stories">
-                  <div className="story">
-                    <div className="story__ring story__ring--self"><ArenaAvatar name={state.social.displayName} avatar={state.social.avatar} self size="md" /></div>
-                    <span>You</span>
-                  </div>
-                  {state.social.friends.slice(0, 10).map((friend) => (
-                    <div key={friend.userId} className="story" onClick={() => void openFriendProfile(friend)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openFriendProfile(friend); } }}>
-                      <div className={`story__ring ${isRecentlyActive(friend.lastSeenAt) ? "" : "story__ring--idle"}`}><ArenaAvatar name={friend.displayName} avatar={friend.avatar} size="md" /></div>
-                      <span>{friend.displayName}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="live-bar" data-tour="social-live">
-                  <span className="live-dot" />
-                  <strong>{liveFriends.length ? `${liveFriends.length} friends` : "No friends"}</strong>
-                  <span>recently active</span>
-                  <small>{liveFriends.slice(0, 3).map((friend) => friend.displayName).join(" · ") || "Sync to update live status"}</small>
-                </div>
-
-                {canViewR2Usage && (r2UsageStatus?.warning || r2UsageStatus?.paused) ? (
-                  <div className={`feed-r2-safety ${r2UsageStatus.paused ? "feed-r2-safety--paused" : ""}`}>
-                    <strong>{r2UsageStatus.paused ? "Image uploads paused" : "Image usage close to safety limit"}</strong>
-                    <span>
-                      Storage {formatBytes(r2UsageStatus.storageBytes)} / {formatBytes(r2UsageStatus.limits.storageHardBytes)} · Writes {formatCompactNumber(r2UsageStatus.classAOps)} / {formatCompactNumber(r2UsageStatus.limits.classAHardMonthly)} · Reads {formatCompactNumber(r2UsageStatus.classBOps)} / {formatCompactNumber(r2UsageStatus.limits.classBHardMonthly)}
-                    </span>
-                    <small>These strict app limits are far below Cloudflare R2's free tier to avoid overage risk.</small>
-                  </div>
-                ) : null}
-
-                <form className={`feed-composer ${appStyle === "wabi-sabi" ? "wabi-feed-composer" : ""}`} data-tour="social-composer" onSubmit={postLatestSessionToFeed}>
-                  <div>
-                    <span className="arena-kicker">{appStyle === "field-notebook" ? "Post your last block" : appStyle === "wabi-sabi" ? "Circle note" : "Share latest session"}</span>
-                    <h3>{latestFeedSession ? appStyle === "wabi-sabi" ? "Say something to the circle" : `${formatMinutes(latestFeedSession.minutes)} ${latestFeedSession.kind} block` : "No session ready"}</h3>
-                    <p>{latestFeedSession ? (appStyle === "field-notebook" ? "One line for the circle, or leave it blank." : appStyle === "wabi-sabi" ? "A note will accompany your latest study block." : "Write one sentence, or leave it blank for a chaotic default.") : "Finish a study or exam block, then publish it here."}</p>
-                  </div>
-                  <input className="arena-input" data-tour="social-note" value={feedNoteDraft} onChange={(event) => setFeedNoteDraft(event.target.value)} placeholder={appStyle === "field-notebook" ? "one line, or leave it blank..." : appStyle === "wabi-sabi" ? "say something to the circle, then Enter" : "one sentence for the feed..."} disabled={!latestFeedSession || latestFeedSessionPosted} />
-                  <div className="feed-composer-actions">
-                    <label className="feed-action-icon" data-tour="social-image" title={feedImageDraft ? "Change image" : "Add image"} aria-label={feedImageDraft ? "Change image" : "Add image"}>
-                      <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => void handleFeedImageDraftChange(event)} disabled={!latestFeedSession || latestFeedSessionPosted || (canViewR2Usage && r2UsageStatus?.paused)} />
-                      <span aria-hidden="true">▧</span>
-                    </label>
-                    <button type="button" className={`feed-action-icon ${feedPollHasDraft ? "feed-action-icon--active" : ""}`} data-tour="social-poll" onClick={() => setFeedPollPanelOpen((open) => !open)} disabled={!latestFeedSession || latestFeedSessionPosted} title="Create poll" aria-label="Create poll">◉</button>
-                  </div>
-                  <button type="submit" className="arena-btn arena-btn--send" data-tour="social-post" disabled={!latestFeedSession || latestFeedSessionPosted}>{latestFeedSessionPosted ? "Posted" : "Post"}</button>
-                  {feedPollPanelOpen ? (
-                    <div className="feed-poll-popover">
-                      <div className="feed-poll-popover__head">
-                        <strong>Create poll</strong>
-                        <label className="feed-poll-switch">
-                          <span>Multiple answers</span>
-                          <input type="checkbox" checked={feedPollDraft.multiple} onChange={(event) => setFeedPollDraft((current) => ({ ...current, multiple: event.target.checked }))} />
-                          <i className="ios-switch" aria-hidden="true" />
-                        </label>
-                      </div>
-                      <input className="arena-input" value={feedPollDraft.question} onChange={(event) => setFeedPollDraft((current) => ({ ...current, question: event.target.value }))} placeholder="Question" maxLength={180} />
-                      <div className="feed-poll-options-editor">
-                        {feedPollDraft.options.map((option, index) => (
-                          <div key={index} className="feed-poll-option-editor">
-                            <input className="arena-input" value={option} onChange={(event) => updateFeedPollOption(index, event.target.value)} placeholder={`Option ${index + 1}`} maxLength={100} />
-                            {feedPollDraft.options.length > 2 ? <button type="button" className="feed-poll-option-remove" onClick={() => removeFeedPollOption(index)} aria-label={`Remove option ${index + 1}`}>×</button> : null}
-                          </div>
-                        ))}
-                      </div>
-                      <button type="button" className="feed-poll-add-option" onClick={addFeedPollOption} disabled={feedPollDraft.options.length >= MAX_FEED_POLL_OPTIONS}>+ Add option</button>
-                      <div className="feed-poll-popover__actions">
-                        <button type="button" className="arena-btn arena-btn--send" onClick={() => setFeedPollPanelOpen(false)}>Done</button>
-                        <button type="button" className="ghost-button small-button" onClick={clearFeedPollDraft}>Clear</button>
-                      </div>
-                    </div>
-                  ) : null}
-                  {feedImageDraft ? (
-                    <div className="feed-image-draft">
-                      <img src={feedImageDraft.previewUrl} alt="Selected feed post preview" />
-                      <button type="button" className="ghost-button small-button" onClick={() => setFeedImageDraft((current) => { if (current) URL.revokeObjectURL(current.previewUrl); return null; })}>Remove image</button>
-                    </div>
-                  ) : null}
-                </form>
-              </div>
-
-              <div className={`social-feed-main ${appStyle === "wabi-sabi" ? "wabi-feed-main" : ""}`}>
-              <div className="section-label" data-tour="social-feed">{appStyle === "field-notebook" ? "Circle log" : appStyle === "wabi-sabi" ? "Feed" : "Activity"} {appStyle === "wabi-sabi" ? "· oldest first · updates when synced" : ""} {feedLoading ? "· Refreshing" : ""}</div>
-              {displayedSocialFeed.length ? displayedSocialFeed.map((item) => {
-                const isOwnPost = item.userId === state.social.userId || item.isSelf;
-                const profileTarget = { userId: item.userId, displayName: item.displayName, friendCode: item.friendCode, avatar: isOwnPost ? state.social.avatar : item.avatar };
-                const comments = item.comments ?? [];
-                const commentsOpen = expandedFeedComments.has(item.id);
-                return item.type === "milestone" ? (
-                  <article key={item.id} className="milestone">
-                    <div className="milestone__icon">{item.icon || "🏆"}</div>
-                    <div>
-                      <h3><button type="button" className="social-name-button" onClick={() => void openFriendProfile(profileTarget)}>{item.displayName}</button> hit a milestone</h3>
-                      <p>{item.note || item.detail}</p>
-                    </div>
-                  </article>
-                ) : (
-                  <article key={item.id} className={`feed-card ${appStyle === "wabi-sabi" ? "wabi-feed-card" : ""}`}>
-                    <div className="feed-card__head">
-                      <ArenaAvatar name={item.displayName} avatar={isOwnPost ? state.social.avatar : item.avatar} self={isOwnPost} />
-                      <div>
-                        <button type="button" className="social-name-button social-name-button--strong" onClick={() => void openFriendProfile(profileTarget)}>{item.displayName}{isOwnPost ? " (You)" : ""}</button>
-                        <span>{formatFeedPostedAt(item.createdAt)}</span>
-                      </div>
-                      {isOwnPost ? <button type="button" className="arena-icon-button feed-edit-button" onClick={() => startEditingFeedPost(item)} title="Edit post">✎</button> : null}
-                    </div>
-                    <div className="feed-card__body">
-                      <div className="feed-card__session">
-                        <span>{item.icon || "✦"}</span>
-                        <div>
-                          <strong>{item.subject || "Study session"}</strong>
-                          <small>{item.detail || `${formatMinutes(item.minutes)} · ${item.presetLabel || "Focus"}`}</small>
-                        </div>
-                      </div>
-                      {editingFeedPostId === item.id ? (
-                        <div className="feed-edit-panel">
-                          <textarea className="arena-input feed-edit-textarea" value={editingFeedPostNote} onChange={(event) => setEditingFeedPostNote(event.target.value)} maxLength={220} autoFocus />
-                          <div className="feed-image-edit-row">
-                            <label className="feed-image-picker">
-                              <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => void handleEditingFeedPostImageChange(event)} disabled={feedPostSaving || (canViewR2Usage && Boolean(r2UsageStatus?.paused)) || state.social.pendingFeedPosts.some((post) => post.id === item.id)} />
-                              <span>{item.imageUrl || item.imageExpiredAt || editingFeedPostImage ? "Replace image" : "Add image"}</span>
-                            </label>
-                            {item.imageUrl && !editingFeedPostImage ? <button type="button" className="ghost-button small-button" onClick={() => setEditingFeedPostRemoveImage(true)} disabled={feedPostSaving}>Remove image</button> : null}
-                          </div>
-                          {state.social.pendingFeedPosts.some((post) => post.id === item.id) ? <p className="feed-image-hint">Sync this post before adding an image.</p> : null}
-                          {editingFeedPostImage ? (
-                            <div className="feed-image-draft feed-image-draft--edit">
-                              <img src={editingFeedPostImage.previewUrl} alt="Replacement feed post preview" />
-                              <button type="button" className="ghost-button small-button" onClick={() => setEditingFeedPostImage((current) => { if (current) URL.revokeObjectURL(current.previewUrl); return null; })}>Clear replacement</button>
-                            </div>
-                          ) : editingFeedPostRemoveImage ? <p className="feed-image-hint">Image will be removed when you save.</p> : null}
-                          <div className="feed-edit-actions">
-                            <button type="button" className="arena-btn arena-btn--send" onClick={() => void saveFeedPostEdit(item.id)} disabled={feedPostSaving}>Save</button>
-                            <button type="button" className="ghost-button small-button" onClick={cancelEditingFeedPost} disabled={feedPostSaving}>Cancel</button>
-                            <button type="button" className="arena-btn arena-btn--decline" onClick={() => void deleteOwnFeedPost(item.id)} disabled={feedPostSaving}>Delete</button>
-                          </div>
-                        </div>
-                      ) : item.note ? <p>"{item.note}"</p> : null}
-                      {feedPollsVisible && item.poll ? (
-                        <div className="feed-poll-card">
-                          <div className="feed-poll-card__head">
-                            <strong>{item.poll.question}</strong>
-                            <span>{item.poll.multiple ? "Multiple answers" : "One answer"}</span>
-                          </div>
-                          <div className="feed-poll-card__options">
-                            {item.poll.options.map((option) => {
-                              const percent = item.poll?.totalVotes ? Math.round((option.votes / item.poll.totalVotes) * 100) : 0;
-                              return (
-                                <button key={option.id} type="button" className={`feed-poll-vote ${option.selected ? "feed-poll-vote--selected" : ""}`} onClick={() => void voteFeedPoll(item, option.id)}>
-                                  <span className="feed-poll-vote__fill" style={{ width: `${percent}%` }} />
-                                  <span className="feed-poll-vote__check">{option.selected ? "✓" : item.poll?.multiple ? "□" : "○"}</span>
-                                  <span className="feed-poll-vote__text">{option.text}</span>
-                                  <span className="feed-poll-vote__count">{option.votes} · {percent}%</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <small>{item.poll.totalVotes} vote{item.poll.totalVotes === 1 ? "" : "s"}</small>
-                        </div>
-                      ) : null}
-                      {feedImagesVisible && item.imageUrl && !failedFeedImages.has(item.id) ? (
-                        <button type="button" className="feed-card__image" onClick={() => setExpandedFeedImageId(item.id)} aria-label="Open feed image fullscreen">
-                          <img src={`${item.imageUrl}${item.imageUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(item.imageExpiresAt ?? item.createdAt)}`} alt={`${item.displayName}'s feed post image`} loading="lazy" onLoad={() => setFailedFeedImages((current) => { if (!current.has(item.id)) return current; const next = new Set(current); next.delete(item.id); return next; })} onError={() => setFailedFeedImages((current) => new Set(current).add(item.id))} />
-                        </button>
-                      ) : feedImagesVisible && item.imageUrl && failedFeedImages.has(item.id) ? <p className="feed-card__image-expired">Image could not load</p> : feedImagesVisible && item.imageExpiredAt ? <p className="feed-card__image-expired">Image expired</p> : null}
-                    </div>
-                    <div className="feed-card__reactions">
-                      {(() => {
-                        const emojiKeys = appStyle === "wabi-sabi"
-                          ? ["fire"]
-                          : ["fire", "brain", "clap", ...Object.keys(item.reactions ?? {}).filter((k) => k !== "fire" && k !== "brain" && k !== "clap" && (item.reactions?.[k] ?? 0) > 0)];
-                        const seen = new Set<string>();
-                        return emojiKeys.filter((k) => { if (seen.has(k)) return false; seen.add(k); return true; }).map((emojiKey) => {
-                          const count = item.reactions?.[emojiKey] ?? 0;
-                          if (count === 0 && emojiKey !== "fire" && emojiKey !== "brain" && emojiKey !== "clap") return null;
-                          const display = appStyle === "wabi-sabi" ? "Nod" : emojiKey === "fire" ? "🔥" : emojiKey === "brain" ? "🧠" : emojiKey === "clap" ? "👏" : emojiKey;
-                          const names = item.reactedBy?.[emojiKey];
-                          const label = names?.length ? (names.length <= 3 ? names.join(", ") : `${names.slice(0, 3).join(", ")} +${names.length - 3} more`) : "";
-                          return (
-                            <button key={emojiKey} type="button" className={`reaction-btn ${item.reacted?.[emojiKey] ? "reaction-btn--active" : ""}`} onClick={() => void toggleLocalFeedReaction(item.id, emojiKey)}>
-                              {display} {count}
-                              {label ? <span className="reaction-tooltip">{label}</span> : null}
-                            </button>
-                          );
-                        });
-                      })()}
-                      <button type="button" className="reaction-btn reaction-btn--add" onClick={() => setEmojiPickerPostId(emojiPickerPostId === item.id ? null : item.id)} title="Add reaction">+</button>
-                      {emojiPickerPostId === item.id ? (
-                        <div className="emoji-picker">
-                          {["🔥", "🧠", "👏", "⭐", "🎯", "💪", "📚", "⚡", "🎉", "🏆", "✨", "💡", "🎓", "🚀", "💎", "🌟", "📖", "🕐", "💯", "🙌", "🤯", "😤", "👑", "🌊", "😂", "🤣", "😭", "🥲", "😅", "🥹", "❤️", "🙏", "👍", "👎", "😍", "😎"].map((emj) => (
-                            <button key={emj} type="button" className={`emoji-picker__item ${item.reacted?.[emj] ? "emoji-picker__item--active" : ""}`} onClick={() => { void toggleLocalFeedReaction(item.id, emj); setEmojiPickerPostId(null); }}>{emj}</button>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="feed-card__comments-shell">
-                      <button type="button" className="feed-comments-toggle" onClick={() => toggleFeedComments(item.id)} aria-expanded={commentsOpen}>
-                        {appStyle === "wabi-sabi" ? `Reply${comments.length ? ` · ${comments.length}` : ""}` : `Comments (${comments.length}) ${commentsOpen ? "↑" : "↓"}`}
-                      </button>
-                      {commentsOpen ? (
-                        <div className="feed-card__comments">
-                          {comments.length ? comments.map((comment: SocialFeedComment) => {
-                            const commentTarget = { userId: comment.userId, displayName: comment.displayName, friendCode: comment.friendCode, avatar: comment.isSelf ? state.social.avatar : comment.avatar };
-                            return (
-                              <div key={comment.id} className="feed-comment">
-                                <ArenaAvatar name={comment.displayName} avatar={comment.isSelf ? state.social.avatar : comment.avatar} self={comment.isSelf} />
-                                <div>
-                                  <div className="feed-comment__meta">
-                                    <button type="button" className="social-name-button social-name-button--strong" onClick={() => void openFriendProfile(commentTarget)}>{comment.displayName}{comment.isSelf ? " (You)" : ""}</button>
-                                    <span>{formatFeedPostedAt(comment.createdAt)}</span>
-                                  </div>
-                                  <p>{comment.body}</p>
-                                </div>
-                              </div>
-                            );
-                          }) : <p className="feed-comments-empty">No comments yet. Start the reply chain.</p>}
-                          <form className="feed-comment-form" onSubmit={(event) => void submitFeedComment(event, item)}>
-                            <input
-                              className="arena-input"
-                              value={feedCommentDrafts[item.id] ?? ""}
-                              onChange={(event) => setFeedCommentDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
-                              maxLength={220}
-                              placeholder="Reply or comment under this post..."
-                              disabled={feedCommentSavingId === item.id}
-                            />
-                            <button type="submit" className="arena-btn arena-btn--send" disabled={feedCommentSavingId === item.id || !(feedCommentDrafts[item.id] ?? "").trim()}>{feedCommentSavingId === item.id ? "Posting" : "Reply"}</button>
-                          </form>
-                        </div>
-                      ) : null}
-                    </div>
-                  </article>
-                );
-              }) : (
-                <div className="arena-empty"><strong>No feed posts yet</strong><span>Post a session or sync to pull the latest arena activity.</span></div>
-              )}
-
-              {appStyle !== "wabi-sabi" ? <><div className="section-label">This Week</div>
-              <article className="week-compare">
-                {weekCompareEntries.length ? weekCompareEntries.map((entry) => {
-                  const max = Math.max(1, ...weekCompareEntries.map((item) => item.minutes));
-                  return (
-                    <div key={entry.userId} className="week-compare__row">
-                      <ArenaAvatar name={entry.displayName} avatar={entry.isSelf ? state.social.avatar : entry.avatar} self={entry.isSelf} />
-                      <strong>{entry.displayName}{entry.isSelf ? " (You)" : ""}</strong>
-                      <div className="week-compare__bar-wrap"><span style={{ width: `${(entry.minutes / max) * 100}%` }} /></div>
-                      <small>{formatMinutes(entry.minutes)}</small>
-                    </div>
-                  );
-                }) : <p className="empty-copy">Weekly comparison appears after you sync with friends.</p>}
-              </article></> : <p className="wabi-feed-end">That is the whole feed. No counts, no ranks, nothing new until someone shares again.</p>}
-              </div>
-            </div>
-          ) : null}
-
-          {socialSubtab === "profile" ? (
-            <div className={`social-single-panel ${appStyle === "wabi-sabi" ? "wabi-profile-panel" : ""}`}>
-              <article className="arena-player-card">
-                <div className="arena-player-card__inner">
-                  <div className="arena-player-main">
-                    <button type="button" className="profile-avatar-button" onClick={openProfileAvatarEditor} title="Change profile avatar">
-                      <ArenaAvatar name={state.social.displayName} avatar={state.social.avatar} self size="lg" />
-                      <span>Edit</span>
-                    </button>
-                    <div className="arena-player-copy">
-                      {socialNameEditing ? (
-                        <form className="arena-name-edit" onSubmit={saveSocialName}>
-                          <input className="arena-name-input" value={socialNameDraft} onChange={(event) => setSocialNameDraft(event.target.value)} maxLength={48} autoFocus />
-                          <button type="submit" className="arena-icon-button arena-icon-button--save" title="Save player name">✓</button>
-                          <button type="button" className="arena-icon-button" onClick={cancelEditingSocialName} title="Cancel">×</button>
-                        </form>
-                      ) : (
-                        <div className="arena-name-row">
-                          <h2>{state.social.displayName}</h2>
-                          <button type="button" className="arena-name-edit-button" onClick={startEditingSocialName}>Edit</button>
-                        </div>
-                      )}
-                      <div className="arena-player-tags">
-                        <button type="button" className="arena-code-plate" onClick={copyFriendCode} title="Copy player tag">
-                          <span className="arena-code-key">#</span>
-                          <span>{state.social.friendCode}</span>
-                          <span className="arena-code-copy">⧉</span>
-                        </button>
-                        <button type="button" className="arena-code-plate" onClick={copyFriendInviteLink} title="Copy invite link">
-                          <span className="arena-code-key">↗</span>
-                          <span>Invite link</span>
-                          <span className="arena-code-copy">⧉</span>
-                        </button>
-                        <button type="button" className="arena-code-plate profile-badges-button" onClick={() => setBadgesOpen(true)} title="View badges">
-                          <span className="arena-code-key">★</span>
-                          <span>Badges</span>
-                          <span className="arena-code-copy">↗</span>
-                        </button>
-                        <span className={`arena-sync-pill ${state.social.lastSyncError ? "arena-sync-pill--error" : socialConfigured ? "arena-sync-pill--ready" : "arena-sync-pill--local"}`}>
-                          <span />{state.social.lastSyncError ? "Sync Issue" : socialConfigured ? "Arena Synced" : "Local Only"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="arena-player-stats">
-                    <div className="arena-mini-stat arena-mini-stat--daily"><span className="arena-mini-stat__icon">↯</span><div><strong>{formatMinutes(localSocialDaily.minutes)}</strong><span>Today · {localSocialDaily.sessions} ses.</span></div></div>
-                    <div className="arena-mini-stat arena-mini-stat--weekly"><span className="arena-mini-stat__icon">◆</span><div><strong>{formatMinutes(localSocialWeekly.minutes)}</strong><span>This Week · {localSocialWeekly.sessions} ses.</span></div></div>
-                    <div className="arena-mini-stat arena-mini-stat--overall"><span className="arena-mini-stat__icon">★</span><div><strong>{formatMinutes(localSocialOverall.minutes)}</strong><span>All Time · {localSocialOverall.sessions} ses.</span></div></div>
-                    <div className="arena-mini-stat"><span className="arena-mini-stat__icon">📅</span><div><strong>{formatMinutes(localSocialMonthly.minutes)}</strong><span>This Month · {localSocialMonthly.sessions} ses.</span></div></div>
-                    <div className="arena-mini-stat"><span className="arena-mini-stat__icon">⚔</span><div><strong>{state.social.isPrivate ? "Hidden" : myGlobalRank ? `#${myGlobalRank}` : "—"}</strong><span>Global Rank</span></div></div>
-                    <div className="arena-mini-stat"><span className="arena-mini-stat__icon">👥</span><div><strong>{myFriendRank ? `#${myFriendRank}` : "—"}</strong><span>Friends Rank</span></div></div>
-                  </div>
-                </div>
-
-                <div className="arena-sync-console">
-                  <div>
-                    <span className="arena-kicker">Cloud sync</span>
-                    <p>Last synced: {lastSocialSyncLabel}</p>
-                    {state.social.lastSyncError ? <p className="arena-error">{state.social.lastSyncError}</p> : null}
-                    {!socialConfigured ? <p className="arena-error">Cloudflare Worker URL has not been configured yet.</p> : null}
-                  </div>
-                  <button type="button" className="arena-btn arena-btn--send" onClick={() => void runSocialSync()} disabled={socialSyncing || !socialConfigured}>
-                    {socialSyncing ? "Syncing..." : "Sync Arena"}
-                  </button>
-                </div>
-
-                <div className="profile-options">
-                  <button type="button" className={`profile-toggle ${state.social.isPrivate ? "" : "active"}`} onClick={toggleProfilePrivacy}>
-                    <strong>{state.social.isPrivate ? "Private profile" : "Public profile"}</strong>
-                    <span>{state.social.isPrivate ? "Hidden from global feed and leaderboard." : "Shown on global feed and leaderboard."}</span>
-                  </button>
-                    <button type="button" className={`profile-toggle ${state.social.autoPostSessions ? "active" : ""}`} onClick={toggleAutoPostSessions}>
-                      <strong>{state.social.autoPostSessions ? "Auto-post on" : "Auto-post off"}</strong>
-                      <span>{state.social.autoPostSessions ? "Completed sessions queue feed posts automatically." : "You choose which sessions to post."}</span>
-                    </button>
-                    <button type="button" className={`profile-toggle ${state.social.showHoursToFriends ? "active" : ""}`} onClick={toggleShowHoursToFriends}>
-                      <strong>Show hours to friends</strong>
-                      <span>Your totals in the friends standings.</span>
-                    </button>
-                </div>
-              </article>
-            </div>
-          ) : null}
-
-          {socialSubtab === "squad" ? (
-            <div className={`social-single-panel squad-panel ${appStyle === "wabi-sabi" ? "wabi-squad-panel" : ""}`}>
-              {!currentSquad ? (
-                <>
-                  <article className="arena-panel squad-card">
-                    <div className="arena-panel-head">
-                      <span className="arena-panel-icon">S</span>
-                      <div>
-                        <span className="arena-kicker">Create squad</span>
-                        <h3>Start a squad</h3>
-                      </div>
-                    </div>
-                    <p className="squad-copy">Squads hold up to 4 players. Once you join one, you cannot create or join another until you leave.</p>
-                    <form className="squad-form" onSubmit={submitSquadCreate}>
-                      <input className="arena-input" value={squadNameDraft} onChange={(event) => setSquadNameDraft(event.target.value)} placeholder="Squad name" maxLength={48} disabled={!socialConfigured || socialSyncing} />
-                      <button type="button" className={`profile-toggle squad-privacy-toggle ${squadPrivateDraft ? "" : "active"}`} onClick={() => setSquadPrivateDraft((value) => !value)} disabled={!socialConfigured || socialSyncing}>
-                        <strong>{squadPrivateDraft ? "Private squad" : "Public squad"}</strong>
-                        <span>{squadPrivateDraft ? "Players must request to join." : "Players can join instantly."}</span>
-                      </button>
-                      <button type="submit" className="arena-btn arena-btn--send" disabled={!socialConfigured || socialSyncing}>{socialSyncing ? "Working..." : "Create"}</button>
-                    </form>
-                  </article>
-
-                  <article className="arena-panel squad-card">
-                    <div className="arena-panel-head">
-                      <span className="arena-panel-icon">⌕</span>
-                      <div>
-                        <span className="arena-kicker">Search all squads</span>
-                        <h3>Find a squad</h3>
-                      </div>
-                    </div>
-                    <form className="squad-form squad-search-form" onSubmit={submitSquadSearch}>
-                      <input className="arena-input" value={squadSearchDraft} onChange={(event) => setSquadSearchDraft(event.target.value)} placeholder="Search by squad name" disabled={!socialConfigured || squadSearching} />
-                      <button type="submit" className="arena-btn arena-btn--send" disabled={!socialConfigured || squadSearching}>{squadSearching ? "Searching..." : "Search"}</button>
-                    </form>
-                    <div className="squad-suggestion-head">
-                      <div>
-                        <strong>Suggested squads</strong>
-                        <span>Don't know a name? Join or request one of these.</span>
-                      </div>
-                      {squadSuggestionPool.length > 4 ? (
-                        <button type="button" className="arena-btn arena-btn--decline" onClick={() => void loadSquadSuggestions()} disabled={squadSuggestionsLoading}>{squadSuggestionsLoading ? "Loading..." : "Reload"}</button>
-                      ) : null}
-                    </div>
-                    <div className="squad-search-results squad-suggestions">
-                      {squadSuggestions.map((squad) => (
-                        <div key={squad.id} className="squad-search-card">
-                          <div>
-                            <strong>{squad.name}</strong>
-                            <span>{squad.isPrivate ? "Private" : "Public"} · {squad.memberCount}/{squad.maxMembers} members · {formatMinutes(squad.totalMinutes)}</span>
-                          </div>
-                          {squad.action === "join" || squad.action === "request" ? (
-                            <button type="button" className="arena-btn arena-btn--accept" onClick={() => void joinOrRequestSquad(squad)} disabled={socialSyncing}>{squad.action === "join" ? "Join" : "Request"}</button>
-                          ) : (
-                            <span className="arena-pending-badge">{squad.action === "pending" ? "Pending" : squad.action === "full" ? "Full" : "Unavailable"}</span>
-                          )}
-                        </div>
-                      ))}
-                      {squadSuggestionsLoading ? <div className="arena-empty small">Loading suggestions...</div> : null}
-                      {!squadSuggestionsLoading && !squadSuggestions.length ? <div className="arena-empty small">No squads exist yet. Create the first one.</div> : null}
-                    </div>
-                    {state.social.outgoingSquadRequests.length ? (
-                      <div className="squad-request-note">Pending request: {state.social.outgoingSquadRequests.map((request) => request.squadName ?? "Squad").join(", ")}</div>
-                    ) : null}
-                    <div className="squad-result-head">Search results</div>
-                    <div className="squad-search-results">
-                      {squadSearchResults.map((squad) => (
-                        <div key={squad.id} className="squad-search-card">
-                          <div>
-                            <strong>{squad.name}</strong>
-                            <span>{squad.isPrivate ? "Private" : "Public"} · {squad.memberCount}/{squad.maxMembers} members · {formatMinutes(squad.totalMinutes)}</span>
-                          </div>
-                          {squad.action === "join" || squad.action === "request" ? (
-                            <button type="button" className="arena-btn arena-btn--accept" onClick={() => void joinOrRequestSquad(squad)} disabled={socialSyncing}>{squad.action === "join" ? "Join" : "Request"}</button>
-                          ) : (
-                            <span className="arena-pending-badge">{squad.action === "pending" ? "Pending" : squad.action === "full" ? "Full" : "Unavailable"}</span>
-                          )}
-                        </div>
-                      ))}
-                      {!squadSearchResults.length ? <div className="arena-empty small">Search by name to discover public and private squads.</div> : null}
-                    </div>
-                  </article>
-                </>
-              ) : (
-                <>
-                  <article className="arena-panel squad-card squad-hq-card">
-                    <div className="squad-hq-head">
-                      <div className="arena-title-cluster">
-                        <span className="arena-title-icon">S</span>
-                        <div>
-                          <span className="arena-kicker">{currentSquad.isPrivate ? "Private squad" : "Public squad"}</span>
-                          <h2>{currentSquad.name}</h2>
-                          <p>{currentSquad.memberCount}/4 members · Your rank: {squadRoleLabels[currentSquad.myRole]}</p>
-                        </div>
-                      </div>
-                      <div className="squad-actions">
-                        {currentSquad.myRole === "leader" ? <button type="button" className="arena-btn arena-btn--decline" onClick={startSquadSettingsEdit}>Edit</button> : null}
-                        <button type="button" className="arena-btn arena-btn--decline" onClick={() => void leaveCurrentSquad()} disabled={socialSyncing}>Leave</button>
-                      </div>
-                    </div>
-                    {squadSettingsEditing ? (
-                      <form className="squad-form squad-settings-form" onSubmit={submitSquadSettings}>
-                        <input className="arena-input" value={squadSettingsNameDraft} onChange={(event) => setSquadSettingsNameDraft(event.target.value)} maxLength={48} />
-                        <button type="button" className={`profile-toggle squad-privacy-toggle ${squadSettingsPrivateDraft ? "" : "active"}`} onClick={() => setSquadSettingsPrivateDraft((value) => !value)} disabled={socialSyncing}>
-                          <strong>{squadSettingsPrivateDraft ? "Private squad" : "Public squad"}</strong>
-                          <span>{squadSettingsPrivateDraft ? "Players must request to join." : "Players can join instantly."}</span>
-                        </button>
-                        <button type="submit" className="arena-btn arena-btn--send" disabled={socialSyncing}>Save</button>
-                        <button type="button" className="arena-btn arena-btn--decline" onClick={() => setSquadSettingsEditing(false)}>Cancel</button>
-                      </form>
-                    ) : null}
-                    <div className="squad-stats-grid">
-                      <div><strong>{formatMinutes(currentSquad.totalMinutes)}</strong><span>Total squad focus</span></div>
-                      <div><strong>{currentSquad.totalSessions}</strong><span>Sessions</span></div>
-                      <div><strong>{state.social.incomingSquadRequests.length}</strong><span>Pending requests</span></div>
-                    </div>
-                  </article>
-
-                  <div className="squad-main-grid">
-                    <article className="arena-panel squad-card squad-roster-panel">
-                      <div className="arena-panel-head"><span className="arena-panel-icon">R</span><div><span className="arena-kicker">Squad roster</span><h3>Members</h3></div></div>
-                      <div className="squad-member-list">
-                        {currentSquad.members.map((member) => {
-                          const expanded = expandedSquadMemberId === member.userId;
-                          const assignableRoles = currentSquadRole && !member.isSelf ? getAssignableSquadRoles(currentSquadRole, member.role) : [];
-                          const canKickMember = Boolean(currentSquadRole && !member.isSelf && canKickSquadMember(currentSquadRole, member.role));
-                          const canManageMember = assignableRoles.length > 0 || canKickMember;
-                          return (
-                            <div key={member.userId} className={`squad-member-card ${expanded ? "squad-member-card--expanded" : ""}`}>
-                              <button type="button" className="squad-member-summary" onClick={() => setExpandedSquadMemberId((current) => current === member.userId ? null : member.userId)}>
-                                <ArenaAvatar name={member.displayName} avatar={member.isSelf ? state.social.avatar : member.avatar} self={member.isSelf} size="sm" />
-                                <div className="squad-member-main"><strong>{member.displayName}{member.isSelf ? " (You)" : ""}</strong><span>{member.friendCode} · {formatMinutes(member.minutes)} · {member.sessions} sessions</span></div>
-                                <span className={`squad-role-badge squad-role-badge--${member.role}`}>{squadRoleLabels[member.role]}</span>
-                              </button>
-                              {expanded ? (
-                                <div className="squad-member-expanded">
-                                  <div>
-                                    <strong>{canManageMember ? `Manage ${member.displayName}` : member.isSelf ? "This is you" : "No actions available"}</strong>
-                                    <span>{squadRoleLabels[member.role]} · joined {formatProfileSeenAt(member.joinedAt)}</span>
-                                  </div>
-                                  {assignableRoles.length ? (
-                                    <div className="squad-member-role-actions">
-                                      {assignableRoles.map((role) => (
-                                        <button key={role} type="button" className={`arena-btn ${member.role === role ? "arena-btn--send" : "arena-btn--decline"}`} onClick={() => void changeSquadMemberRole(member.userId, role)} disabled={socialSyncing || member.role === role}>
-                                          Make {squadRoleLabels[role]}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  ) : null}
-                                  {canKickMember ? <button type="button" className="arena-btn arena-btn--decline squad-kick-expanded" onClick={() => void kickFromSquad(member.userId, member.displayName)} disabled={socialSyncing}>Kick from squad</button> : null}
-                                </div>
-                              ) : null}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </article>
-
-                    <article className="arena-panel squad-card squad-internal-leaderboard-panel">
-                      <div className="arena-panel-head"><span className="arena-panel-icon">⚔</span><div><span className="arena-kicker">Internal leaderboard</span><h3>Squad members</h3></div></div>
-                      <div className="arena-period-chips squad-periods" aria-label="Internal squad leaderboard period">
-                        {(["daily", "weekly", "overall"] as SocialLeaderboardPeriod[]).map((period) => <button key={period} type="button" className={socialPeriod === period ? "arena-period-chip arena-period-chip--active" : "arena-period-chip"} onClick={() => setSocialPeriod(period)}>{period === "daily" ? "Daily" : period === "weekly" ? "Weekly" : "Overall"}</button>)}
-                      </div>
-                      <div className="arena-lb-rows squad-lb-rows">
-                        {squadMemberLeaderboard.map((entry) => {
-                          const profileTarget = { userId: entry.userId, displayName: entry.displayName, friendCode: entry.friendCode, avatar: entry.isSelf ? state.social.avatar : entry.avatar };
-                          return <ArenaLeaderboardRow key={entry.userId} entry={entry} selfAvatar={state.social.avatar} onProfile={() => void openFriendProfile(profileTarget)} />;
-                        })}
-                        {!squadMemberLeaderboard.length ? <div className="arena-empty small">Sync your squad to see member rankings.</div> : null}
-                      </div>
-                    </article>
-                  </div>
-
-                  <article className="arena-panel squad-card squad-chat-card">
-                    <div className="arena-panel-head"><span className="arena-panel-icon">#</span><div><span className="arena-kicker">Squad chat</span><h3>Chat</h3></div></div>
-                    <div className="squad-chat-list">
-                      {state.social.squadMessages.map((message) => (
-                        <div key={message.id} className={`squad-chat-message ${message.isSelf ? "squad-chat-message--self" : ""}`}>
-                          <ArenaAvatar name={message.displayName} avatar={message.isSelf ? state.social.avatar : message.avatar} self={message.isSelf} size="sm" />
-                          <div><strong>{message.displayName} <span>{squadRoleLabels[message.role]}</span></strong><p>{message.body}</p></div>
-                          {message.isSelf ? <button type="button" className="squad-chat-delete" onClick={() => void deleteOwnSquadMessage(message.id)} title="Delete message">Delete</button> : null}
-                        </div>
-                      ))}
-                      {!state.social.squadMessages.length ? <div className="arena-empty small">No messages yet. Start the squad chat.</div> : null}
-                    </div>
-                    <form className="squad-chat-form" onSubmit={submitSquadChat}>
-                      <input className="arena-input" value={squadChatDraft} onChange={(event) => setSquadChatDraft(event.target.value)} placeholder="Message your squad" maxLength={500} />
-                      <button type="submit" className="arena-btn arena-btn--send" disabled={!squadChatDraft.trim()}>Send</button>
-                    </form>
-                  </article>
-
-                  {canManageCurrentSquadRequests ? (
-                    <article className="arena-panel squad-card squad-requests-card">
-                      <div className="arena-panel-head"><span className="arena-panel-icon">?</span><div><span className="arena-kicker">Private requests</span><h3>Join requests</h3></div></div>
-                      {state.social.incomingSquadRequests.length ? state.social.incomingSquadRequests.map((request) => (
-                        <div key={request.id} className="arena-request-card">
-                          <ArenaAvatar name={request.displayName ?? "Student"} avatar={request.avatar} size="sm" />
-                          <div className="arena-request-copy"><strong>{request.displayName}</strong><span>{request.friendCode}</span></div>
-                          <div className="arena-request-actions">
-                            <button type="button" className="arena-btn arena-btn--accept" onClick={() => void answerSquadRequest(request.id, "accepted")} disabled={socialSyncing}>Accept</button>
-                            <button type="button" className="arena-btn arena-btn--decline" onClick={() => void answerSquadRequest(request.id, "declined")} disabled={socialSyncing}>Decline</button>
-                          </div>
-                        </div>
-                      )) : <div className="arena-empty small">No pending squad requests.</div>}
-                    </article>
-                  ) : null}
-                </>
-              )}
-            </div>
-          ) : null}
-
-          {socialSubtab === "friends" ? (
-            <div className={`social-single-panel ${appStyle === "wabi-sabi" ? "wabi-friends-panel" : ""}`}>
-              <article className="arena-panel arena-friends-panel">
-                <div className="arena-panel-head">
-                  <span className="arena-panel-icon">+</span>
-                  <div>
-                    <span className="arena-kicker">Player tags</span>
-                    <h3>Friends</h3>
-                  </div>
-                  </div>
-
-                  <div className="arena-invite-card">
-                    <div>
-                      <span className="arena-kicker">Invite link</span>
-                      <p>Share this link in WhatsApp or anywhere else. It opens the download page with your player tag ready to copy.</p>
-                    </div>
-                    <input className="arena-input" value={friendInviteLink} readOnly onFocus={(event) => event.currentTarget.select()} />
-                    <button type="button" className="arena-btn arena-btn--send" onClick={copyFriendInviteLink}>Copy invite link</button>
-                  </div>
-
-                  <form className="arena-add-friend" onSubmit={submitFriendRequest}>
-                    <input className="arena-input" value={friendCodeDraft} onChange={(event) => setFriendCodeDraft(event.target.value.toUpperCase())} placeholder="Enter player tag, e.g. ABCD-1234" disabled={!socialConfigured} />
-                    <button type="submit" className="arena-btn arena-btn--send" disabled={socialSyncing || !socialConfigured}>Send</button>
-                  </form>
-
-                <div className="arena-social-section">
-                  <h4>Incoming <span>{state.social.incomingFriendRequests.length}</span></h4>
-                  {state.social.incomingFriendRequests.length ? state.social.incomingFriendRequests.map((request) => (
-                    <div key={request.id} className="arena-request-card">
-                      <ArenaAvatar name={request.fromDisplayName} avatar={request.fromAvatar} size="sm" />
-                      <div className="arena-request-copy"><strong>{request.fromDisplayName}</strong><span>{request.fromFriendCode}</span></div>
-                      <div className="arena-request-actions">
-                        <button type="button" className="arena-btn arena-btn--accept" onClick={() => void answerFriendRequest(request.id, "accepted")} disabled={socialSyncing}>Accept</button>
-                        <button type="button" className="arena-btn arena-btn--decline" onClick={() => void answerFriendRequest(request.id, "declined")} disabled={socialSyncing}>Decline</button>
-                      </div>
-                    </div>
-                  )) : <div className="arena-empty small">No incoming requests.</div>}
-                </div>
-
-                <div className="arena-social-section">
-                  <h4>Pending <span>{state.social.outgoingFriendRequests.length}</span></h4>
-                  {state.social.outgoingFriendRequests.length ? state.social.outgoingFriendRequests.map((request) => (
-                    <div key={request.id} className="arena-request-card">
-                      <ArenaAvatar name={request.toDisplayName} avatar={request.toAvatar} size="sm" />
-                      <div className="arena-request-copy"><strong>{request.toDisplayName}</strong><span>{request.toFriendCode}</span></div>
-                      <span className="arena-pending-badge">Pending</span>
-                    </div>
-                  )) : <div className="arena-empty small">No pending sent requests.</div>}
-                </div>
-
-                <div className="arena-social-section">
-                  <h4>Your Friends <span>{state.social.friends.length}</span></h4>
-                  {state.social.friends.length ? (
-                    <div className="arena-friend-grid">
-                      {state.social.friends.map((friend) => (
-                        <div key={friend.userId} className="arena-friend-card" onClick={() => void openFriendProfile(friend)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openFriendProfile(friend); } }}>
-                          <ArenaAvatar name={friend.displayName} avatar={friend.avatar} size="sm" />
-                          <div><strong>{friend.displayName}</strong><span>{friend.friendCode}{friend.lastSeenAt ? ` · seen ${formatProfileSeenAt(friend.lastSeenAt)}` : ""}</span></div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : <div className="arena-empty">Share your player tag to build your friends leaderboard.</div>}
-                </div>
-              </article>
-            </div>
-          ) : null}
-
-          {socialSubtab === "leaderboard" ? (
-            <article className={`arena-leaderboard ${appStyle === "wabi-sabi" ? "wabi-standings" : ""}`}>
-              <div className="arena-leaderboard-head">
-                <div className="arena-title-cluster">
-                  <span className="arena-title-icon">⚔</span>
-                  <div>
-                    <span className="arena-kicker">{appStyle === "wabi-sabi" ? "Standings" : "Arena standings"}</span>
-                    <h2>{appStyle === "wabi-sabi" ? socialScope === "global" ? "World" : socialScope === "squad" ? "Squad" : "Friends" : socialArenaTitle}</h2>
-                    <p>{socialArenaSubtitle}</p>
-                  </div>
-                </div>
-                <div className="arena-sync-status">
-                  <span>Last synced: {lastSocialSyncLabel}</span>
-                  <button type="button" className="arena-btn arena-btn--decline social-refresh-btn" onClick={() => void runSocialSync()} disabled={socialSyncing || !socialConfigured}>
-                    {socialSyncing ? "Syncing..." : "Refresh"}
-                  </button>
-                </div>
-              </div>
-
-              <div className="arena-scope-toggle" aria-label="Leaderboard scope">
-                {(["friends", "squad", "global"] as SocialLeaderboardScope[]).map((scope) => (
-                  <button key={scope} type="button" className={socialScope === scope ? "arena-scope-btn arena-scope-btn--active" : "arena-scope-btn"} onClick={() => setSocialScope(scope)}>
-                    {scope === "global" ? "World Arena" : scope === "squad" ? "Squad Arena" : "Friends Arena"}
-                  </button>
-                ))}
-              </div>
-
-              {socialScope === "squad" ? (
-                <div className="arena-period-chips" aria-label="Squad leaderboard period">
-                  {(["daily", "season", "overall"] as SocialSquadScorePeriod[]).map((period) => (
-                    <button key={period} type="button" className={squadScorePeriod === period ? "arena-period-chip arena-period-chip--active" : "arena-period-chip"} onClick={() => setSquadScorePeriod(period)}>
-                      {period === "daily" ? "Daily" : period === "season" ? "Seasonal Points" : "Overall Points"}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="arena-period-chips" aria-label="Leaderboard period">
-                  {(["daily", "weekly", "overall"] as SocialLeaderboardPeriod[]).map((period) => (
-                    <button key={period} type="button" className={socialPeriod === period ? "arena-period-chip arena-period-chip--active" : "arena-period-chip"} onClick={() => setSocialPeriod(period)}>
-                      {period === "daily" ? "Daily Sprint" : period === "weekly" ? "Weekly League" : "Hall of Focus"}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {socialScope === "global" && state.social.isPrivate ? (
-                <div className="arena-empty small arena-private-notice">
-                  <strong>Private profile enabled</strong>
-                  <span>You are hidden from the global leaderboard. Switch to Friends Arena to compare with friends.</span>
-                </div>
-              ) : null}
-
-              {socialScope === "squad" ? (
-                <div className="arena-empty small arena-private-notice">
-                  <strong>{SQUAD_SEASON_NAME}</strong>
-                  <span>Season: {SQUAD_SEASON_RANGE_LABEL} · Overall tracking started: {SQUAD_TRACKING_START_LABEL}</span>
-                </div>
-              ) : null}
-
-              {socialScope !== "squad" && appStyle === "field-notebook" ? (
-                <div className="fn-lb-table">
-                  <div className="fn-lb-head">
-                    <span />
-                    <span>Name</span>
-                    <span>Hours</span>
-                    <span>{socialPeriod === "daily" ? "Today" : socialPeriod === "overall" ? "All time" : "This week"}</span>
-                    <span>Sessions</span>
-                  </div>
-                  <div className="arena-lb-rows">
-                    {socialLeaderboard.map((entry) => {
-                      const profileTarget = { userId: entry.userId, displayName: entry.displayName, friendCode: entry.friendCode, avatar: entry.isSelf ? state.social.avatar : entry.avatar };
-                      const barPct = entry.minutes > 0 ? Math.max(4, Math.round((entry.minutes / socialLeaderboardTopMinutes) * 100)) : 0;
-                      return (
-                        <div key={entry.userId} className={`fn-lb-row ${entry.isSelf ? "fn-lb-row--self" : ""}`} onClick={() => void openFriendProfile(profileTarget)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openFriendProfile(profileTarget); } }}>
-                          <span className="fn-lb-rank">{entry.rank}</span>
-                          <span className="fn-lb-name">{entry.displayName}{entry.isSelf ? <em>{entry.friendCode}</em> : null}</span>
-                          <span className="fn-lb-hours">{formatMinutes(entry.minutes)}</span>
-                          <span className="fn-lb-bar"><i style={{ width: `${barPct}%` }} /></span>
-                          <span className="fn-lb-sessions">{entry.sessions}</span>
-                        </div>
-                      );
-                    })}
-                    {!socialLeaderboard.length ? (
-                      <div className="arena-empty">
-                        <strong>No contenders yet</strong>
-                        <span>Start studying and sync to claim your rank.</span>
-                      </div>
-                    ) : null}
-                  </div>
-                  {socialLeaderboard.length ? <p className="fn-lb-note">Bars are relative to the top of the board.</p> : null}
-                </div>
-              ) : null}
-
-              {socialScope !== "squad" && appStyle !== "field-notebook" && socialLeaderboard.length >= 3 ? (
-                <div className="arena-podium">
-                  {[socialLeaderboard[1], socialLeaderboard[0], socialLeaderboard[2]].map((entry, index) => {
-                    const profileTarget = { userId: entry.userId, displayName: entry.displayName, friendCode: entry.friendCode, avatar: entry.isSelf ? state.social.avatar : entry.avatar };
-                    return (
-                      <div key={entry.userId} className={`arena-podium-col ${entry.isSelf ? "arena-podium-col--self" : ""}`} onClick={() => void openFriendProfile(profileTarget)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openFriendProfile(profileTarget); } }}>
-                        <ArenaAvatar name={entry.displayName} avatar={entry.isSelf ? state.social.avatar : entry.avatar} self={entry.isSelf} size={index === 1 ? "lg" : "md"} />
-                        <strong>{entry.displayName}{entry.isSelf ? " (You)" : ""}</strong>
-                        <span>{formatMinutes(entry.minutes)}</span>
-                        <div className={`arena-podium-block arena-podium-block--${entry.rank}`}>
-                          <ArenaRankBadge rank={entry.rank} large={index === 1} />
-                          <small>{entry.sessions} sessions</small>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-
-              {socialScope === "squad" || appStyle !== "field-notebook" ? (
-                <div className="arena-lb-rows">
-                  {socialScope === "squad" ? squadScoreLeaderboard.map((entry) => (
-                    <SquadArenaRow key={entry.squadId} entry={entry} period={squadScorePeriod} isSelf={entry.squadId === state.social.squad?.id} onOpen={() => void openSquadDetails(entry)} />
-                  )) : (socialLeaderboard.length >= 3 ? socialLeaderboard.slice(3) : socialLeaderboard).map((entry) => {
-                    const profileTarget = { userId: entry.userId, displayName: entry.displayName, friendCode: entry.friendCode, avatar: entry.isSelf ? state.social.avatar : entry.avatar };
-                    return <ArenaLeaderboardRow key={entry.userId} entry={entry} selfAvatar={state.social.avatar} onProfile={() => void openFriendProfile(profileTarget)} />;
-                  })}
-                  {socialScope === "squad" && !squadScoreLeaderboard.length ? (
-                    <div className="arena-empty">
-                      <strong>No eligible squads yet</strong>
-                      <span>Squads need at least 2 members to enter the Squad Arena.</span>
-                    </div>
-                  ) : null}
-                  {socialScope !== "squad" && !socialLeaderboard.length ? (
-                    <div className="arena-empty">
-                      <strong>No contenders yet</strong>
-                      <span>Start studying and sync to claim your rank.</span>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </article>
-          ) : null}
-        </section>
-      ) : null}
-
-      {expandedFeedImage?.imageUrl ? (
-        <div className="feed-image-lightbox" onClick={() => setExpandedFeedImageId(null)} role="presentation">
-          <button type="button" className="feed-image-lightbox__frame" onClick={() => setExpandedFeedImageId(null)} aria-label="Close fullscreen feed image">
-            <img src={`${expandedFeedImage.imageUrl}${expandedFeedImage.imageUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(expandedFeedImage.imageExpiresAt ?? expandedFeedImage.createdAt)}`} alt={`${expandedFeedImage.displayName}'s feed post image`} />
-          </button>
-        </div>
-      ) : null}
-
-      {viewingFriend ? (
-        <div className="calendar-drawer-backdrop" style={{ justifyContent: "center", alignItems: "center" }} onClick={() => setViewingFriend(null)} role="presentation">
-          <article className="arena-player-card" style={{ width: "min(440px, 100%)", padding: 0, alignSelf: "center" }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`${viewingFriend.displayName}'s profile`}>
-            <div className="arena-player-card__inner">
-              <div className="arena-title-cluster" style={{ marginBottom: 16 }}>
-                <ArenaAvatar name={viewingFriend.displayName} avatar={viewingFriend.avatar} size="lg" />
-                <div style={{ flex: 1 }}>
-                  <span className="arena-kicker">{viewingFriend.friendCode}</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <h3 style={{ margin: 0 }}>{viewingFriend.displayName}</h3>
-                    <button type="button" className="arena-icon-button" onClick={() => setViewingFriend(null)} title="Close" style={{ marginLeft: "auto" }}>×</button>
-                  </div>
-                  {viewingFriend.lastSeenAt ? <span style={{ color: "var(--muted)", fontSize: "0.82rem" }}>Seen {formatProfileSeenAt(viewingFriend.lastSeenAt)}</span> : null}
-                  <div className="profile-action-row">
-                    <span className="arena-pending-badge">{viewingIsSelf ? "Your profile" : viewingIsFriend ? "Friend" : viewingRequestPending ? "Request pending" : "Not friends"}</span>
-                    {!viewingIsSelf && !viewingIsFriend && !viewingRequestPending ? (
-                      <button type="button" className="arena-btn arena-btn--send" onClick={() => void sendFriendRequestToCode(viewingFriend.friendCode)} disabled={socialSyncing || !socialConfigured}>Send friend request</button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-              {viewingFriendLoading ? (
-                <div className="arena-empty">Loading stats...</div>
-              ) : viewingFriendStats?.hoursVisible && viewingFriendStats.daily && viewingFriendStats.weekly && viewingFriendStats.overall ? (
-                <div className="arena-player-stats" style={{ marginTop: 0 }}>
-                  <div className="arena-mini-stat"><span className="arena-mini-stat__icon">↯</span><div><strong>{formatMinutes(viewingFriendStats.daily.minutes)}</strong><span>Today · {viewingFriendStats.daily.sessions} ses.</span></div></div>
-                  <div className="arena-mini-stat"><span className="arena-mini-stat__icon">◆</span><div><strong>{formatMinutes(viewingFriendStats.weekly.minutes)}</strong><span>This Week · {viewingFriendStats.weekly.sessions} ses.</span></div></div>
-                  <div className="arena-mini-stat"><span className="arena-mini-stat__icon">★</span><div><strong>{formatMinutes(viewingFriendStats.overall.minutes)}</strong><span>All Time · {viewingFriendStats.overall.sessions} ses.</span></div></div>
-                  <div className="arena-mini-stat"><span className="arena-mini-stat__icon">📅</span><div><strong>{viewingFriendStats.daily.lastActiveDate || "—"}</strong><span>Last Active</span></div></div>
-                </div>
-              ) : viewingFriendStats ? (
-                <div className="arena-empty">This friend has chosen not to share their study hours.</div>
-              ) : (
-                <div className="arena-error">Could not load stats.</div>
-              )}
-            </div>
-          </article>
-        </div>
-      ) : null}
-
-      {viewingSquadEntry ? (
-        <div className="calendar-drawer-backdrop" style={{ justifyContent: "center", alignItems: "center" }} onClick={() => { setViewingSquadEntry(null); setViewingSquadDetails(null); }} role="presentation">
-          <article className="arena-player-card squad-details-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`${viewingSquadEntry.squadName} squad details`}>
-            <div className="arena-player-card__inner">
-              <div className="arena-title-cluster squad-details-head">
-                <ArenaRankBadge rank={viewingSquadEntry.rank} large />
-                <div style={{ flex: 1 }}>
-                  <span className="arena-kicker">{viewingSquadDetails?.isPrivate ?? viewingSquadEntry.isPrivate ? "Private squad" : "Public squad"}</span>
-                  <div className="squad-details-title-row">
-                    <h3>{viewingSquadDetails?.name ?? viewingSquadEntry.squadName}</h3>
-                    <button type="button" className="arena-icon-button" onClick={() => { setViewingSquadEntry(null); setViewingSquadDetails(null); }} title="Close">×</button>
-                  </div>
-                  <div className="profile-action-row">
-                    <span className="arena-pending-badge">
-                      {viewingSquadAction === "current" ? "Your squad" : viewingSquadAction === "pending" ? "Request pending" : viewingSquadAction === "full" ? "Full" : viewingSquadAction === "unavailable" ? "Unavailable" : viewingSquadAction === "request" ? "Request to join" : "Open to join"}
-                    </span>
-                    {viewingSquadAction === "join" || viewingSquadAction === "request" ? (
-                      <button type="button" className="arena-btn arena-btn--send" onClick={() => void joinOrRequestViewedSquad()} disabled={socialSyncing || !socialConfigured}>
-                        {viewingSquadAction === "join" ? "Join squad" : "Request to join"}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-
-              {viewingSquadLoading ? (
-                <div className="arena-empty">Loading squad...</div>
-              ) : viewingSquadDetails ? (
-                <>
-                  <div className="arena-player-stats squad-details-stats" style={{ marginTop: 0 }}>
-                    <div className="arena-mini-stat"><span className="arena-mini-stat__icon">#</span><div><strong>{viewingSquadDetails.memberCount}/{viewingSquadDetails.maxMembers}</strong><span>Members</span></div></div>
-                    <div className="arena-mini-stat"><span className="arena-mini-stat__icon">◆</span><div><strong>{formatMinutes(viewingSquadDetails.totalMinutes)}</strong><span>Today</span></div></div>
-                    <div className="arena-mini-stat"><span className="arena-mini-stat__icon">★</span><div><strong>{viewingSquadEntry.points} pts</strong><span>{squadScorePeriod === "season" ? "Season" : squadScorePeriod === "overall" ? "Overall" : "Today if held"}</span></div></div>
-                    <div className="arena-mini-stat"><span className="arena-mini-stat__icon">↯</span><div><strong>{formatMinutes(Math.round(viewingSquadDetails.previousDayAverageMinutes ?? 0))}</strong><span>Yesterday avg</span></div></div>
-                  </div>
-
-                  <div className="squad-details-roster">
-                    <div className="section-label">Members</div>
-                    {viewingSquadDetails.members.map((member) => (
-                      <div key={member.userId} className="squad-details-member">
-                        <ArenaAvatar name={member.displayName} avatar={member.isSelf ? state.social.avatar : member.avatar} self={member.isSelf} size="sm" />
-                        <div>
-                          <strong>{member.displayName}{member.isSelf ? " (You)" : ""}</strong>
-                          <span>{squadRoleLabels[member.role]} · today {formatMinutes(member.minutes)} · {member.sessions} sessions</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="arena-error">Could not load squad details.</div>
-              )}
-            </div>
-          </article>
-        </div>
-      ) : null}
-
-      {badgesOpen ? (
-        <div className="calendar-drawer-backdrop profile-badges-backdrop" onClick={() => setBadgesOpen(false)} role="presentation">
-          <article className="profile-badges-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-label="Profile badges">
-            <div className="profile-badges-head">
-              <div>
-                <span className="arena-kicker">Profile collection</span>
-                <h3>Badges</h3>
-                <p>Hover or focus a badge to see how to unlock it.</p>
-              </div>
-              <button type="button" className="arena-icon-button" onClick={() => setBadgesOpen(false)} title="Close">×</button>
-            </div>
-
-            <div className="profile-badges-groups">
-              {profileBadgeGroups.map((group) => (
-                <section key={group.category} className="profile-badge-group">
-                  <div className="profile-badge-group-head">
-                    <h4>{group.category}</h4>
-                    <span>{group.source}</span>
-                  </div>
-                  <div className="profile-badge-grid">
-                    {group.badges.map(renderProfileBadgeCard)}
-                  </div>
-                  {group.subgroups?.map((subgroup) => (
-                    <div key={subgroup.category} className="profile-badge-subgroup">
-                      <div className="profile-badge-subgroup-head">
-                        <h5>{subgroup.category}</h5>
-                        <span>{subgroup.source}</span>
-                      </div>
-                      <div className="profile-badge-grid">
-                        {subgroup.badges.map(renderProfileBadgeCard)}
-                      </div>
-                    </div>
-                  ))}
-                </section>
-              ))}
-            </div>
-          </article>
-        </div>
-      ) : null}
-
-      {profileAvatarEditorOpen ? (
-        <div className="calendar-drawer-backdrop" style={{ justifyContent: "center", alignItems: "center" }} onClick={closeProfileAvatarEditor} role="presentation">
-          <article className="profile-avatar-editor" onClick={(event) => event.stopPropagation()} role="dialog" aria-label="Edit profile avatar">
-            <button type="button" className="arena-icon-button profile-avatar-close" onClick={closeProfileAvatarEditor} title="Close">×</button>
-            <div className="profile-avatar-editor-head">
-              <ArenaAvatar name={state.social.displayName} avatar={profileAvatarDraft} self size="lg" />
-              <div>
-                <span className="arena-kicker">Profile picture</span>
-                <h3>Choose your arena mark</h3>
-                <p>Friends will see this after your next arena sync.</p>
-              </div>
-            </div>
-
-            <div className="profile-avatar-mode-toggle" aria-label="Avatar type">
-              <button type="button" className={profileAvatarDraft.kind === "letter" ? "active" : ""} onClick={() => setProfileAvatarDraft({ kind: "letter", letter: getFirstAvatarLetter(state.social.displayName), style: "classic" })}>Letter</button>
-              <button type="button" className={profileAvatarDraft.kind === "icon" ? "active" : ""} onClick={() => setProfileAvatarDraft({ kind: "icon", icon: avatarIcons[0] })}>Icon</button>
-              <button type="button" className={profileAvatarDraft.kind === "photo" ? "active" : ""} onClick={() => setProfileAvatarDraft(profileAvatarDraft.kind === "photo" ? profileAvatarDraft : { kind: "photo", name: "", url: "", mimeType: "image/webp" })}>Photo</button>
-            </div>
-
-            {profileAvatarDraft.kind === "letter" ? (
-              <div className="profile-avatar-panel">
-                <div className="profile-avatar-grid profile-avatar-grid--styles">
-                  {avatarStyles.map((style) => {
-                    const avatar: SocialAvatar = { kind: "letter", letter: profileAvatarDraft.letter, style: style.id };
-                    const selected = profileAvatarDraft.kind === "letter" && profileAvatarDraft.style === style.id;
-                    return (
-                      <button key={style.id} type="button" className={`profile-avatar-choice ${selected ? "selected" : ""}`} onClick={() => setProfileAvatarDraft(avatar)}>
-                        <ArenaAvatar name={state.social.displayName} avatar={avatar} self size="md" />
-                        <span>{style.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <button type="button" className="ghost-button small-button profile-avatar-change-letter" onClick={() => setProfileAvatarLetterPickerOpen((open) => !open)}>
-                  Change letter
-                </button>
-                {profileAvatarLetterPickerOpen ? (
-                  <div className="profile-avatar-letter-picker" aria-label="Choose avatar letter">
-                    {alphabetLetters.map((letter) => (
-                      <button key={letter} type="button" className={profileAvatarDraft.letter === letter ? "selected" : ""} onClick={() => setProfileAvatarDraft({ ...profileAvatarDraft, letter })}>
-                        {letter}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : profileAvatarDraft.kind === "icon" ? (
-              <div className="profile-avatar-grid profile-avatar-grid--icons">
-                {avatarIcons.map((icon) => {
-                  const avatar: SocialAvatar = { kind: "icon", icon };
-                  const selected = profileAvatarDraft.kind === "icon" && profileAvatarDraft.icon === icon;
-                  return (
-                    <button key={icon} type="button" className={`profile-avatar-choice ${selected ? "selected" : ""}`} onClick={() => setProfileAvatarDraft(avatar)}>
-                      <ArenaAvatar name={state.social.displayName} avatar={avatar} self size="md" />
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="profile-avatar-panel">
-                <button type="button" className="profile-avatar-photo-upload" onClick={() => profileAvatarFileInputRef.current?.click()}>
-                  {profileAvatarDraft.url ? "Change photo" : "Choose a photo"}
-                </button>
-                <input ref={profileAvatarFileInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => void handleProfileAvatarPhotoChange(event)} />
-                {profileAvatarDraft.url ? (
-                  <button type="button" className="ghost-button small-button profile-avatar-photo-remove" onClick={() => setProfileAvatarDraft({ kind: "photo", name: "", url: "", mimeType: "image/webp" })}>Remove photo</button>
-                ) : null}
-                <p className="profile-avatar-photo-hint">Square photos look best. Up to 512px, under 1 MB. PNG, JPEG, or WebP (no GIFs).</p>
-              </div>
-            )}
-
-            <div className="profile-avatar-actions">
-              <button type="button" className="ghost-button small-button" onClick={closeProfileAvatarEditor}>Cancel</button>
-              <button type="button" className="arena-btn arena-btn--send" onClick={() => void saveProfileAvatar()} disabled={socialSyncing}>Save</button>
-            </div>
-          </article>
-        </div>
-      ) : null}
-
-      {avatarCropOpen && avatarCropSource ? (
-        <div className="calendar-drawer-backdrop" style={{ justifyContent: "center", alignItems: "center" }} onClick={cancelAvatarCrop} role="presentation">
-          <article className="profile-crop-editor" onClick={(event) => event.stopPropagation()} role="dialog" aria-label="Crop profile picture">
-            <div className="profile-crop-head">
-              <div>
-                <span className="arena-kicker">Profile picture</span>
-                <h3>Crop your photo</h3>
-                <p>Drag to reposition, scroll or use the slider to zoom. The result is a square picture.</p>
-              </div>
-            </div>
-            <div
-              className={`profile-crop-stage ${avatarCropDragging ? "profile-crop-stage--dragging" : ""}`}
-              style={{ width: AVATAR_CROP_VIEWPORT_PX, height: AVATAR_CROP_VIEWPORT_PX }}
-              onPointerDown={handleAvatarCropPointerDown}
-              onPointerMove={handleAvatarCropPointerMove}
-              onPointerUp={handleAvatarCropPointerEnd}
-              onPointerCancel={handleAvatarCropPointerEnd}
-              onWheel={handleAvatarCropWheel}
-            >
-              <img
-                src={avatarCropSource.url}
-                alt="Profile picture to crop"
-                draggable={false}
-                style={{
-                  width: avatarCropSource.width * Math.max(AVATAR_CROP_VIEWPORT_PX / avatarCropSource.width, AVATAR_CROP_VIEWPORT_PX / avatarCropSource.height) * avatarCrop.zoom,
-                  height: avatarCropSource.height * Math.max(AVATAR_CROP_VIEWPORT_PX / avatarCropSource.width, AVATAR_CROP_VIEWPORT_PX / avatarCropSource.height) * avatarCrop.zoom,
-                  transform: `translate(${AVATAR_CROP_VIEWPORT_PX / 2 - avatarCrop.x * avatarCropSource.width * Math.max(AVATAR_CROP_VIEWPORT_PX / avatarCropSource.width, AVATAR_CROP_VIEWPORT_PX / avatarCropSource.height) * avatarCrop.zoom}px, ${AVATAR_CROP_VIEWPORT_PX / 2 - avatarCrop.y * avatarCropSource.height * Math.max(AVATAR_CROP_VIEWPORT_PX / avatarCropSource.width, AVATAR_CROP_VIEWPORT_PX / avatarCropSource.height) * avatarCrop.zoom}px)`,
-                }}
-              />
-              <div className="profile-crop-grid" aria-hidden="true" />
-            </div>
-            <div className="profile-crop-zoom-row">
-              <span aria-hidden="true">−</span>
-              <input type="range" min={1} max={AVATAR_CROP_MAX_ZOOM} step={0.01} value={avatarCrop.zoom} onChange={(event) => handleAvatarCropZoomChange(Number(event.target.value))} aria-label="Zoom" />
-              <span aria-hidden="true">+</span>
-            </div>
-            <div className="profile-avatar-actions">
-              <button type="button" className="ghost-button small-button" onClick={cancelAvatarCrop}>Cancel</button>
-              <button type="button" className="arena-btn arena-btn--send" onClick={() => void confirmAvatarCrop()}>Apply crop</button>
-            </div>
-          </article>
-        </div>
+        <Suspense fallback={<section className="arena-root"><p className="arena-empty">Loading Social...</p></section>}>
+          <LazySocialScreen {...({ AVATAR_CROP_MAX_ZOOM, AVATAR_CROP_VIEWPORT_PX, ArenaAvatar, ArenaBg, ArenaLeaderboardRow, ArenaRankBadge, MAX_FEED_POLL_OPTIONS, SQUAD_SEASON_NAME, SQUAD_SEASON_RANGE_LABEL, SQUAD_TRACKING_START_LABEL, SquadArenaRow, addFeedPollOption, alphabetLetters, answerFriendRequest, answerSquadRequest, appStyle, avatarCrop, avatarCropDragging, avatarCropOpen, avatarCropSource, avatarIcons, avatarStyles, badgesOpen, canKickSquadMember, canManageCurrentSquadRequests, canViewR2Usage, cancelAvatarCrop, cancelEditingFeedPost, cancelEditingSocialName, changeSquadMemberRole, clearFeedPollDraft, closeProfileAvatarEditor, confirmAvatarCrop, copyFriendCode, copyFriendInviteLink, currentSquad, currentSquadRole, deleteOwnFeedPost, deleteOwnSquadMessage, displayedSocialFeed, editingFeedPostId, editingFeedPostImage, editingFeedPostNote, editingFeedPostRemoveImage, emojiPickerPostId, expandedFeedComments, expandedFeedImage, expandedSquadMemberId, failedFeedImages, feedCommentDrafts, feedCommentSavingId, feedImageDraft, feedImagesVisible, feedLoading, feedNoteDraft, feedPollDraft, feedPollHasDraft, feedPollPanelOpen, feedPollsVisible, feedPostSaving, feedScope, formatBytes, formatCompactNumber, formatFeedPostedAt, formatMinutes, formatProfileSeenAt, friendCodeDraft, friendInviteLink, getAssignableSquadRoles, getFirstAvatarLetter, handleAvatarCropPointerDown, handleAvatarCropPointerEnd, handleAvatarCropPointerMove, handleAvatarCropWheel, handleAvatarCropZoomChange, handleEditingFeedPostImageChange, handleFeedImageDraftChange, handleProfileAvatarPhotoChange, incomingFriendRequestCount, isRecentlyActive, joinOrRequestSquad, joinOrRequestViewedSquad, kickFromSquad, lastSocialSyncLabel, latestFeedSession, latestFeedSessionPosted, leaveCurrentSquad, liveFriends, loadSquadSuggestions, localSocialDaily, localSocialMonthly, localSocialOverall, localSocialWeekly, myFriendRank, myGlobalRank, openFriendProfile, openProfileAvatarEditor, openSquadDetails, postLatestSessionToFeed, profileAvatarDraft, profileAvatarEditorOpen, profileAvatarFileInputRef, profileAvatarLetterPickerOpen, profileBadgeGroups, r2UsageStatus, removeFeedPollOption, renderProfileBadgeCard, runSocialSync, saveFeedPostEdit, saveProfileAvatar, saveSocialName, sendFriendRequestToCode, setBadgesOpen, setEditingFeedPostImage, setEditingFeedPostNote, setEditingFeedPostRemoveImage, setEmojiPickerPostId, setExpandedFeedImageId, setExpandedSquadMemberId, setFailedFeedImages, setFeedCommentDrafts, setFeedImageDraft, setFeedNoteDraft, setFeedPollDraft, setFeedPollPanelOpen, setFeedScope, setFriendCodeDraft, setProfileAvatarDraft, setProfileAvatarLetterPickerOpen, setSocialNameDraft, setSocialPeriod, setSocialScope, setSocialSubtab, setSquadChatDraft, setSquadNameDraft, setSquadPrivateDraft, setSquadScorePeriod, setSquadSearchDraft, setSquadSettingsEditing, setSquadSettingsNameDraft, setSquadSettingsPrivateDraft, setViewingFriend, setViewingSquadDetails, setViewingSquadEntry, setWabiCircleCompetitive, socialArenaSubtitle, socialArenaTitle, socialConfigured, socialLeaderboard, socialLeaderboardTopMinutes, socialNameDraft, socialNameEditing, socialPeriod, socialScope, socialSubtab, socialSubtabs, socialSyncing, squadChatDraft, squadMemberLeaderboard, squadNameDraft, squadPrivateDraft, squadRoleLabels, squadScoreLeaderboard, squadScorePeriod, squadSearchDraft, squadSearchResults, squadSearching, squadSettingsEditing, squadSettingsNameDraft, squadSettingsPrivateDraft, squadSuggestionPool, squadSuggestions, squadSuggestionsLoading, startEditingFeedPost, startEditingSocialName, startSquadSettingsEdit, state, submitFeedComment, submitFriendRequest, submitSquadChat, submitSquadCreate, submitSquadSearch, submitSquadSettings, toggleAutoPostSessions, toggleFeedComments, toggleLocalFeedReaction, toggleProfilePrivacy, toggleShowHoursToFriends, updateFeedPollOption, viewingFriend, viewingFriendLoading, viewingFriendStats, viewingIsFriend, viewingIsSelf, viewingRequestPending, viewingSquadAction, viewingSquadDetails, viewingSquadEntry, viewingSquadLoading, voteFeedPoll, wabiAttendanceFriends, wabiCircleCompetitive, weekCompareEntries } as Record<string, unknown>)} />
+        </Suspense>
       ) : null}
 
       {state.activeTab === "break" && appStyle === "wabi-sabi" ? renderWabiBreakRoom() : null}
@@ -15419,10 +14568,11 @@ function App() {
             <div className="break-card-grid" data-tour="break-games">
               {studyBreakGames.map((game) => {
                 const unlocked = effectiveUnlocked.includes(game.name);
-                return (
+                const playable = unlocked;
+                const card = (
                   <div
                     key={game.name}
-                    className={`break-game-card ${unlocked ? "unlocked" : "locked"} ${celebrating === game.name ? "celebrating" : ""}`}
+                    className={`break-game-card ${playable ? "unlocked" : "locked"} ${celebrating === game.name ? "celebrating" : ""}`}
                     onAnimationEnd={() => setCelebrating(null)}
                   >
                     <div className="break-game-main">
@@ -15430,7 +14580,7 @@ function App() {
                       <span>{game.desc}</span>
                     </div>
                     <div className="break-game-side">
-                      {unlocked ? (
+                      {playable ? (
                         game.name === "Daily Durak" ? (
                           <div className="break-game-durak">
                             <span className="break-durak-progress">{(state.durakPuzzle.solvedCount || 0)}/3</span>
@@ -15466,6 +14616,13 @@ function App() {
                               Play
                             </button>
                           </div>
+                        ) : game.name === "Daily Skribbl" ? (
+                          <div className="break-game-durak">
+                            <span className="break-durak-progress">Daily</span>
+                            <button type="button" className="design-chip" data-tour="break-game-action" onClick={() => { logPlayedBreak(game.name); setShowSkribblPuzzle(true); }}>
+                              Play
+                            </button>
+                          </div>
                         ) : (
                           <a href={game.url} target="_blank" rel="noreferrer" className="design-chip" data-tour="break-game-action" onClick={() => logPlayedBreak(game.name)}>
                             Play
@@ -15481,6 +14638,7 @@ function App() {
                     </div>
                   </div>
                 );
+                return card;
               })}
             </div>
 
@@ -15526,7 +14684,7 @@ function App() {
         </section>
       ) : null}
 
-      {(showTravlePuzzle || showFlagglePuzzle || showGeodlePuzzle || showWordlePuzzle || showDurakPuzzle) ? createPortal(<>
+      {(showTravlePuzzle || showFlagglePuzzle || showGeodlePuzzle || showWordlePuzzle || showDurakPuzzle || showSkribblPuzzle) ? createPortal(<>
       {showTravlePuzzle ? (
         <div className="travle-overlay" onClick={() => setShowTravlePuzzle(false)} role="presentation">
           <div className="travle-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-label="Daily Travle puzzle">
@@ -16037,10 +15195,15 @@ function App() {
           </div>
         </div>
       ) : null}
+
+      {showSkribblPuzzle ? (
+        <SkribblRoom state={state} onClose={() => setShowSkribblPuzzle(false)} />
+      ) : null}
       </>, document.body) : null}
 
-      {fullscreen && state.timer.phase !== "idle" ? (
+      {appStyle !== "wabi-sabi" && fullscreen && state.timer.phase !== "idle" ? (
         <div className="exam-fullscreen-overlay">
+          {appStyle === "field-notebook" && palette === "sakura" ? <SakuraScatter /> : null}
           <button
             type="button"
             className="exam-fullscreen-exit"

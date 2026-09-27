@@ -1,4 +1,17 @@
-@import url("https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Courier+Prime:wght@400;700&family=Shippori+Mincho:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@300;400;500;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Courier+Prime:wght@400;700&family=Shippori+Mincho:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@300;400;500;700&family=Dancing+Script:wght@500;600&display=swap");
+
+/* Self-hosted, not just a fallback: the packaged app's CSP (see src-tauri/tauri.conf.json)
+   restricts style-src/font-src to 'self', so the @import above - and every Google Fonts request
+   it makes - is silently blocked in the actual built app (it only ever worked, if it ever
+   appeared to, in an unsandboxed browser preview). This is the one cursive face actually used
+   for real content (the calendar's subject line), so it gets a local copy that CSP allows. */
+@font-face {
+  font-family: "Dancing Script";
+  font-style: normal;
+  font-weight: 500 700;
+  font-display: swap;
+  src: url("/fonts/DancingScript-latin.woff2") format("woff2");
+}
 
 :root {
   --font-serif: "Newsreader", Georgia, "Times New Roman", serif;
@@ -426,6 +439,119 @@
   --garden-sky: oklch(0.92 0.030 90);
   --garden-soil: oklch(0.78 0.040 55);
   color-scheme: light;
+}
+
+/* ---------- SAKURA — whitish-pink notebook, fallen petals ---------- */
+:root[data-app-style="field-notebook"][data-palette="sakura"],
+:root[data-app-style="field-notebook"][data-palette="sakura"][data-theme="dark"] {
+  --bg: #f7eeed;
+  --bg-top: #fae6e7;
+  --bg-grad-1: #f7eeed;
+  --bg-grad-2: #f7eeed;
+  --surface: #fae6e7;
+  --surface-2: #fcecf0;
+  --surface-raised: #fff5f6;
+  --surface-inset: #f4bbc9;
+  --hover: #f4bbc9;
+  --line: #f6a6bb;
+  --line-soft: #f4bbc9;
+  --line-strong: #f191ac;
+  --ink: #3d2230;
+  --ink-2: #5a3447;
+  --ink-3: #8a6070;
+  --ink-4: #b08a9a;
+  --text: var(--ink);
+  --muted: var(--ink-3);
+  --border: var(--line);
+  --border-strong: var(--line-strong);
+  --accent: #f191ac;
+  --accent-strong: #e67a9e;
+  --accent-soft: rgb(241 145 172 / 0.14);
+  --accent-line: rgb(241 145 172 / 0.32);
+  --on-accent: #fff7f8;
+  --warn: #b85a6b;
+  --warn-soft: rgb(184 90 107 / 0.14);
+  --danger: #c05070;
+  --danger-soft: rgb(192 80 112 / 0.14);
+  --garden: #d98a9f;
+  --garden-deep: #b85a6b;
+  --garden-soft: rgb(217 138 159 / 0.14);
+  --ok: #d98a9f;
+  --steady: #b08a9a;
+  --watch: #c9a048;
+  --critical: #c05070;
+  --shadow-sm: 0 1px 0 rgb(61 34 48 / 0.06);
+  --shadow-md: 0 2px 0 rgb(61 34 48 / 0.08);
+  --shadow-lg: 0 2px 8px rgb(61 34 48 / 0.10);
+  --shadow: var(--shadow-md);
+  --ring-track: #f4bbc9;
+  --garden-sky: #f7eeed;
+  --garden-soil: #e8c4cc;
+  --fn-desk: #f7eeed;
+  --fn-paper: #fae6e7;
+  --fn-paper-1: #fcecf0;
+  --fn-paper-2: #f4bbc9;
+  --fn-paper-3: #fae6e7;
+  --fn-slip: #fcecf0;
+  --fn-rule-hard: 1px solid #f191ac;
+  --fn-rule-soft: 1px solid #f4bbc9;
+  --fn-rule-dot: 1px dotted #f6a6bb;
+  --fn-edge: 1px solid #f6a6bb;
+  --fn-link: #8a4a5e;
+  --fn-stamp: #f191ac;
+  --fn-course-blue: #8a4a6e;
+  --fn-course-green: #b07085;
+  --fn-course-ochre: #c9a048;
+  --fn-course-mulberry: #f191ac;
+  color-scheme: light;
+}
+
+[data-app-style="field-notebook"][data-palette="sakura"] body,
+[data-app-style="wabi-sabi"][data-palette="sakura"] body {
+  background-color: #f7eeed;
+}
+
+[data-app-style="field-notebook"][data-palette="sakura"] body::after,
+[data-app-style="wabi-sabi"][data-palette="sakura"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url('/sakura-leaves-ezgif.com-gif-maker.gif');
+  background-repeat: repeat;
+  background-size: auto;
+  opacity: 0.14;
+}
+
+[data-app-style="field-notebook"][data-palette="sakura"] .shell,
+[data-app-style="wabi-sabi"][data-palette="sakura"] .shell,
+[data-app-style="field-notebook"][data-palette="sakura"] .exam-fullscreen-overlay,
+[data-app-style="wabi-sabi"][data-palette="sakura"] .exam-fullscreen-overlay {
+  position: relative;
+}
+
+[data-app-style="field-notebook"][data-palette="sakura"] .exam-fullscreen-overlay::before,
+[data-app-style="wabi-sabi"][data-palette="sakura"] .exam-fullscreen-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url('/sakura-leaves-ezgif.com-gif-maker.gif');
+  background-repeat: repeat;
+  background-size: auto;
+  opacity: 0.12;
+  z-index: 0;
+}
+
+[data-app-style="field-notebook"][data-palette="sakura"] .exam-fullscreen-overlay .exam-fullscreen-face,
+[data-app-style="wabi-sabi"][data-palette="sakura"] .exam-fullscreen-overlay .exam-fullscreen-face,
+[data-app-style="field-notebook"][data-palette="sakura"] .exam-fullscreen-overlay .exam-fullscreen-actions,
+[data-app-style="wabi-sabi"][data-palette="sakura"] .exam-fullscreen-overlay .exam-fullscreen-actions,
+[data-app-style="field-notebook"][data-palette="sakura"] .exam-fullscreen-overlay .exam-fullscreen-exit,
+[data-app-style="wabi-sabi"][data-palette="sakura"] .exam-fullscreen-overlay .exam-fullscreen-exit {
+  position: relative;
+  z-index: 1;
 }
 
 /* ---------- COSMIC — deep indigo & violet with a luminous orchid glow ---------- */
@@ -1014,4 +1140,36 @@ p {
   --wabi-sage: #7fa077;
   --wabi-sage-deep: #97b78f;
   --wabi-vermilion: #d97a5e;
+}
+
+/* Falling sakura petals: outer element falls + drifts, inner image sways. */
+.sakura-petal {
+  position: absolute;
+  top: -60px;
+  opacity: 0;
+  animation: sakura-fall linear infinite;
+  will-change: transform, opacity;
+}
+
+.sakura-petal img {
+  display: block;
+  object-fit: contain;
+  animation: sakura-sway ease-in-out infinite alternate;
+}
+
+@keyframes sakura-fall {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+  8% { opacity: var(--petal-opacity, 0.3); }
+  92% { opacity: var(--petal-opacity, 0.3); }
+  100% { transform: translate3d(var(--petal-drift, 40px), calc(100vh + 80px), 0) rotate(var(--petal-spin, 360deg)); opacity: 0; }
+}
+
+@keyframes sakura-sway {
+  from { transform: translateX(-14px) rotate(-18deg); }
+  to { transform: translateX(14px) rotate(18deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sakura-petal { animation: none; opacity: var(--petal-opacity, 0.25); top: 20%; }
+  .sakura-petal img { animation: none; }
 }

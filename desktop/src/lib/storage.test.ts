@@ -6,7 +6,9 @@ import {
   defaultState,
   defaultTimer,
   getChangedSections,
+  buildBackup,
   loadAppState,
+  restoreBackup,
   saveAppState,
 } from "./storage";
 import type { AppState, TimerState } from "../types";
@@ -154,7 +156,7 @@ describe("saveAppState - section-aware writes", () => {
     let baselines = createInitialPersistenceBaselines(state);
     baselines = applyPersistedSections(baselines, state, saveAppState(state, baselines));
 
-    const afterEdit: AppState = { ...state, tasks: [{ id: "t1", semesterId: "s", courseId: "c", title: "Read", unitLabel: "Unit", totalUnits: 1, completedUnits: 0, dueDate: null, priority: "medium", notes: "", createdAt: "2026-08-01T00:00:00.000Z" }] };
+    const afterEdit: AppState = { ...state, tasks: [{ id: "t1", semesterId: "s", courseId: "c", title: "Read", subtype: "Other", unitLabel: "Unit", totalUnits: 1, completedUnits: 0, dueDate: null, priority: "medium", notes: "", createdAt: "2026-08-01T00:00:00.000Z" }] };
     const succeeded = saveAppState(afterEdit, baselines);
 
     expect(succeeded).toEqual(new Set(["core"]));
@@ -351,5 +353,172 @@ describe("loadAppState - migration and corruption", () => {
 
   it("returns defaultState when nothing is persisted at all", () => {
     expect(loadAppState()).toEqual(defaultState);
+  });
+
+  it("backfills phase/archived/date defaults on an old-shape semester and course", () => {
+    storage.setItem(CORE_KEY, JSON.stringify({
+      semesters: [{ id: "sem1", name: "Old Semester", createdAt: "2026-01-01T00:00:00.000Z" }],
+      courses: [{ id: "course1", semesterId: "sem1", name: "Old Course", color: "#fff", targetGrade: 5, createdAt: "2026-01-01T00:00:00.000Z" }],
+    }));
+    const result = loadAppState();
+    expect(result.semesters[0]).toMatchObject({ startDate: null, endDate: null, phase: "semester", archived: false, archivedAt: null });
+    expect(result.courses[0]).toMatchObject({ externalUrl: null });
+  });
+
+  it("defaults a legacy daily todo's missing time/endTime/notes fields", () => {
+    storage.setItem(CORE_KEY, JSON.stringify({
+      dailyTodos: [{ id: "todo1", date: "2026-09-07", title: "Buy pens", completed: false, completedAt: null, createdAt: "2026-01-01T00:00:00.000Z" }],
+    }));
+    const result = loadAppState();
+    expect(result.dailyTodos[0]).toMatchObject({ time: null, endTime: null, notes: "", repeatWeekly: false, completedOccurrences: [], recurrenceEndDate: null, skippedOccurrences: [], occurrenceTimes: {} });
+  });
+
+  it("defaults the new planner arrays to [] when the stored blob predates them", () => {
+    storage.setItem(CORE_KEY, JSON.stringify({ waterGlasses: 1 }));
+    const result = loadAppState();
+    expect(result.timetableEvents).toEqual([]);
+    expect(result.holidays).toEqual([]);
+    expect(result.dailyTodos).toEqual([]);
+  });
+
+  it("round-trips populated timetable events, holidays, and todos", () => {
+    const state: AppState = {
+      ...defaultState,
+      tasks: [{
+        id: "task1", semesterId: "sem1", courseId: "course1", title: "Lectures", subtype: "Lecture", unitLabel: "unit",
+        totalUnits: 14, completedUnits: 3, dueDate: null, priority: "medium", notes: "", createdAt: "2026-01-01T00:00:00.000Z",
+      }],
+      timetableEvents: [{
+        id: "ev1", semesterId: "sem1", courseId: "course1", kind: "occurrence", taskId: "task1", label: "Lecture",
+        date: "2026-09-07", time: "10:00", endTime: "12:00", repeatWeekly: true, recurrenceEndDate: null, occurrenceOverrides: {}, url: null,
+        completedOccurrences: [], createdAt: "2026-01-01T00:00:00.000Z",
+      }],
+      holidays: [{ id: "holiday1", semesterId: "sem1", startDate: "2026-12-20", endDate: "2027-01-05", label: "Winter break", createdAt: "2026-01-01T00:00:00.000Z" }],
+      dailyTodos: [{ id: "todo1", date: "2026-09-07", time: null, endTime: null, title: "Buy pens", notes: "", completed: false, completedAt: null, createdAt: "2026-01-01T00:00:00.000Z", repeatWeekly: false, completedOccurrences: [], recurrenceEndDate: null, skippedOccurrences: [], occurrenceTimes: {} }],
+    };
+    saveAppState(state, createInitialPersistenceBaselines(defaultState));
+    const loaded = loadAppState();
+    expect(loaded.timetableEvents).toEqual(state.timetableEvents);
+    expect(loaded.holidays).toEqual(state.holidays);
+    expect(loaded.dailyTodos).toEqual(state.dailyTodos);
+  });
+
+  it("migrates a legacy recurring-class-event and exercise-sheet-series blob into unified timetable events, creating fallback tasks for them", () => {
+    storage.setItem(CORE_KEY, JSON.stringify({
+      semesters: [{ id: "sem1", name: "WS", createdAt: "2026-01-01T00:00:00.000Z", startDate: "2026-09-07", endDate: "2026-12-31", phase: "semester", archived: false, archivedAt: null }],
+      recurringClassEvents: [{ id: "ev1", semesterId: "sem1", courseId: "course1", label: "Lecture", weekday: 1, startTime: "10:00", endTime: "12:00", createdAt: "2026-01-01T00:00:00.000Z" }],
+      exerciseSheetSeries: [{ id: "series1", semesterId: "sem1", courseId: "course1", label: "Sheet", releaseWeekday: 1, releaseTime: "20:00", deadlineWeekday: 0, deadlineTime: "23:59", url: "https://example.com", createdAt: "2026-01-01T00:00:00.000Z" }],
+    }));
+    const result = loadAppState();
+    expect(result.timetableEvents).toEqual([
+      { id: "ev1", semesterId: "sem1", courseId: "course1", kind: "occurrence", taskId: "course1:legacy-lecture-task", label: "Lecture", date: "2026-09-07", time: "10:00", endTime: "12:00", repeatWeekly: true, recurrenceEndDate: null, occurrenceOverrides: {}, url: null, completedOccurrences: [], createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "series1-release", semesterId: "sem1", courseId: "course1", kind: "sheet-release", taskId: "course1:legacy-sheet-task", label: "Sheet", date: "2026-09-07", time: "20:00", endTime: null, repeatWeekly: true, recurrenceEndDate: null, occurrenceOverrides: {}, url: "https://example.com", completedOccurrences: [], createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "series1-deadline", semesterId: "sem1", courseId: "course1", kind: "sheet-deadline", taskId: "course1:legacy-sheet-task", label: "Sheet", date: "2026-09-13", time: "23:59", endTime: null, repeatWeekly: true, recurrenceEndDate: null, occurrenceOverrides: {}, url: "https://example.com", completedOccurrences: [], createdAt: "2026-01-01T00:00:00.000Z" },
+    ]);
+    expect(result.tasks.map((task) => task.id)).toEqual(expect.arrayContaining(["course1:legacy-lecture-task", "course1:legacy-sheet-task"]));
+  });
+
+  it("migrates old kind='class'/'lecture'/'exercise-session' timetable events (with no taskId or unitTypeId at all) onto a fallback task", () => {
+    storage.setItem(CORE_KEY, JSON.stringify({
+      courses: [{ id: "course1", semesterId: "sem1", name: "Old Course", color: "#fff", targetGrade: 5, createdAt: "2026-01-01T00:00:00.000Z" }],
+      timetableEvents: [
+        { id: "ev1", semesterId: "sem1", courseId: "course1", kind: "class", label: "Lecture", date: "2026-09-07", time: "10:00", endTime: "12:00", repeatWeekly: true, url: null, completedOccurrences: [], createdAt: "2026-01-01T00:00:00.000Z" },
+        { id: "ev2", semesterId: "sem1", courseId: "course1", kind: "exercise-session", label: "Exercise", date: "2026-09-08", time: "14:00", endTime: "16:00", repeatWeekly: true, url: null, completedOccurrences: [], createdAt: "2026-01-01T00:00:00.000Z" },
+      ],
+    }));
+    const result = loadAppState();
+    expect(result.timetableEvents[0]).toMatchObject({ kind: "occurrence", taskId: "course1:legacy-lecture-task" });
+    expect(result.timetableEvents[1]).toMatchObject({ kind: "occurrence", taskId: "course1:legacy-lecture-task" });
+    expect(result.tasks.some((task) => task.id === "course1:legacy-lecture-task")).toBe(true);
+  });
+
+  it("converts a pre-unification course.unitTypes entry into a Task, reusing the unit type's id, and drops a timetable event whose taskId no longer resolves to any task", () => {
+    storage.setItem(CORE_KEY, JSON.stringify({
+      courses: [{
+        id: "course1", semesterId: "sem1", name: "Old Course", color: "#fff", targetGrade: 5, createdAt: "2026-01-01T00:00:00.000Z",
+        unitTypes: [{ id: "unit1", label: "Lectures", behavior: "single", repeatWeeklyDefault: true, completedCount: 4, createdAt: "2026-01-01T00:00:00.000Z" }],
+      }],
+      timetableEvents: [
+        { id: "ev1", semesterId: "sem1", courseId: "course1", kind: "occurrence", unitTypeId: "unit1", label: "Lecture", date: "2026-09-07", time: "10:00", endTime: "12:00", repeatWeekly: true, url: null, completedOccurrences: [], createdAt: "2026-01-01T00:00:00.000Z" },
+        { id: "ev2", semesterId: "sem1", courseId: "course1", kind: "occurrence", unitTypeId: "no-such-unit", label: "Orphaned", date: "2026-09-08", time: "10:00", endTime: "12:00", repeatWeekly: true, url: null, completedOccurrences: [], createdAt: "2026-01-01T00:00:00.000Z" },
+      ],
+    }));
+    const result = loadAppState();
+    const migratedTask = result.tasks.find((task) => task.id === "unit1");
+    expect(migratedTask).toMatchObject({ courseId: "course1", title: "Lectures", subtype: "Lecture", completedUnits: 4, totalUnits: 4 });
+    expect(result.timetableEvents.map((event) => event.id)).toEqual(["ev1"]);
+    expect(result.timetableEvents[0].taskId).toBe("unit1");
+  });
+
+  it("defaults a task's subtype to 'Other' when missing or invalid, and preserves a valid explicit subtype", () => {
+    storage.setItem(CORE_KEY, JSON.stringify({
+      tasks: [
+        { id: "t1", semesterId: "sem1", courseId: "course1", title: "Old task", unitLabel: "Unit", totalUnits: 5, completedUnits: 0, dueDate: null, priority: "medium", notes: "", createdAt: "2026-01-01T00:00:00.000Z" },
+        { id: "t2", semesterId: "sem1", courseId: "course1", title: "Bogus subtype", subtype: "Homework", unitLabel: "Unit", totalUnits: 5, completedUnits: 0, dueDate: null, priority: "medium", notes: "", createdAt: "2026-01-01T00:00:00.000Z" },
+        { id: "t3", semesterId: "sem1", courseId: "course1", title: "Weekly lecture", subtype: "Lecture", unitLabel: "unit", totalUnits: 0, completedUnits: 0, dueDate: null, priority: "medium", notes: "", createdAt: "2026-01-01T00:00:00.000Z" },
+      ],
+    }));
+    const result = loadAppState();
+    expect(result.tasks.find((task) => task.id === "t1")?.subtype).toBe("Other");
+    expect(result.tasks.find((task) => task.id === "t2")?.subtype).toBe("Other");
+    expect(result.tasks.find((task) => task.id === "t3")?.subtype).toBe("Lecture");
+  });
+
+  it("infers a subtype from the title for a task that predates the subtype field entirely, matching 'Sheet' over 'Session' for a title that contains both 'exercise' and 'sheet'", () => {
+    storage.setItem(CORE_KEY, JSON.stringify({
+      tasks: [
+        { id: "t1", semesterId: "sem1", courseId: "course1", title: "Exercise Sheets", unitLabel: "unit", totalUnits: 1, completedUnits: 0, dueDate: null, priority: "medium", notes: "", createdAt: "2026-01-01T00:00:00.000Z" },
+        { id: "t2", semesterId: "sem1", courseId: "course1", title: "Lectures", unitLabel: "unit", totalUnits: 1, completedUnits: 0, dueDate: null, priority: "medium", notes: "", createdAt: "2026-01-01T00:00:00.000Z" },
+        { id: "t3", semesterId: "sem1", courseId: "course1", title: "Exercise Sessions", unitLabel: "unit", totalUnits: 1, completedUnits: 0, dueDate: null, priority: "medium", notes: "", createdAt: "2026-01-01T00:00:00.000Z" },
+      ],
+    }));
+    const result = loadAppState();
+    expect(result.tasks.find((task) => task.id === "t1")?.subtype).toBe("Sheet");
+    expect(result.tasks.find((task) => task.id === "t2")?.subtype).toBe("Lecture");
+    expect(result.tasks.find((task) => task.id === "t3")?.subtype).toBe("Session");
+  });
+});
+
+describe("restoreBackup", () => {
+  it("rejects files that are not backups", async () => {
+    const { restoreBackup } = await import("./storage");
+    expect(() => restoreBackup("nope")).toThrow(/valid JSON/);
+    expect(() => restoreBackup("{}")).toThrow(/not a Study Tracker backup/);
+    expect(() => restoreBackup(JSON.stringify({ sessions: [], courses: [], social: {} }))).toThrow(/account identity/);
+  });
+});
+
+describe("backup round trip", () => {
+  it("restores study time, semesters, courses, deadlines, achievements and the account on a blank device", () => {
+    const original = {
+      ...defaultState,
+      semesters: [{ id: "sem1", name: "HS26", createdAt: "2026-09-01T00:00:00.000Z", startDate: "2026-09-14", endDate: "2026-12-23", phase: "active", archived: false, archivedAt: null }],
+      courses: [{ id: "c1", semesterId: "sem1", name: "Analysis", color: "#123456", targetGrade: 5.5, createdAt: "2026-09-01T00:00:00.000Z", externalUrl: null }],
+      tasks: [{ id: "t1", semesterId: "sem1", courseId: "c1", title: "Sheet 3", subtype: "Sheet", unitLabel: "sheet", totalUnits: 4, completedUnits: 1, dueDate: "2026-10-05", priority: "high", notes: "", createdAt: "2026-09-02T00:00:00.000Z" }],
+      exams: [{ id: "e1", semesterId: "sem1", courseId: "c1", title: "Final", examDate: "2027-01-20", weight: 100, preparedness: 40, location: "HG E 5" }],
+      sessions: [{ id: "s1", semesterId: "sem1", courseId: "c1", taskId: "t1", kind: "study", goal: "g", learned: "l", blocker: "", nextStep: "", confidence: 3, startedAt: "2026-09-20T09:00:00.000Z", endedAt: "2026-09-20T10:30:00.000Z", minutes: 90, presetLabel: "Deep" }],
+      lifetimeStudyMinutes: 4321,
+      lifetimeStudySessions: 77,
+      petRockPats: 1234,
+      achievementEarnedOnDates: { "early-bird": "2026-09-10" },
+      social: { ...defaultState.social, userId: "user-abc", deviceSecret: "secret-xyz", friendCode: "ABCD-2345", displayName: "Dani" },
+    } as unknown as AppState;
+
+    const file = JSON.stringify(buildBackup(original));
+    storage.clear();
+    restoreBackup(file);
+    const loaded = loadAppState();
+
+    expect(loaded.semesters).toMatchObject([{ id: "sem1", name: "HS26", startDate: "2026-09-14", endDate: "2026-12-23" }]);
+    expect(loaded.courses).toMatchObject([{ id: "c1", name: "Analysis", targetGrade: 5.5 }]);
+    expect(loaded.tasks).toMatchObject([{ id: "t1", title: "Sheet 3", dueDate: "2026-10-05" }]);
+    expect(loaded.exams).toMatchObject([{ id: "e1", title: "Final", examDate: "2027-01-20" }]);
+    expect(loaded.sessions).toMatchObject([{ id: "s1", minutes: 90 }]);
+    expect(loaded.lifetimeStudyMinutes).toBe(4321);
+    expect(loaded.lifetimeStudySessions).toBe(77);
+    expect(loaded.petRockPats).toBe(1234);
+    expect(loaded.achievementEarnedOnDates).toEqual({ "early-bird": "2026-09-10" });
+    expect(loaded.social.userId).toBe("user-abc");
+    expect(loaded.social.deviceSecret).toBe("secret-xyz");
   });
 });

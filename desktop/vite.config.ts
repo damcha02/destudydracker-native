@@ -20,7 +20,8 @@ export default defineConfig({
           if (!id.includes('/node_modules/')) return undefined
           if (id.includes('/react/') || id.includes('/react-dom/')) return 'vendor-react'
           if (id.includes('/@tauri-apps/')) return 'vendor-tauri'
-          if (id.includes('/pdfjs-dist/')) return 'vendor-pdf'
+          // PDF.js is imported only by the lazy PDF viewer. Leaving it to Rollup's
+          // dynamic-import boundary prevents the app shell from preloading it.
           return 'vendor'
         },
       },

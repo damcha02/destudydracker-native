@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   calculateAggregateWorkload,
+  getActiveSemesterIds,
   getCourseHealth,
   getCourseHealthMap,
   getCourseMinutesMap,
   getFirstSessionDate,
   getLocalMonthlyStats,
+  getOverallHealth,
   getSemesterHealth,
   getSemesterHealthMap,
   getSessionDaySet,
@@ -22,6 +24,7 @@ function task(overrides: Partial<Task>): Task {
     semesterId: "semester",
     courseId: "course",
     title: "Task",
+    subtype: "Other",
     unitLabel: "Unit",
     totalUnits: 10,
     completedUnits: 0,
@@ -41,6 +44,7 @@ function course(overrides: Partial<Course>): Course {
     color: "#8fb4ff",
     targetGrade: 4,
     createdAt: "2026-08-01T00:00:00.000Z",
+    externalUrl: null,
     ...overrides,
   };
 }
@@ -50,6 +54,11 @@ function semester(overrides: Partial<Semester>): Semester {
     id: "semester",
     name: "Semester",
     createdAt: "2026-08-01T00:00:00.000Z",
+    startDate: null,
+    endDate: null,
+    phase: "semester",
+    archived: false,
+    archivedAt: null,
     ...overrides,
   };
 }
@@ -63,6 +72,7 @@ function exam(overrides: Partial<Exam>): Exam {
     examDate: "2026-08-15",
     weight: 40,
     preparedness: 35,
+    location: "",
     ...overrides,
   };
 }
@@ -312,5 +322,33 @@ describe("getLocalMonthlyStats", () => {
 
   it("returns zero for no sessions in the current month", () => {
     expect(getLocalMonthlyStats([], new Date("2026-08-20T12:00:00.000Z"))).toEqual({ minutes: 0, sessions: 0 });
+  });
+});
+
+describe("getActiveSemesterIds", () => {
+  it("includes non-archived semesters (both semester and exam-prep phase) and excludes archived ones", () => {
+    const semesters = [
+      semester({ id: "active-semester", phase: "semester", archived: false }),
+      semester({ id: "active-exam-prep", phase: "exam-prep", archived: false }),
+      semester({ id: "archived", archived: true }),
+    ];
+    const state = { semesters } as AppState;
+    expect(getActiveSemesterIds(state)).toEqual(new Set(["active-semester", "active-exam-prep"]));
+  });
+
+  it("excludes an archived semester's course/tasks from totalWorkload-style aggregation", () => {
+    const semesters = [semester({ id: "active" }), semester({ id: "archived", archived: true })];
+    const courses = [course({ id: "c-active", semesterId: "active" }), course({ id: "c-archived", semesterId: "archived" })];
+    const tasks = [
+      task({ id: "t-active", courseId: "c-active", semesterId: "active", totalUnits: 10, completedUnits: 0 }),
+      task({ id: "t-archived", courseId: "c-archived", semesterId: "archived", totalUnits: 10, completedUnits: 0 }),
+    ];
+    const activeIds = getActiveSemesterIds({ semesters } as AppState);
+    const activeCourseIds = new Set(courses.filter((c) => activeIds.has(c.semesterId)).map((c) => c.id));
+    const activeTasks = tasks.filter((t) => activeCourseIds.has(t.courseId));
+
+    expect(activeTasks.map((t) => t.id)).toEqual(["t-active"]);
+    expect(calculateAggregateWorkload(activeTasks).totalUnits).toBe(10);
+    expect(getOverallHealth({ tasks: activeTasks, exams: [] } as unknown as AppState)).toBeGreaterThanOrEqual(0);
   });
 });

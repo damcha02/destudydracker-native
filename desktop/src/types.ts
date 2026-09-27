@@ -16,10 +16,17 @@ export type SocialAvatar =
   | { kind: "icon"; icon: string }
   | { kind: "photo"; name: string; url: string; mimeType: string };
 
+export type SemesterPhase = "semester" | "exam-prep";
+
 export interface Semester {
   id: string;
   name: string;
   createdAt: string;
+  startDate: string | null;
+  endDate: string | null;
+  phase: SemesterPhase;
+  archived: boolean;
+  archivedAt: string | null;
 }
 
 export interface Course {
@@ -29,13 +36,17 @@ export interface Course {
   color: string;
   targetGrade: number;
   createdAt: string;
+  externalUrl: string | null;
 }
+
+export type TaskSubtype = "Lecture" | "Session" | "Sheet" | "Other";
 
 export interface Task {
   id: string;
   semesterId: string;
   courseId: string;
   title: string;
+  subtype: TaskSubtype;
   unitLabel: string;
   totalUnits: number;
   completedUnits: number;
@@ -53,6 +64,67 @@ export interface Exam {
   examDate: string;
   weight: number;
   preparedness: number;
+  location: string;
+}
+
+export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export type TimetableEventKind = "occurrence" | "sheet-release" | "sheet-deadline";
+
+export interface TimetableOccurrenceOverride {
+  skipped?: true;
+  date?: string;
+  time?: string;
+  endTime?: string | null;
+}
+
+export interface TimetableEvent {
+  id: string;
+  semesterId: string;
+  courseId: string;
+  kind: TimetableEventKind;
+  taskId: string;
+  label: string;
+  date: string;
+  time: string;
+  endTime: string | null;
+  repeatWeekly: boolean;
+  recurrenceEndDate: string | null;
+  occurrenceOverrides: Record<string, TimetableOccurrenceOverride>;
+  url: string | null;
+  completedOccurrences: string[];
+  createdAt: string;
+}
+
+export interface Holiday {
+  id: string;
+  semesterId: string;
+  startDate: string;
+  endDate: string;
+  label: string;
+  createdAt: string;
+}
+
+export interface DailyTodo {
+  id: string;
+  date: string;
+  time: string | null;
+  endTime: string | null;
+  title: string;
+  notes: string;
+  completed: boolean;
+  completedAt: string | null;
+  createdAt: string;
+  // A weekly-repeating to-do keeps completed/completedAt for its own (anchor) date, but every
+  // projected occurrence's completion is tracked separately here, by date - the same
+  // completedOccurrences pattern TimetableEvent already uses for recurring items.
+  repeatWeekly: boolean;
+  completedOccurrences: string[];
+  // Series controls for a repeating to-do, mirroring TimetableEvent: an inclusive last date, dates
+  // dropped from the series, and per-date time overrides ("this occurrence only" moves).
+  recurrenceEndDate: string | null;
+  skippedOccurrences: string[];
+  occurrenceTimes: Record<string, { time: string | null; endTime: string | null }>;
 }
 
 export interface CalendarEntry {
@@ -102,6 +174,7 @@ export interface Settings {
   themeFamily: "normal";
   backgroundEffect: boolean;
   hideFeedImages: boolean;
+  hideProfilePictures: boolean;
   hideFeedPolls: boolean;
   showHelpButton: boolean;
   telemetryEnabled: boolean;
@@ -405,6 +478,9 @@ export interface AppState {
   tasks: Task[];
   exams: Exam[];
   calendarEntries: CalendarEntry[];
+  timetableEvents: TimetableEvent[];
+  holidays: Holiday[];
+  dailyTodos: DailyTodo[];
   sessions: StudySession[];
   lifetimeStudyMinutes: number;
   lifetimeStudySessions: number;
@@ -427,6 +503,13 @@ export interface AppState {
   waterGlasses: number;
   waterDate: string;
   petRockPats: number;
+  /** Achievements hung on the Rest room board; x/y are the icon centre as a fraction of the board. */
+  achievementBoard: Array<{ id: string; uid?: string; x: number; y: number; size?: number; color?: string; rot?: number; icon?: string; name?: string; how?: string }>;
+  /** The day (YYYY-MM-DD) each achievement id was actually seen go from not-earned to earned, recorded
+   * the moment that happens - never back-filled for one already earned when tracking began, since that
+   * day is genuinely unknown. Powers the "book" achievement wall, which titles each entry by the day it
+   * was earned and leaves entries with no recorded day untitled. */
+  achievementEarnedOnDates: Record<string, string>;
   durakPuzzle: DurakPuzzleState;
   wordlePuzzle: WordlePuzzleState;
   geodlePuzzle: GeodlePuzzleState;

@@ -1,4 +1,4 @@
-import type { AppState, CalendarEntry, Course, Exam, FlaggleGuess, FlagglePuzzleState, GeodlePuzzleState, Semester, SocialAvatar, SocialAvatarStyle, SocialFeedPost, SocialLeaderboardEntry, SocialSquadRole, SocialSquadScoreEntry, SocialState, StudySession, TabKey, Task, TimerState, TravlePuzzleState, WordlePuzzleState } from "../types";
+import type { AppState, CalendarEntry, Course, DailyTodo, Exam, FlaggleGuess, FlagglePuzzleState, GeodlePuzzleState, Holiday, Semester, SocialAvatar, SocialAvatarStyle, SocialFeedPost, SocialLeaderboardEntry, SocialSquadRole, SocialSquadScoreEntry, SocialState, StudySession, TabKey, Task, TaskSubtype, TimerState, TimetableEvent, TimetableEventKind, TimetableOccurrenceOverride, TravlePuzzleState, WordlePuzzleState } from "../types";
 import { getFlaggleAnswerForDate, getFlagglePuzzleId, makeFlaggleSeedSalt } from "./flaggle";
 import { getGeodleAnswerForDate, getGeodlePuzzleId, makeGeodleSeedSalt } from "./geodle";
 import { getTravlePuzzleForDate, getTravlePuzzleId, makeTravleSeedSalt } from "./travle";
@@ -10,6 +10,9 @@ const LEGACY_V1_KEY = "study-tracker-desktop-v1";
 const TIMER_KEY = "study-tracker-desktop-v3-timer";
 const SOCIAL_KEY = "study-tracker-desktop-v3-social";
 const CORE_KEY = "study-tracker-desktop-v3-core";
+
+/** Set after a backup restore is written, so the pre-reload unload flush can't overwrite it with the old in-memory state. */
+let restorePending = false;
 
 /** Every localStorage key that can hold part of AppState, across every format version this app has used. */
 export const APP_STATE_STORAGE_KEYS: readonly string[] = [STORAGE_KEY, LEGACY_V1_KEY, TIMER_KEY, SOCIAL_KEY, CORE_KEY];
@@ -118,7 +121,7 @@ function normalizeAvatar(avatar: unknown, displayName: string): SocialAvatar {
     return { kind: "letter", letter, style };
   }
   if (record.kind === "photo") {
-    const url = typeof record.url === "string" && record.url.startsWith("data:image/") ? record.url : "";
+    const url = typeof record.url === "string" && (record.url.startsWith("data:image/") || /^https:\/\/[^/]+\/profile\/avatar\//.test(record.url)) ? record.url : "";
     if (url) {
       return {
         kind: "photo",
@@ -342,6 +345,9 @@ export const defaultState: AppState = {
   tasks: [],
   exams: [],
   calendarEntries: [],
+  timetableEvents: [],
+  holidays: [],
+  dailyTodos: [],
   sessions: [],
   lifetimeStudyMinutes: 0,
   lifetimeStudySessions: 0,
@@ -353,6 +359,7 @@ export const defaultState: AppState = {
     themeFamily: "normal",
     backgroundEffect: true,
     hideFeedImages: false,
+    hideProfilePictures: false,
     hideFeedPolls: false,
     showHelpButton: true,
     telemetryEnabled: false,
@@ -377,6 +384,8 @@ export const defaultState: AppState = {
   waterGlasses: 0,
   waterDate: "",
   petRockPats: 0,
+  achievementBoard: [],
+  achievementEarnedOnDates: {},
   durakPuzzle: {
     seed: null,
     hint: "",
@@ -603,6 +612,23 @@ function normalizeTaskUnitLabel(task: Partial<Task>) {
   return label || "Unit";
 }
 
+const taskSubtypes: TaskSubtype[] = ["Lecture", "Session", "Sheet", "Other"];
+
+/** Maps a legacy free-text unit-type/task label onto the fixed four-value subtype enum, for tasks saved before subtypes existed. "sheet" is checked before "session"/"exercise" so a title like "Exercise Sheets" - which matches both - infers Sheet, not Session. */
+function inferTaskSubtype(label: string): TaskSubtype {
+  const normalized = label.toLowerCase();
+  if (normalized.includes("lecture")) return "Lecture";
+  if (normalized.includes("sheet")) return "Sheet";
+  if (normalized.includes("session") || normalized.includes("exercise")) return "Session";
+  return "Other";
+}
+
+/** A task with no subtype at all (or an invalid one) predates the subtype field - infer a best-guess subtype from its title/unit label instead of collapsing it to "Other", so pre-existing Sheet/Lecture/Session tasks (e.g. from the Course/Unit migration) keep behaving like their subtype once this field is introduced. */
+function normalizeTaskSubtype(task: Partial<Task>): TaskSubtype {
+  if (typeof task.subtype === "string" && (taskSubtypes as string[]).includes(task.subtype)) return task.subtype as TaskSubtype;
+  return inferTaskSubtype(`${task.title ?? ""} ${task.unitLabel ?? ""}`);
+}
+
 function nextLocalMidnightAfter(date: Date) {
   const next = new Date(date);
   next.setHours(24, 0, 0, 0);
@@ -789,6 +815,11 @@ function migrateSemesters(parsed: Record<string, unknown>) {
     id: importedSemesterId,
     name: "Imported Semester",
     createdAt: new Date().toISOString(),
+    startDate: null,
+    endDate: null,
+    phase: "semester",
+    archived: false,
+    archivedAt: null,
   };
 
   const courseSemesterLookup = new Map<string, string>();
@@ -846,6 +877,349 @@ function normalizeCalendarEntries(entries: unknown): CalendarEntry[] {
       adHocCourseId: typeof record.adHocCourseId === "string" ? record.adHocCourseId : undefined,
     }];
   });
+}
+
+function normalizeSemesters(semesters: unknown): Semester[] {
+  if (!Array.isArray(semesters)) return [];
+  return semesters.flatMap((semester) => {
+    if (!semester || typeof semester !== "object") return [];
+    const record = semester as Partial<Semester> & Record<string, unknown>;
+    if (typeof record.id !== "string" || typeof record.name !== "string") return [];
+    return [{
+      id: record.id,
+      name: record.name,
+      createdAt: typeof record.createdAt === "string" ? record.createdAt : new Date().toISOString(),
+      startDate: typeof record.startDate === "string" ? record.startDate : null,
+      endDate: typeof record.endDate === "string" ? record.endDate : null,
+      phase: record.phase === "exam-prep" ? "exam-prep" : "semester",
+      archived: Boolean(record.archived),
+      archivedAt: typeof record.archivedAt === "string" ? record.archivedAt : null,
+    }];
+  });
+}
+
+function normalizeExams(exams: unknown): Exam[] {
+  if (!Array.isArray(exams)) return [];
+  return exams.flatMap((exam) => {
+    if (!exam || typeof exam !== "object") return [];
+    const record = exam as Partial<Exam> & Record<string, unknown>;
+    if (typeof record.id !== "string" || typeof record.semesterId !== "string" || typeof record.courseId !== "string" || typeof record.title !== "string" || typeof record.examDate !== "string") return [];
+    return [{
+      id: record.id,
+      semesterId: record.semesterId,
+      courseId: record.courseId,
+      title: record.title,
+      examDate: record.examDate,
+      weight: typeof record.weight === "number" ? record.weight : 0,
+      preparedness: typeof record.preparedness === "number" ? record.preparedness : 0,
+      location: typeof record.location === "string" ? record.location : "",
+    }];
+  });
+}
+
+/** Converts a pre-unification course.unitTypes entry (from a blob saved before Tasks and Units merged into one entity) into a Task, reusing the unit type's own id as the Task id so legacy TimetableEvent.unitTypeId references resolve for free. */
+function migrateLegacyCourseUnitTypesToTasks(rawCourses: unknown): Task[] {
+  if (!Array.isArray(rawCourses)) return [];
+  return rawCourses.flatMap((course) => {
+    if (!course || typeof course !== "object") return [];
+    const record = course as Record<string, unknown>;
+    if (typeof record.id !== "string" || typeof record.semesterId !== "string" || !Array.isArray(record.unitTypes)) return [];
+    const courseId = record.id;
+    const semesterId = record.semesterId;
+    return (record.unitTypes as unknown[]).flatMap((unit) => {
+      if (!unit || typeof unit !== "object") return [];
+      const u = unit as Record<string, unknown>;
+      if (typeof u.id !== "string" || typeof u.label !== "string") return [];
+      const completedCount = typeof u.completedCount === "number" && Number.isFinite(u.completedCount) ? u.completedCount : 0;
+      return [{
+        id: u.id,
+        semesterId,
+        courseId,
+        title: u.label,
+        subtype: inferTaskSubtype(u.label),
+        unitLabel: "unit",
+        totalUnits: Math.max(1, completedCount),
+        completedUnits: completedCount,
+        dueDate: null,
+        priority: "medium" as const,
+        notes: "",
+        createdAt: typeof u.createdAt === "string" ? u.createdAt : new Date().toISOString(),
+      }];
+    });
+  });
+}
+
+function legacyFallbackTaskId(courseId: string, key: "lecture" | "sheet") {
+  return `${courseId}:legacy-${key}-task`;
+}
+
+function makeLegacyFallbackTask(courseId: string, semesterId: string, key: "lecture" | "sheet", label: string, createdAt: string): Task {
+  return {
+    id: legacyFallbackTaskId(courseId, key),
+    semesterId,
+    courseId,
+    title: label,
+    subtype: key === "lecture" ? "Lecture" : "Sheet",
+    unitLabel: "unit",
+    totalUnits: 1,
+    completedUnits: 0,
+    dueDate: null,
+    priority: "medium",
+    notes: "",
+    createdAt,
+  };
+}
+
+function normalizeOccurrenceOverrides(value: unknown): Record<string, TimetableOccurrenceOverride> {
+  if (!value || typeof value !== "object") return {};
+  const result: Record<string, TimetableOccurrenceOverride> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!raw || typeof raw !== "object") continue;
+    const record = raw as Record<string, unknown>;
+    if (record.skipped === true) {
+      result[key] = { skipped: true };
+    } else if (typeof record.date === "string" && typeof record.time === "string") {
+      result[key] = { date: record.date, time: record.time, endTime: typeof record.endTime === "string" ? record.endTime : null };
+    }
+  }
+  return result;
+}
+
+/** Maps a legacy 4-kind TimetableEvent kind ("class"/"lecture"/"exercise-session"/"sheet-*") forward to the current 3-kind model plus the fallback task it now belongs to (used only when the event predates any explicit taskId/unitTypeId). */
+function migrateTimetableEventKind(rawKind: unknown, courseId: string): { kind: TimetableEventKind; fallbackTaskId: string } | null {
+  const legacyKind = rawKind === "class" ? "lecture" : rawKind;
+  if (legacyKind === "lecture" || legacyKind === "exercise-session" || legacyKind === "occurrence") {
+    return { kind: "occurrence", fallbackTaskId: legacyFallbackTaskId(courseId, "lecture") };
+  }
+  if (legacyKind === "sheet-release" || legacyKind === "sheet-deadline") {
+    return { kind: legacyKind, fallbackTaskId: legacyFallbackTaskId(courseId, "sheet") };
+  }
+  return null;
+}
+
+/** Scans a raw (pre-normalization) timetableEvents array for entries with neither a `taskId` nor a legacy `unitTypeId`, and builds the fallback Task each such entry will resolve to. */
+function collectFallbackTasksForRawEvents(rawEvents: unknown[]): Task[] {
+  const tasks: Task[] = [];
+  const seen = new Set<string>();
+  for (const raw of rawEvents) {
+    if (!raw || typeof raw !== "object") continue;
+    const record = raw as Record<string, unknown>;
+    if (typeof record.courseId !== "string" || typeof record.semesterId !== "string") continue;
+    if (typeof record.taskId === "string" || typeof record.unitTypeId === "string") continue;
+    const legacyKind = record.kind === "class" ? "lecture" : record.kind;
+    const key: "lecture" | "sheet" = legacyKind === "sheet-release" || legacyKind === "sheet-deadline" ? "sheet" : "lecture";
+    const id = legacyFallbackTaskId(record.courseId, key);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    tasks.push(makeLegacyFallbackTask(record.courseId, record.semesterId, key, key === "sheet" ? "Exercise Sheets" : "Lectures", todayIso()));
+  }
+  return tasks;
+}
+
+/** `knownTaskIds` must include every real Task id plus any migrated legacy-unit/fallback task ids, so an event whose taskId no longer resolves to anything real is dropped instead of silently orphaned. */
+function normalizeTimetableEvents(events: unknown, knownTaskIds: Set<string>): TimetableEvent[] {
+  if (!Array.isArray(events)) return [];
+  return events.flatMap((event) => {
+    if (!event || typeof event !== "object") return [];
+    const record = event as Record<string, unknown> & { kind?: unknown };
+    if (
+      typeof record.id !== "string" ||
+      typeof record.semesterId !== "string" ||
+      typeof record.courseId !== "string" ||
+      typeof record.date !== "string" ||
+      typeof record.time !== "string"
+    ) return [];
+    const migratedKind = migrateTimetableEventKind(record.kind, record.courseId);
+    if (!migratedKind) return [];
+    const taskId = typeof record.taskId === "string" ? record.taskId : typeof record.unitTypeId === "string" ? record.unitTypeId : migratedKind.fallbackTaskId;
+    if (!knownTaskIds.has(taskId)) return [];
+    return [{
+      id: record.id,
+      semesterId: record.semesterId,
+      courseId: record.courseId,
+      kind: migratedKind.kind,
+      taskId,
+      label: typeof record.label === "string" ? record.label : "Lecture",
+      date: record.date,
+      time: record.time,
+      endTime: typeof record.endTime === "string" ? record.endTime : null,
+      repeatWeekly: Boolean(record.repeatWeekly),
+      recurrenceEndDate: typeof record.recurrenceEndDate === "string" ? record.recurrenceEndDate : null,
+      occurrenceOverrides: normalizeOccurrenceOverrides(record.occurrenceOverrides),
+      url: typeof record.url === "string" ? record.url : null,
+      completedOccurrences: Array.isArray(record.completedOccurrences)
+        ? record.completedOccurrences.filter((item): item is string => typeof item === "string")
+        : [],
+      createdAt: typeof record.createdAt === "string" ? record.createdAt : new Date().toISOString(),
+    }];
+  });
+}
+
+function normalizeHolidays(holidays: unknown): Holiday[] {
+  if (!Array.isArray(holidays)) return [];
+  return holidays.flatMap((holiday) => {
+    if (!holiday || typeof holiday !== "object") return [];
+    const record = holiday as Partial<Holiday> & Record<string, unknown>;
+    if (typeof record.id !== "string" || typeof record.semesterId !== "string" || typeof record.startDate !== "string" || typeof record.endDate !== "string") return [];
+    return [{
+      id: record.id,
+      semesterId: record.semesterId,
+      startDate: record.startDate,
+      endDate: record.endDate,
+      label: typeof record.label === "string" ? record.label : "Holiday",
+      createdAt: typeof record.createdAt === "string" ? record.createdAt : new Date().toISOString(),
+    }];
+  });
+}
+
+function firstWeekdayOnOrAfter(startIso: string, weekday: number): string {
+  const [year, month, day] = startIso.split("-").map(Number);
+  const start = new Date(year, (month || 1) - 1, day || 1);
+  const offset = (weekday - start.getDay() + 7) % 7;
+  start.setDate(start.getDate() + offset);
+  const resultYear = start.getFullYear();
+  const resultMonth = String(start.getMonth() + 1).padStart(2, "0");
+  const resultDay = String(start.getDate()).padStart(2, "0");
+  return `${resultYear}-${resultMonth}-${resultDay}`;
+}
+
+/** Converts the pre-unification RecurringClassEvent/ExerciseSheetSeries arrays (if present in a legacy blob) into TimetableEvent rows, plus the fallback Tasks those events reference (the concept of a named "unit"/"task" per course didn't exist yet at that point). */
+function migrateLegacyTimetableEvents(parsed: Record<string, unknown>, semesters: Semester[]): { events: TimetableEvent[]; extraTasks: Task[] } {
+  const semesterLookup = new Map(semesters.map((semester) => [semester.id, semester]));
+  const anchorFor = (semesterId: string, weekday: number) => {
+    const semester = semesterLookup.get(semesterId);
+    return firstWeekdayOnOrAfter(semester?.startDate ?? todayIso(), weekday);
+  };
+
+  const legacyClasses = Array.isArray(parsed.recurringClassEvents) ? (parsed.recurringClassEvents as Array<Record<string, unknown>>) : [];
+  const classEvents: TimetableEvent[] = legacyClasses.flatMap((record) => {
+    if (
+      typeof record.id !== "string" || typeof record.semesterId !== "string" || typeof record.courseId !== "string" ||
+      typeof record.startTime !== "string" || typeof record.endTime !== "string" || typeof record.weekday !== "number"
+    ) return [];
+    return [{
+      id: record.id,
+      semesterId: record.semesterId,
+      courseId: record.courseId,
+      kind: "occurrence",
+      taskId: legacyFallbackTaskId(record.courseId, "lecture"),
+      label: typeof record.label === "string" ? record.label : "Lecture",
+      date: anchorFor(record.semesterId, record.weekday),
+      time: record.startTime,
+      endTime: record.endTime,
+      repeatWeekly: true,
+      recurrenceEndDate: null,
+      occurrenceOverrides: {},
+      url: null,
+      completedOccurrences: [],
+      createdAt: typeof record.createdAt === "string" ? record.createdAt : new Date().toISOString(),
+    }];
+  });
+
+  const legacySheets = Array.isArray(parsed.exerciseSheetSeries) ? (parsed.exerciseSheetSeries as Array<Record<string, unknown>>) : [];
+  const sheetEvents: TimetableEvent[] = legacySheets.flatMap((record) => {
+    if (
+      typeof record.id !== "string" || typeof record.semesterId !== "string" || typeof record.courseId !== "string" ||
+      typeof record.releaseTime !== "string" || typeof record.deadlineTime !== "string" ||
+      typeof record.releaseWeekday !== "number" || typeof record.deadlineWeekday !== "number"
+    ) return [];
+    const label = typeof record.label === "string" ? record.label : "Exercise Sheet";
+    const url = typeof record.url === "string" ? record.url : null;
+    const createdAt = typeof record.createdAt === "string" ? record.createdAt : new Date().toISOString();
+    return [
+      {
+        id: `${record.id}-release`,
+        semesterId: record.semesterId,
+        courseId: record.courseId,
+        kind: "sheet-release",
+        taskId: legacyFallbackTaskId(record.courseId, "sheet"),
+        label,
+        date: anchorFor(record.semesterId, record.releaseWeekday),
+        time: record.releaseTime,
+        endTime: null,
+        repeatWeekly: true,
+        recurrenceEndDate: null,
+        occurrenceOverrides: {},
+        url,
+        completedOccurrences: [],
+        createdAt,
+      },
+      {
+        id: `${record.id}-deadline`,
+        semesterId: record.semesterId,
+        courseId: record.courseId,
+        kind: "sheet-deadline",
+        taskId: legacyFallbackTaskId(record.courseId, "sheet"),
+        label,
+        date: anchorFor(record.semesterId, record.deadlineWeekday),
+        time: record.deadlineTime,
+        endTime: null,
+        repeatWeekly: true,
+        recurrenceEndDate: null,
+        occurrenceOverrides: {},
+        url,
+        completedOccurrences: [],
+        createdAt,
+      },
+    ];
+  });
+
+  const extraTasks: Task[] = [];
+  const seenTaskIds = new Set<string>();
+  const addFallbackTask = (courseId: string, semesterId: string, key: "lecture" | "sheet", label: string, createdAt: string) => {
+    const id = legacyFallbackTaskId(courseId, key);
+    if (seenTaskIds.has(id)) return;
+    seenTaskIds.add(id);
+    extraTasks.push(makeLegacyFallbackTask(courseId, semesterId, key, label, createdAt));
+  };
+  legacyClasses.forEach((record) => {
+    if (typeof record.courseId === "string" && typeof record.semesterId === "string") {
+      addFallbackTask(record.courseId, record.semesterId, "lecture", "Lectures", todayIso());
+    }
+  });
+  legacySheets.forEach((record) => {
+    if (typeof record.courseId === "string" && typeof record.semesterId === "string") {
+      addFallbackTask(record.courseId, record.semesterId, "sheet", "Exercise Sheets", todayIso());
+    }
+  });
+
+  return { events: [...classEvents, ...sheetEvents], extraTasks };
+}
+
+function normalizeDailyTodos(todos: unknown): DailyTodo[] {
+  if (!Array.isArray(todos)) return [];
+  return todos.flatMap((todo) => {
+    if (!todo || typeof todo !== "object") return [];
+    const record = todo as Partial<DailyTodo> & Record<string, unknown>;
+    if (typeof record.id !== "string" || typeof record.date !== "string" || typeof record.title !== "string") return [];
+    return [{
+      id: record.id,
+      date: record.date,
+      time: typeof record.time === "string" ? record.time : null,
+      endTime: typeof record.endTime === "string" ? record.endTime : null,
+      title: record.title,
+      notes: typeof record.notes === "string" ? record.notes : "",
+      completed: Boolean(record.completed),
+      completedAt: typeof record.completedAt === "string" ? record.completedAt : null,
+      createdAt: typeof record.createdAt === "string" ? record.createdAt : new Date().toISOString(),
+      repeatWeekly: Boolean(record.repeatWeekly),
+      completedOccurrences: Array.isArray(record.completedOccurrences) ? record.completedOccurrences.filter((date): date is string => typeof date === "string") : [],
+      recurrenceEndDate: typeof record.recurrenceEndDate === "string" ? record.recurrenceEndDate : null,
+      skippedOccurrences: Array.isArray(record.skippedOccurrences) ? record.skippedOccurrences.filter((date): date is string => typeof date === "string") : [],
+      occurrenceTimes: normalizeOccurrenceTimes(record.occurrenceTimes),
+    }];
+  });
+}
+
+function normalizeOccurrenceTimes(value: unknown): DailyTodo["occurrenceTimes"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: DailyTodo["occurrenceTimes"] = {};
+  for (const [date, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as { time?: unknown; endTime?: unknown };
+    result[date] = { time: typeof record.time === "string" ? record.time : null, endTime: typeof record.endTime === "string" ? record.endTime : null };
+  }
+  return result;
 }
 
 function normalizeVisibleTabs(visibleTabs: unknown): Record<TabKey, boolean> {
@@ -1080,26 +1454,53 @@ export function loadAppState(): AppState {
     const timerRecovery = recoverExpiredTimer({ ...defaultTimer, ...parsedTimer }, sessions);
     const visibleTabs = normalizeVisibleTabs(parsed.settings?.visibleTabs);
     const lifetimeTotals = normalizeLifetimeTotals(parsed, timerRecovery.sessions);
+    const normalizedSemesters = normalizeSemesters(migrated.semesters);
+
+    // Tasks and per-course "units" used to be separate entities; a blob saved before they were
+    // unified may still carry course.unitTypes and/or pre-taskId timetable events, so both get
+    // converted into ordinary Tasks here before anything looks up a taskId.
+    const baseTasks: Task[] = Array.isArray(migrated.tasks) ? migrated.tasks.map((task) => ({ ...task, unitLabel: normalizeTaskUnitLabel(task), subtype: normalizeTaskSubtype(task) })) : [];
+    const legacyUnitTasks = migrateLegacyCourseUnitTypesToTasks(migrated.courses).filter((task) => !baseTasks.some((existing) => existing.id === task.id));
+
+    let timetableEvents: TimetableEvent[];
+    let fallbackTasks: Task[];
+    if (Array.isArray(parsed.timetableEvents)) {
+      const knownSoFar = [...baseTasks, ...legacyUnitTasks];
+      fallbackTasks = collectFallbackTasksForRawEvents(parsed.timetableEvents).filter((task) => !knownSoFar.some((existing) => existing.id === task.id));
+      const knownTaskIds = new Set([...knownSoFar, ...fallbackTasks].map((task) => task.id));
+      timetableEvents = normalizeTimetableEvents(parsed.timetableEvents, knownTaskIds);
+    } else {
+      const legacyResult = migrateLegacyTimetableEvents(parsed, normalizedSemesters);
+      timetableEvents = legacyResult.events;
+      const knownSoFar = [...baseTasks, ...legacyUnitTasks];
+      fallbackTasks = legacyResult.extraTasks.filter((task) => !knownSoFar.some((existing) => existing.id === task.id));
+    }
+    const finalTasks = [...baseTasks, ...legacyUnitTasks, ...fallbackTasks];
 
     return {
       ...defaultState,
       ...parsed,
       activeTab: normalizeActiveTab(parsed.activeTab, visibleTabs),
-      semesters: migrated.semesters,
+      semesters: normalizedSemesters,
       courses: Array.isArray(migrated.courses)
         ? migrated.courses.map((course) => ({
             ...course,
             targetGrade: typeof course.targetGrade === "number" && course.targetGrade >= 4 && course.targetGrade <= 6 ? course.targetGrade : 4,
+            externalUrl: typeof (course as Partial<Course>).externalUrl === "string" ? (course as Partial<Course>).externalUrl! : null,
           }))
         : [],
-      tasks: Array.isArray(migrated.tasks) ? migrated.tasks.map((task) => ({ ...task, unitLabel: normalizeTaskUnitLabel(task) })) : [],
-      exams: Array.isArray(migrated.exams) ? migrated.exams : [],
+      tasks: finalTasks,
+      exams: normalizeExams(migrated.exams),
       calendarEntries: normalizeCalendarEntries(parsed.calendarEntries),
+      timetableEvents,
+      holidays: normalizeHolidays(parsed.holidays),
+      dailyTodos: normalizeDailyTodos(parsed.dailyTodos),
       settings: {
         ...defaultState.settings,
         ...parsed.settings,
         visibleTabs,
         hideFeedImages: Boolean(parsed.settings?.hideFeedImages),
+        hideProfilePictures: Boolean(parsed.settings?.hideProfilePictures),
         hideFeedPolls: Boolean(parsed.settings?.hideFeedPolls),
         showHelpButton: parsed.settings?.showHelpButton !== false,
         telemetryEnabled: Boolean(parsed.settings?.telemetryEnabled),
@@ -1116,6 +1517,25 @@ export function loadAppState(): AppState {
       exports: Array.isArray(parsed.exports) ? parsed.exports : [],
       badgeCounts: parsed.badgeCounts && typeof parsed.badgeCounts === "object" ? parsed.badgeCounts as Record<string, number> : {},
       badgeCountDates: parsed.badgeCountDates && typeof parsed.badgeCountDates === "object" ? parsed.badgeCountDates as Record<string, string> : {},
+      // Deliberately reads a fresh key, not the old (now-abandoned) one: the old field's values were
+      // all back-filled with the date they were first coded, not the date they were truly earned.
+      achievementEarnedOnDates: parsed.achievementEarnedOnDates && typeof parsed.achievementEarnedOnDates === "object" ? parsed.achievementEarnedOnDates as Record<string, string> : {},
+      achievementBoard: Array.isArray(parsed.achievementBoard)
+        ? parsed.achievementBoard
+            .filter((item) => Boolean(item) && typeof item.id === "string" && Number.isFinite(item.x) && Number.isFinite(item.y))
+            .map((item) => ({
+              id: item.id,
+              ...(typeof item.uid === "string" ? { uid: item.uid } : {}),
+              x: item.x,
+              y: item.y,
+              ...(Number.isFinite(item.size) ? { size: item.size } : {}),
+              ...(typeof item.color === "string" ? { color: item.color } : {}),
+              ...(Number.isFinite(item.rot) ? { rot: item.rot } : {}),
+              ...(typeof item.icon === "string" && item.icon ? { icon: item.icon } : {}),
+              ...(typeof item.name === "string" ? { name: item.name } : {}),
+              ...(typeof item.how === "string" ? { how: item.how } : {}),
+            }))
+        : [],
     };
   } catch {
     return defaultState;
@@ -1230,6 +1650,7 @@ export function saveAppState(
   baselines: PersistenceBaselines,
   options: { forceSections?: ReadonlySet<PersistSection> } = {},
 ): Set<PersistSection> {
+  if (restorePending) return new Set();
   const now = new Date();
   const sectionsToWrite = new Set<PersistSection>([...getChangedSections(state, baselines), ...(options.forceSections ?? [])]);
 
@@ -1293,12 +1714,95 @@ export function saveAppState(
   return succeeded;
 }
 
-export function downloadBackup(state: AppState) {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+/** UI preferences kept in their own localStorage keys (not in AppState); backed up so a restored device looks and feels the same. */
+const PREFERENCE_STORAGE_KEYS: readonly string[] = [
+  "study-tracker-theme",
+  "study-tracker-palette",
+  "study-tracker-style",
+  "study-tracker-dashboard-layout",
+  "study-tracker-dashboard-custom-layout",
+  "study-tracker-field-dashboard-layout",
+  "study-tracker-wabi-circle-competitive",
+  "study-tracker-garden-variant",
+  "study-tracker-rest-tree",
+];
+
+export function buildBackup(state: AppState) {
+  const preferences: Record<string, string> = {};
+  for (const key of PREFERENCE_STORAGE_KEYS) {
+    const value = localStorage.getItem(key);
+    if (value !== null) preferences[key] = value;
+  }
+  return { app: "study-tracker", backupVersion: 2, exportedAt: new Date().toISOString(), state, preferences };
+}
+
+/** Returns where the backup was saved, or null if the user cancelled the save dialog. */
+export async function saveBackup(state: AppState): Promise<string | null> {
+  const contents = JSON.stringify(buildBackup(state), null, 2);
+  const fileName = `study-tracker-backup-${todayIso()}.json`;
+  if ("__TAURI_INTERNALS__" in window) {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const { invoke } = await import("@tauri-apps/api/core");
+    const path = await save({ defaultPath: fileName, filters: [{ name: "Study Tracker backup", extensions: ["json"] }] });
+    if (!path) return null;
+    await invoke("write_backup_file", { path, contents });
+    return path;
+  }
+  const blob = new Blob([contents], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `study-tracker-backup-${todayIso()}.json`;
+  anchor.download = fileName;
   anchor.click();
   URL.revokeObjectURL(url);
+  return fileName;
+}
+
+/**
+ * Writes a backup file's contents into localStorage as the app's persisted state, so the next
+ * loadAppState() (after a reload) runs it through the normal migration/normalization pipeline.
+ * The backup's social identity (userId + deviceSecret) is what makes the restored device the
+ * same account as the original.
+ */
+export function restoreBackup(rawJson: string): void {
+  if (restorePending) return;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch {
+    throw new Error("That file is not valid JSON.");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("That file is not a Study Tracker backup.");
+  const wrapper = parsed as { backupVersion?: unknown; state?: unknown; preferences?: unknown };
+  const isWrapped = typeof wrapper.backupVersion === "number" && wrapper.state && typeof wrapper.state === "object";
+  const backup = (isWrapped ? wrapper.state : parsed) as Partial<AppState>;
+  const preferences = isWrapped && wrapper.preferences && typeof wrapper.preferences === "object" ? wrapper.preferences as Record<string, unknown> : {};
+  if (!Array.isArray(backup.sessions) || !Array.isArray(backup.courses) || !backup.social || typeof backup.social !== "object") {
+    throw new Error("That file is not a Study Tracker backup.");
+  }
+  const { social, timer, ...core } = backup;
+  if (typeof social.userId !== "string" || typeof social.deviceSecret !== "string" || !social.userId || !social.deviceSecret) {
+    throw new Error("This backup has no account identity to restore.");
+  }
+
+  const previous = [...APP_STATE_STORAGE_KEYS, ...PREFERENCE_STORAGE_KEYS].map((key) => [key, localStorage.getItem(key)] as const);
+  try {
+    localStorage.setItem(SOCIAL_KEY, JSON.stringify({ social }));
+    localStorage.setItem(CORE_KEY, JSON.stringify(core));
+    if (timer && typeof timer === "object") localStorage.setItem(TIMER_KEY, JSON.stringify({ timer }));
+    else localStorage.removeItem(TIMER_KEY);
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_V1_KEY);
+    for (const key of PREFERENCE_STORAGE_KEYS) {
+      const value = preferences[key];
+      if (typeof value === "string") localStorage.setItem(key, value);
+    }
+    restorePending = true;
+  } catch (error) {
+    for (const [key, value] of previous) {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    }
+    throw new Error(`Could not store the backup: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+  }
 }

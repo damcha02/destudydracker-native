@@ -4931,6 +4931,111 @@
   gap: 16px;
 }
 
+.vault-onboard-card {
+  width: min(760px, 100%);
+  margin: 34px auto;
+  display: grid;
+  gap: 22px;
+}
+
+.vault-onboard-head {
+  display: grid;
+  gap: 6px;
+  max-width: 62ch;
+}
+
+.vault-onboard-head h2 {
+  margin: 0;
+}
+
+.vault-onboard-head code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+}
+
+.vault-onboard-body {
+  display: grid;
+  grid-template-columns: minmax(200px, 0.85fr) minmax(240px, 1fr);
+  gap: 26px;
+  align-items: start;
+}
+
+.vault-onboard-preview {
+  display: grid;
+  gap: 4px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.vault-onboard-root {
+  color: var(--text);
+}
+
+.vault-onboard-branch {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-left: 14px;
+  position: relative;
+}
+
+.vault-onboard-branch::before {
+  content: "└";
+  position: absolute;
+  left: 0;
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.vault-onboard-branch em {
+  font-style: normal;
+  color: var(--text);
+}
+
+.vault-onboard-branch i {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.92em;
+}
+
+.vault-onboard-form {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.vault-onboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.vault-onboard-foot {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 720px) {
+  .vault-onboard-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.fn-vault-rail-hint {
+  margin: 0;
+  padding: 0 18px;
+  color: var(--ink-4);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 .vault-folder-strip {
   display: flex;
   flex-wrap: wrap;
@@ -6576,6 +6681,45 @@ button:hover:not(:disabled) {
   border: 0;
   box-shadow: var(--shadow-lg);
   font-weight: 700;
+}
+
+.undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  /* Higher than .timetable-modal-backdrop (5000) and .fn-task-modal-backdrop (5100), so Undo
+     stays clickable even while a modal (e.g. Manage Semesters) is open on top of it. */
+  z-index: 5200;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  padding: 12px 14px 12px 18px;
+  transform: translateX(-50%);
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: var(--bg);
+  border: 0;
+  box-shadow: var(--shadow-lg);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.undo-toast button {
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid color-mix(in oklch, var(--bg) 40%, transparent);
+  background: transparent;
+  color: var(--bg);
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.undo-toast button:hover {
+  background: color-mix(in oklch, var(--bg) 16%, transparent);
 }
 
 .notice-stack {
@@ -8505,9 +8649,14 @@ input[type="color"] {
 
 .calendar-task-course {
   color: var(--ink-4);
-  font-family: var(--font-serif);
-  font-size: 0.7rem;
-  font-style: italic;
+  /* Self-hosted (see the @font-face in index.css) - the packaged app's CSP blocks the Google
+     Fonts request this used to depend on, which is why it never actually rendered cursive there
+     no matter what was tried here. Weight 500, not 600: bold strokes read as a fat sans at this
+     size, not a slender script. */
+  font-family: "Dancing Script", "Segoe Script", "Brush Script MT", cursive;
+  font-size: 0.42rem;
+  font-weight: 500;
+  line-height: 1.2;
   letter-spacing: 0.01em;
 }
 
@@ -8525,6 +8674,22 @@ input[type="color"] {
 
 .calendar-pill.completed .calendar-task-title {
   text-decoration: line-through;
+}
+
+.calendar-day-todos {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--line-soft);
+}
+
+.todo-pill {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px;
+  align-items: start;
+  background: color-mix(in oklch, var(--surface-raised) 92%, var(--ink-4) 8%);
 }
 
 .exam-pill {
@@ -8777,11 +8942,77 @@ input[type="color"] {
   align-items: center;
   min-width: 0;
   overflow: hidden;
+  box-sizing: border-box;
   padding: 4px 11px 8px;
   border-radius: var(--r-md);
   background: color-mix(in oklch, var(--entry-color) 12%, var(--surface-raised));
   border: 1px solid color-mix(in oklch, var(--entry-color) 36%, transparent);
   cursor: grab;
+}
+
+/* Blocks are sized to their exact scheduled duration (see getTimelineBlockGeometry), so short
+   ones drop secondary text instead of growing past their slot. */
+.calendar-timeline-entry.density-compact {
+  padding: 2px 9px;
+  gap: 8px;
+}
+
+.calendar-timeline-entry.density-compact .calendar-timeline-entry-copy {
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
+  justify-content: start;
+  align-items: baseline;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.calendar-timeline-entry.density-compact .calendar-timeline-entry-copy > span {
+  display: none;
+}
+
+.calendar-timeline-entry.density-tiny {
+  padding: 0 8px;
+  gap: 6px;
+  font-size: 0.72rem;
+  line-height: 1.1;
+}
+
+.calendar-timeline-entry.density-tiny .calendar-timeline-entry-copy {
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
+  justify-content: start;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.calendar-timeline-entry.density-tiny .calendar-timeline-entry-copy > span,
+.calendar-timeline-entry.density-tiny .calendar-timeline-entry-copy > small {
+  display: none;
+}
+
+.calendar-timeline-entry.density-tiny.generated .calendar-timeline-entry-actions .small-button {
+  padding: 0 6px;
+  height: 15px;
+  font-size: 0.6rem;
+  line-height: 15px;
+}
+
+.calendar-timeline-entry.density-compact.generated .calendar-timeline-entry-actions .small-button {
+  padding: 1px 7px;
+  font-size: 0.66rem;
+}
+
+.calendar-timeline-entry.density-compact .calendar-timeline-checkbox,
+.calendar-timeline-entry.density-tiny .calendar-timeline-checkbox {
+  width: 14px;
+  height: 14px;
+}
+
+.calendar-timeline-entry.density-compact .calendar-resize-handle,
+.calendar-timeline-entry.density-tiny .calendar-resize-handle {
+  bottom: 0;
+  height: 5px;
 }
 
 .calendar-timeline-entry.scheduled {
@@ -8839,8 +9070,40 @@ input[type="color"] {
   opacity: 0.62;
 }
 
+/* Overlap-split entries (see computeOverlapLayout) sit side by side in narrower columns; on
+   hover, lift the hovered one above its neighbors and boost its background so it stays fully
+   readable even when several entries are squeezed into the same time slot. */
+.calendar-timeline-entry.overlap-split {
+  z-index: 1;
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--border) 70%, transparent);
+}
+
+.calendar-timeline-entry.overlap-split:hover,
+.calendar-timeline-entry.overlap-split:focus-within {
+  z-index: 10;
+  background: color-mix(in oklch, var(--entry-color, var(--accent)) 14%, var(--surface-raised));
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--entry-color, var(--accent)) 55%, transparent), var(--shadow-lg);
+}
+
 .calendar-timeline-entry.done strong {
   text-decoration: line-through;
+}
+
+/* Standalone Daily To-Dos aren't tied to a subject's color, so they get a neutral dashed
+   treatment instead of the solid course-colored left bar used by subject-bound items - keeps
+   them visually distinct from Lecture/Session/Sheet occurrences at a glance. */
+.calendar-timeline-entry.standalone-todo {
+  border-style: dashed;
+  border-color: color-mix(in oklch, var(--ink-4) 55%, transparent);
+  background: color-mix(in oklch, var(--surface-raised) 92%, var(--ink-4) 8%);
+}
+
+.timetable-todo-icon {
+  display: inline-block;
+  margin-right: 5px;
+  font-size: 0.5rem;
+  vertical-align: middle;
+  color: var(--ink-4);
 }
 
 .calendar-timeline-entry-copy {
@@ -8876,6 +9139,25 @@ input[type="color"] {
   gap: 5px;
   justify-items: center;
   align-items: center;
+}
+
+/* Generated (non-draggable) timetable rows lay their action buttons out horizontally, since a
+   row can carry both "Open" (sheet link) and "Remove" and the default vertical stacking above
+   collides with the row's shorter minimum height. */
+.calendar-timeline-entry.generated .calendar-timeline-entry-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 6px;
+  justify-items: initial;
+}
+
+.calendar-timeline-entry.generated .calendar-timeline-entry-actions .small-button {
+  padding: 3px 8px;
+  min-height: 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 .calendar-timeline-checkbox {
@@ -14168,6 +14450,7 @@ input[type="color"] {
 :root[data-app-style="field-notebook"] .session-log-card,
 :root[data-app-style="field-notebook"] .vault-document,
 :root[data-app-style="field-notebook"] .vault-empty-card,
+:root[data-app-style="field-notebook"] .vault-onboard-card,
 :root[data-app-style="field-notebook"] .vault-settings-panel,
 :root[data-app-style="field-notebook"] .summary-file-list,
 :root[data-app-style="field-notebook"] .summary-viewer-card,
@@ -15468,6 +15751,21 @@ input[type="color"] {
   color: var(--ink);
 }
 
+.fn-rail-row.fn-semester-folder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.fn-semester-folder-toggle {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
 .fn-rail-row strong,
 .fn-course-folder strong {
   color: inherit;
@@ -15877,7 +16175,8 @@ input[type="color"] {
 .fn-task-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 5000;
+  /* Higher than .timetable-modal-backdrop (5000) so the task editor always layers above an open Manage Semesters modal. */
+  z-index: 5100;
   display: grid;
   place-items: start center;
   background: rgb(0 0 0 / 0.62);
@@ -15979,19 +16278,50 @@ input[type="color"] {
 }
 
 .fn-task-form {
+  /* No nested scroller here: the form just flows inside .fn-task-modal, which is the only
+     scrolling ancestor (see its own overflow: auto). A second overflow region on this flex
+     column used to squeeze itself to whatever space was left below the subtype picker and
+     above the schedule row/footer, so only the field grid scrolled in a tiny cramped box while
+     everything below it stayed fully expanded and the footer looked stuck in place. */
   min-height: 0;
   display: flex;
-  flex: 1;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .fn-task-form-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
-  overflow: auto;
   padding: 18px 0;
+}
+
+.fn-task-form-subtype-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 4px;
+  margin-top: 16px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+}
+
+.fn-task-form-subtype-picker button {
+  min-height: 40px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fn-task-form-subtype-picker button.active {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--shadow-sm);
 }
 
 .fn-task-form .field {
@@ -16037,12 +16367,22 @@ input[type="color"] {
   grid-column: 1 / -1;
 }
 
+.fn-task-form-schedule {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
 .fn-task-modal-footer {
-  position: sticky;
-  bottom: 0;
+  /* Not sticky: pinning it to the scrollport's bottom edge made it an opaque bar sitting on top
+     of whatever content happened to have scrolled underneath it (the schedule row's bottom half,
+     in practice) - it now just flows after the form like Wabi-Sabi's own footer already does. */
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  margin-top: 14px;
   border-top: var(--fn-rule-soft);
   background: var(--surface);
   padding-top: 14px;
@@ -16528,11 +16868,33 @@ input[type="color"] {
 
 :root[data-app-style="field-notebook"] .fn-vault .vault-space-panel,
 :root[data-app-style="field-notebook"] .fn-vault .vault-settings-panel,
+:root[data-app-style="field-notebook"] .fn-vault .vault-onboard-card,
 :root[data-app-style="field-notebook"] .fn-vault .vault-empty-card {
   margin: 0;
   border: 0 !important;
   border-radius: 0 !important;
   padding: 20px 34px 40px;
+}
+
+:root[data-app-style="field-notebook"] .fn-vault .vault-onboard-card {
+  width: 100%;
+  max-width: 720px;
+  padding-top: 30px;
+}
+
+:root[data-app-style="field-notebook"] .vault-onboard-head h2 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+}
+
+:root[data-app-style="field-notebook"] .vault-onboard-preview {
+  border: var(--fn-edge);
+  border-radius: 0;
+  background: var(--surface-2);
+}
+
+:root[data-app-style="field-notebook"] .vault-onboard-branch::before {
+  content: "·";
 }
 
 :root[data-app-style="field-notebook"] .fn-vault .vault-document-wrap,
@@ -16904,6 +17266,111 @@ input[type="color"] {
   :root[data-app-style="field-notebook"] .fn-break .break-card-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ------------------------------------------------------------
+   Field Notebook: portaled modals & overlays (Manage Semesters,
+   the planner item / to-do modal, day-view drawer). These render
+   via createPortal onto document.body, outside the .fn-* wrapper
+   tree, so they're reskinned here off the root attribute instead
+   of a .fn-* ancestor class - matching the paper/ink/hard-edge
+   language already established by .fn-task-modal.
+   ------------------------------------------------------------ */
+
+:root[data-app-style="field-notebook"] .timetable-modal-backdrop,
+:root[data-app-style="field-notebook"] .calendar-drawer-backdrop,
+:root[data-app-style="field-notebook"] .fn-task-modal-backdrop {
+  background: rgb(20 17 12 / 0.55);
+}
+
+:root[data-app-style="field-notebook"] .timetable-modal {
+  border-radius: 0;
+  border: var(--fn-edge);
+  background: var(--surface);
+  box-shadow: 0 22px 60px rgb(0 0 0 / 0.28);
+}
+
+:root[data-app-style="field-notebook"] .timetable-modal-head {
+  border-bottom: 2px solid var(--ink);
+  background: var(--surface);
+}
+
+:root[data-app-style="field-notebook"] .timetable-modal-head strong {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+:root[data-app-style="field-notebook"] .timetable-modal-form .field > span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+:root[data-app-style="field-notebook"] .timetable-modal-form input,
+:root[data-app-style="field-notebook"] .timetable-modal-form select,
+:root[data-app-style="field-notebook"] .timetable-modal-form textarea {
+  border: var(--fn-edge);
+  border-radius: 0;
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  box-shadow: none;
+}
+
+:root[data-app-style="field-notebook"] .timetable-modal-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  border-radius: 0;
+  accent-color: var(--fn-stamp);
+}
+
+:root[data-app-style="field-notebook"] .timetable-modal-form > button[type="button"]:not(.ghost-button),
+:root[data-app-style="field-notebook"] .timetable-modal-form > button:not(.ghost-button):not(.timetable-modal-manage-link) {
+  border-radius: 0;
+  border: var(--fn-rule-hard);
+  background: var(--ink);
+  color: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+:root[data-app-style="field-notebook"] .timetable-modal .ghost-button {
+  border-radius: 0;
+  border: var(--fn-edge);
+}
+
+/* Manage Semesters: section headers, the summary strip, and clustering
+   its scattered action buttons into cohesive, ruled button groups. */
+
+
+
+
+
+
+
+
+/* Calendar day-view drawer and drag/recurrence popovers share the same
+   flat paper-and-ink surface as every other Notebook overlay. */
+:root[data-app-style="field-notebook"] .calendar-day-view,
+:root[data-app-style="field-notebook"] .calendar-drawer {
+  border-radius: 0;
+  border: var(--fn-edge);
+  background: var(--surface);
+  box-shadow: 0 22px 60px rgb(0 0 0 / 0.28);
+}
+
+:root[data-app-style="field-notebook"] .calendar-drag-preview {
+  border-radius: 0;
+  border: var(--fn-edge);
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.24);
 }
 
 /* ============================================================
@@ -17691,7 +18158,7 @@ input[type="color"] {
 /* -------- Timer -------- */
 
 .wabi-timer-grid {
-  padding: 6px 0 40px;
+  padding: 6px 0 16px;
   font-family: var(--font-sans);
   color: var(--wabi-ink);
 }
@@ -17725,14 +18192,25 @@ input[type="color"] {
 
 .wabi-timer-body {
   display: flex;
-  align-items: flex-end;
-  gap: 40px;
-  margin-top: 34px;
+  align-items: center;
+  gap: 40px 56px;
+  margin-top: 22px;
   flex-wrap: wrap;
 }
 
 .wabi-timer-clock-col {
   flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.wabi-timer-subline {
+  margin: 4px 0 0;
+  font: 400 13px var(--font-sans);
+  letter-spacing: 0.06em;
+  color: var(--wabi-muted);
 }
 
 .wabi-timer-clock,
@@ -17761,7 +18239,7 @@ input[type="color"] {
 .wabi-timer-modes-col {
   flex: 1 1 380px;
   min-width: 300px;
-  padding-bottom: 12px;
+  padding-bottom: 0;
 }
 
 .wabi-timer-phase-label {
@@ -17845,7 +18323,7 @@ input[type="color"] {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 32px;
+  margin-top: 0;
 }
 
 :root[data-app-style="wabi-sabi"] .wabi-timer-grid .timer-advanced-toggle {
@@ -18906,6 +19384,37 @@ input[type="color"] {
 
 :root[data-app-style="wabi-sabi"] .wabi-vault .vault-hero {
   display: none;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-vault .vault-onboard-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 48px 0 0;
+  margin: 0 auto;
+  gap: 28px;
+}
+
+:root[data-app-style="wabi-sabi"] .vault-onboard-preview {
+  border: 0;
+  border-left: var(--wabi-rule-hard);
+  border-radius: 0;
+  background: transparent;
+  padding: 2px 0 2px 18px;
+}
+
+:root[data-app-style="wabi-sabi"] .vault-onboard-branch::before {
+  content: "";
+}
+
+:root[data-app-style="wabi-sabi"] .vault-onboard-branch {
+  padding-left: 0;
+}
+
+:root[data-app-style="wabi-sabi"] .vault-onboard-branch i,
+:root[data-app-style="wabi-sabi"] .vault-onboard-foot {
+  color: var(--wabi-faint);
 }
 
 :root[data-app-style="wabi-sabi"] .wabi-vault .vault-nav {
@@ -20908,4 +21417,3722 @@ input[type="color"] {
     grid-template-columns: 34px minmax(0, 1fr) auto;
     gap: 8px;
   }
+}
+
+/* --- Daily Skribbl --- */
+.skribbl-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.skribbl-modal {
+  width: min(960px, 100%);
+  max-height: 94vh;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in oklch, var(--accent) 20%, transparent), transparent 36%),
+    var(--surface);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.42);
+}
+
+.skribbl-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.skribbl-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-serif);
+  font-size: clamp(1.45rem, 4vw, 2.1rem);
+  letter-spacing: -0.04em;
+}
+
+.skribbl-kicker {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-weight: 900;
+}
+
+.skribbl-close-btn {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 10px;
+  padding: 5px 9px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.skribbl-close-btn:hover {
+  background: color-mix(in oklch, var(--accent) 14%, transparent);
+  color: var(--text);
+}
+
+.skribbl-error {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklch, var(--danger, #e53935) 45%, transparent);
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--danger, #e53935) 12%, transparent);
+  color: var(--text);
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.skribbl-error p {
+  margin: 0;
+}
+
+.skribbl-retry-btn {
+  border: 1px solid color-mix(in oklch, var(--danger, #e53935) 45%, transparent);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.skribbl-retry-btn:hover {
+  background: color-mix(in oklch, var(--danger, #e53935) 12%, transparent);
+}
+
+.skribbl-empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.skribbl-body {
+  display: grid;
+  gap: 14px;
+}
+
+.skribbl-theme-card {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in oklch, var(--accent) 8%, transparent);
+}
+
+.skribbl-theme-card strong {
+  color: var(--text);
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+}
+
+.skribbl-theme-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.skribbl-intro {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.skribbl-intro-note {
+  margin: 0;
+  color: var(--muted);
+  text-align: center;
+  max-width: 42ch;
+}
+
+.skribbl-start-btn,
+.skribbl-submit-btn,
+.skribbl-more-btn {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 22px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.skribbl-start-btn:hover,
+.skribbl-submit-btn:hover,
+.skribbl-more-btn:hover {
+  background: var(--accent-strong);
+}
+
+.skribbl-start-btn:disabled,
+.skribbl-submit-btn:disabled,
+.skribbl-more-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.skribbl-thumb {
+  max-width: 240px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.skribbl-draw-area {
+  display: grid;
+  gap: 10px;
+}
+
+.skribbl-toolbar,
+.skribbl-color-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.skribbl-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 10px;
+  margin-right: 2px;
+  border-right: 1px solid var(--border);
+}
+
+.skribbl-tool-btn {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+
+.skribbl-tool-btn:hover {
+  border-color: var(--accent-line);
+}
+
+.skribbl-tool-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent-strong);
+}
+
+.skribbl-tool-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.skribbl-size-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skribbl-size-btn::after {
+  content: "";
+  width: var(--dot);
+  height: var(--dot);
+  border-radius: 50%;
+  background: var(--text);
+}
+
+.skribbl-size-btn.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.skribbl-color-row {
+  flex-wrap: wrap;
+}
+
+.skribbl-color-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 2px solid var(--surface);
+  cursor: pointer;
+  padding: 0;
+}
+
+.skribbl-color-btn.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.skribbl-custom-color {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 2px dashed var(--border);
+  overflow: hidden;
+  cursor: pointer;
+  display: inline-flex;
+}
+
+.skribbl-custom-color input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.skribbl-custom-color span {
+  position: absolute;
+  inset: 0;
+}
+
+.skribbl-canvas-wrap {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.skribbl-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  background: #fff;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.skribbl-timer {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--surface) 85%, transparent);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+
+.skribbl-canvas-wrap[data-low="true"] .skribbl-timer {
+  color: #e53935;
+}
+
+.skribbl-submit-btn {
+  justify-self: center;
+}
+
+.skribbl-gallery,
+.skribbl-leaderboard {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.skribbl-gallery-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.skribbl-gallery-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+}
+
+.skribbl-refresh-btn {
+  margin-left: auto;
+  border: 1px solid var(--line, var(--border));
+  border-radius: var(--r-pill, 999px);
+  padding: 4px 9px;
+  background: var(--surface-2, transparent);
+  color: var(--ink-3, var(--muted));
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.skribbl-refresh-btn:hover:not(:disabled) {
+  background: var(--surface-raised, color-mix(in oklch, var(--accent) 14%, transparent));
+  color: var(--ink, var(--text));
+}
+
+.skribbl-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.skribbl-refresh-spin {
+  display: inline-block;
+  animation: skribbl-spin 0.8s linear infinite;
+}
+
+@keyframes skribbl-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.skribbl-drawing-thumb-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+}
+
+.skribbl-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: color-mix(in oklch, #000 72%, transparent);
+  backdrop-filter: blur(10px);
+  cursor: zoom-out;
+}
+
+.skribbl-lightbox-frame {
+  max-width: 94vw;
+  max-height: 90vh;
+  border: 1px solid color-mix(in oklch, white 18%, transparent);
+  border-radius: 22px;
+  padding: 10px;
+  background: color-mix(in oklch, var(--surface) 92%, transparent);
+  box-shadow: var(--shadow-lg);
+}
+
+.skribbl-lightbox-frame img {
+  display: block;
+  max-width: calc(94vw - 20px);
+  max-height: calc(90vh - 20px);
+  object-fit: contain;
+  border-radius: 14px;
+}
+
+.skribbl-gallery-count {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.skribbl-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.skribbl-drawing-card {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in oklch, var(--surface) 96%, transparent);
+}
+
+.skribbl-drawing-card img {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.skribbl-drawing-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.skribbl-drawing-name {
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skribbl-vote-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.skribbl-vote-btn {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.skribbl-vote-btn:hover:not(:disabled) {
+  border-color: var(--accent-line);
+  color: var(--text);
+}
+
+.skribbl-vote-btn.up.active {
+  background: color-mix(in oklch, #43a047 18%, transparent);
+  border-color: #43a047;
+  color: #43a047;
+}
+
+.skribbl-vote-btn.down.active {
+  background: color-mix(in oklch, #e53935 18%, transparent);
+  border-color: #e53935;
+  color: #e53935;
+}
+
+.skribbl-vote-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.skribbl-vote-score {
+  min-width: 24px;
+  text-align: center;
+  color: var(--text);
+  font-weight: 800;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.skribbl-gallery-empty {
+  padding: 18px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+}
+
+.skribbl-more-btn {
+  justify-self: center;
+  background: transparent;
+  color: var(--accent-strong);
+  border: 1px solid var(--accent-line);
+}
+
+.skribbl-more-btn:hover {
+  background: var(--accent-soft);
+}
+
+.skribbl-winner-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(120deg, color-mix(in oklch, #f9a825 18%, transparent), color-mix(in oklch, var(--surface) 92%, transparent));
+}
+
+.skribbl-winner-trophy {
+  font-size: 1.6rem;
+}
+
+.skribbl-winner-card div {
+  display: grid;
+  gap: 2px;
+}
+
+.skribbl-winner-card strong {
+  color: var(--text);
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+}
+
+.skribbl-winner-score {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* Shared modal pattern for the semester wizard/holiday/archive modals and the timetable creation modal. */
+
+.timetable-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: grid;
+  place-items: start center;
+  background: rgb(0 0 0 / 0.55);
+  padding: 72px 24px 28px;
+  overflow-y: auto;
+}
+
+.timetable-modal {
+  width: min(560px, 100%);
+  max-height: calc(100vh - 112px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+
+.timetable-modal-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.timetable-modal-form {
+  display: grid;
+  gap: 12px;
+}
+
+.timetable-modal-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.timetable-modal-dates .field {
+  flex: 1;
+  min-width: 120px;
+}
+
+.timetable-modal-dates > input {
+  flex: 1;
+  min-width: 140px;
+}
+
+.timetable-modal-course-row {
+  display: flex;
+  gap: 8px;
+}
+
+.timetable-modal-course-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.timetable-modal-subtype-badge {
+  align-self: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill, 999px);
+  background: color-mix(in oklch, var(--accent) 16%, var(--surface));
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.timetable-modal-unscheduled-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: color-mix(in oklch, var(--surface-raised) 92%, var(--ink-4) 8%);
+  border: 1px dashed var(--line-soft);
+  color: var(--ink-3);
+  font-size: 0.84rem;
+}
+
+.timetable-modal-remove-time {
+  align-self: flex-end;
+  margin-bottom: 2px;
+}
+
+.timetable-modal-manage-link {
+  justify-self: center;
+  font-size: 0.78rem;
+  color: var(--ink-4);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.timetable-modal-manage-link:hover {
+  color: var(--accent);
+}
+
+.timetable-modal-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 0.88rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.timetable-modal-toggle input[type="checkbox"] {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.timetable-modal-toggle span {
+  flex: 1 1 auto;
+  line-height: 1.3;
+}
+
+/* Click-to-create affordance on empty timeline hour rows, and the generated (non-draggable) timeline pills. */
+
+.calendar-timeline-hour--clickable {
+  cursor: pointer;
+}
+
+.calendar-timeline-hour--clickable:hover {
+  background: color-mix(in oklch, var(--accent) 6%, transparent);
+}
+
+.calendar-timeline-entry.generated {
+  cursor: default;
+}
+
+.calendar-timeline-entry.generated:active {
+  cursor: default;
+}
+
+.calendar-timeline-entry.generated.editable-draggable {
+  cursor: grab;
+}
+
+.calendar-timeline-entry.generated.editable-draggable:active {
+  cursor: grabbing;
+}
+
+.exam-row-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.exam-row-edit input {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+/* Inline confirm affordance reused by the Manage Semesters modal (remove semester/course). */
+
+.semester-menu-confirm {
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+}
+
+.semester-menu-confirm span {
+  color: var(--text);
+}
+
+.timetable-edit-toggle.active {
+  background: color-mix(in oklch, var(--accent) 22%, transparent);
+  border-color: color-mix(in oklch, var(--accent) 55%, transparent);
+  color: var(--text);
+}
+
+.timetable-solved-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--accent) 20%, transparent);
+  color: var(--text);
+  font-style: normal;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Timetable drag/resize preview + recurrence-scope confirm popover (repeat-weekly move/resize). */
+
+.timetable-recurrence-confirm {
+  display: grid;
+  gap: 8px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 14px;
+  min-width: 260px;
+  max-width: 320px;
+  pointer-events: auto;
+  z-index: 220;
+}
+
+.timetable-recurrence-confirm span:first-child {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.timetable-recurrence-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Manage Semesters modal: semester picker/summary, holidays, and per-subject unit-type editor. */
+
+.manage-semesters-modal {
+  width: min(720px, 100%);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.fn-manage-semesters-button {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+
+
+
+.manage-semesters-schedule-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  margin-top: 4px;
+  border-radius: var(--r-sm);
+  background: color-mix(in oklch, var(--accent) 6%, transparent);
+  border: 1px solid var(--border);
+}
+
+.manage-semesters-schedule-row input,
+.manage-semesters-schedule-row select {
+  min-width: 0;
+}
+
+.manage-semesters-sheet-schedule {
+  align-items: stretch;
+  gap: 12px;
+}
+
+.manage-semesters-sheet-schedule-section {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 220px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.manage-semesters-sheet-schedule-section > .section-note {
+  flex: 0 0 100%;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.7rem;
+}
+
+.manage-semesters-sheet-schedule > input {
+  flex: 1 1 100%;
+}
+
+.semester-menu-confirm.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+}
+
+.timetable-modal-toggle.compact {
+  padding: 0;
+  gap: 6px;
+  font-size: 0.82rem;
+}
+
+.planner-overdue-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in oklch, var(--warn, var(--accent)) 45%, transparent);
+  background: color-mix(in oklch, var(--warn, var(--accent)) 10%, var(--surface-raised));
+  font-size: 0.85rem;
+}
+
+.manage-semesters-timespan {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.manage-semesters-timespan-field {
+  display: grid;
+  gap: 2px;
+  font-size: 0.72rem;
+  color: var(--ink-4);
+}
+
+.manage-semesters-timespan-end {
+  align-self: center;
+  white-space: nowrap;
+}
+
+.time-field {
+  min-width: 0;
+  width: 7.5em;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-field.invalid {
+  outline: 2px solid var(--danger, #d64545);
+  outline-offset: -1px;
+}
+
+/* Manage Semesters ("msm"): one calm column of cards - a slim semester bar, then a card per subject
+   with its tasks as single rows; scheduling details fold open under the task they belong to. */
+.manage-semesters-modal {
+  width: min(780px, 100%);
+}
+
+.msm {
+  display: grid;
+  gap: 12px;
+}
+
+.msm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.msm-select {
+  flex: 1 1 200px;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.msm-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.msm-bar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.msm-pill {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--accent) 20%, transparent);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.msm-muted {
+  color: var(--ink-4, var(--muted, #888));
+  font-size: 0.8rem;
+}
+
+.msm-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: color-mix(in oklch, var(--surface-raised, var(--surface)) 60%, transparent);
+  padding: 12px 14px;
+}
+
+.msm-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.msm-section-head h3 {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-4, var(--muted, #888));
+}
+
+.msm-holidays > summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  list-style-position: inside;
+}
+
+.msm-count {
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--accent) 16%, transparent);
+  font-size: 0.72rem;
+}
+
+.msm-holiday-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+
+.msm-holiday-form input:first-child {
+  flex: 1 1 140px;
+}
+
+.msm-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.86rem;
+}
+
+.msm-edit {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.msm-edit .msm-wide {
+  grid-column: 1 / -1;
+}
+
+.msm-edit-actions {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.msm-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid color-mix(in oklch, var(--danger, #d64545) 45%, transparent);
+  background: color-mix(in oklch, var(--danger, #d64545) 8%, transparent);
+  font-size: 0.85rem;
+}
+
+.msm-confirm > span {
+  flex: 1 1 200px;
+}
+
+.msm-subject {
+  display: grid;
+  gap: 10px;
+  border-left: 4px solid var(--subject-color, var(--accent));
+}
+
+.msm-subject-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.msm-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--subject-color, var(--accent));
+  flex: none;
+}
+
+.msm-subject-name {
+  font-size: 1rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msm-chip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.msm-spacer {
+  flex: 1;
+}
+
+.msm-tasks {
+  display: grid;
+  gap: 2px;
+}
+
+.msm-task {
+  border-radius: var(--r-sm);
+}
+
+.msm-task.open {
+  background: color-mix(in oklch, var(--accent) 5%, transparent);
+}
+
+.msm-task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+}
+
+.msm-task-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.msm-badge {
+  padding: 0 7px;
+  border-radius: var(--r-sm);
+  background: color-mix(in oklch, var(--ink-4, #888) 16%, transparent);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.msm-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 96px;
+  justify-content: flex-end;
+}
+
+.msm-progress-track {
+  width: 44px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.msm-progress-track > span {
+  display: block;
+  height: 100%;
+  background: var(--subject-color, var(--accent));
+}
+
+.msm-add-task {
+  justify-self: start;
+  margin-top: 4px;
+  padding: 4px 6px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.msm-task-panel {
+  display: grid;
+  gap: 6px;
+  padding: 4px 8px 10px;
+}
+
+.msm-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 0.84rem;
+}
+
+.msm-slot-kind {
+  min-width: 68px;
+  color: var(--ink-4, #888);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.msm-slot-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  padding-top: 6px;
+}
+
+.msm-slot-form input,
+.msm-slot-form select {
+  min-width: 0;
+}
+
+.msm-sheet-form {
+  display: grid;
+  gap: 8px;
+}
+
+.msm-sheet-part {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.msm-label {
+  flex: 0 0 100%;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-4, #888);
+}
+
+.msm-menu {
+  position: relative;
+}
+
+.msm-icon-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.msm-icon-button:hover,
+.msm-icon-button[aria-expanded="true"] {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.msm-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  display: grid;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-raised, var(--surface));
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.3));
+}
+
+.msm-menu-list button {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.msm-menu-list button:hover {
+  background: color-mix(in oklch, var(--accent) 14%, transparent);
+}
+
+.msm-menu-list .danger,
+.msm .danger {
+  color: var(--danger, #d64545);
+}
+
+:root[data-app-style="field-notebook"] .msm-card,
+:root[data-app-style="field-notebook"] .msm-confirm,
+:root[data-app-style="field-notebook"] .msm-menu-list,
+:root[data-app-style="field-notebook"] .msm-sheet-part,
+:root[data-app-style="field-notebook"] .msm-badge,
+:root[data-app-style="field-notebook"] .msm-chip,
+:root[data-app-style="field-notebook"] .msm-pill {
+  border-radius: 0;
+}
+
+:root[data-app-style="field-notebook"] .msm-card {
+  border: var(--fn-edge);
+  background: var(--fn-paper-1);
+}
+
+:root[data-app-style="field-notebook"] .msm-section-head h3,
+:root[data-app-style="field-notebook"] .msm-label,
+:root[data-app-style="field-notebook"] .msm-slot-kind {
+  font-family: var(--font-mono);
+  letter-spacing: 0.14em;
+}
+
+.msm-slot-form input[type="date"],
+.msm-holiday-form input[type="date"] {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.msm-slot-form > button:not(.ghost-button),
+.msm-sheet-form > button:not(.ghost-button),
+.msm-edit-actions button:not(.ghost-button),
+.msm-holiday-form button {
+  padding: 7px 14px;
+  border: 1px solid color-mix(in oklch, var(--accent) 60%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in oklch, var(--accent) 22%, transparent);
+  color: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.msm-slot-form > button:not(.ghost-button):hover,
+.msm-sheet-form > button:not(.ghost-button):hover,
+.msm-edit-actions button:not(.ghost-button):hover,
+.msm-holiday-form button:hover {
+  background: color-mix(in oklch, var(--accent) 34%, transparent);
+}
+
+.msm-slot-form .msm-edit-actions {
+  margin-left: auto;
+}
+
+/* Quiet mode's opaque overlay hides the app-level petals, so it hosts its own, clipped to the overlay. */
+.wabi-quiet-overlay .sakura-scatter {
+  position: absolute !important;
+}
+
+/* Wabi-Sabi sidebar: Plan submenu (current semester -> courses) */
+.wabi-plan-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 22px 10px 34px;
+}
+
+.wabi-plan-semester,
+.wabi-plan-course,
+.wabi-plan-link {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wabi-plan-semester {
+  padding: 5px 0;
+  font: 500 13px var(--font-serif);
+  color: var(--wabi-ink);
+}
+
+.wabi-plan-semester:hover,
+.wabi-plan-course:hover {
+  color: var(--wabi-vermilion);
+}
+
+.wabi-plan-chevron {
+  color: var(--wabi-muted);
+  font: 400 13px var(--font-serif);
+}
+
+.wabi-plan-course {
+  justify-content: flex-start;
+  padding: 4px 0 4px 10px;
+  border-left: 2px solid var(--wabi-course, var(--wabi-rule-soft));
+  font: 400 12.5px var(--font-serif);
+  color: var(--wabi-muted);
+}
+
+.wabi-plan-link {
+  margin-top: 4px;
+  justify-content: flex-start;
+  font: 400 11px var(--font-serif);
+  letter-spacing: 0.04em;
+  color: var(--wabi-faint);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.wabi-plan-link:hover {
+  color: var(--wabi-vermilion);
+}
+
+.wabi-plan-empty {
+  padding: 4px 0 4px 10px;
+  font: italic 400 12px var(--font-serif);
+  color: var(--wabi-faint);
+}
+
+/* Edit Semester window: collapsible course rows */
+.manage-semesters-course-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.manage-semesters-course-toggle {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  font-weight: 500;
+}
+
+.manage-semesters-course-toggle:hover {
+  color: var(--accent);
+}
+
+/* Edit Semester: course edit form (labelled fields so colour/grade/link are visible) */
+.manage-semesters-course-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  padding: 8px 0 12px;
+}
+
+.manage-semesters-course-edit .field { flex: 1 1 160px; min-width: 0; }
+.manage-semesters-course-edit .manage-semesters-course-edit-link { flex-basis: 100%; }
+.manage-semesters-course-edit-actions { display: flex; gap: 8px; }
+
+.manage-semesters-color-input {
+  width: 56px;
+  height: 36px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+/* Read-only occurrence lines in the Edit Semester window: small; editing happens in the task editor. */
+.manage-semesters-scheduled-row.readonly .section-note {
+  font-size: 11px;
+}
+
+.task-schedule-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+/* Wabi-Sabi Manage/Edit Semester window: the earlier Manage Semesters styles, scoped so the shared redesign does not affect it. */
+.wabi-msm-scope.manage-semesters-modal {
+  width: min(720px, 100%);
+}
+
+.wabi-msm-scope .manage-semesters-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.wabi-msm-scope .manage-semesters-toolbar .field {
+  flex: 1;
+  min-width: 180px;
+}
+
+.wabi-msm-scope .manage-semesters-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: color-mix(in oklch, var(--accent) 6%, transparent);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.wabi-msm-scope .manage-semesters-summary .danger {
+  color: var(--danger);
+}
+
+.wabi-msm-scope .manage-semesters-holidays {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+}
+
+.wabi-msm-scope .manage-semesters-holidays summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.wabi-msm-scope .manage-semesters-holidays .timetable-modal-dates {
+  margin-top: 10px;
+}
+
+.wabi-msm-scope .manage-semesters-subjects-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wabi-msm-scope .manage-semesters-subject-row {
+  display: grid;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.wabi-msm-scope .manage-semesters-subject-row:last-child {
+  border-bottom: none;
+}
+
+.wabi-msm-scope .manage-semesters-subject-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.wabi-msm-scope .manage-semesters-units {
+  display: grid;
+  gap: 6px;
+  padding-left: 16px;
+}
+
+.wabi-msm-scope .manage-semesters-unit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.wabi-msm-scope .manage-semesters-unit-label {
+  flex: 1 1 160px;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  padding: 4px 6px;
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.wabi-msm-scope .manage-semesters-unit-label:hover, .wabi-msm-scope .manage-semesters-unit-label:focus {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.wabi-msm-scope .manage-semesters-scheduled-list {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.wabi-msm-scope .manage-semesters-scheduled-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+.wabi-msm-scope .manage-semesters-scheduled-row .section-note {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.wabi-msm-scope .manage-semesters-schedule-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  margin-top: 4px;
+  border-radius: var(--r-sm);
+  background: color-mix(in oklch, var(--accent) 6%, transparent);
+  border: 1px solid var(--border);
+}
+
+.wabi-msm-scope .manage-semesters-schedule-row input, .wabi-msm-scope .manage-semesters-schedule-row select {
+  min-width: 0;
+}
+
+.wabi-msm-scope .manage-semesters-sheet-schedule {
+  align-items: stretch;
+  gap: 12px;
+}
+
+.wabi-msm-scope .manage-semesters-sheet-schedule-section {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 220px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.wabi-msm-scope .manage-semesters-sheet-schedule-section > .section-note {
+  flex: 0 0 100%;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.7rem;
+}
+
+.wabi-msm-scope .manage-semesters-sheet-schedule > input {
+  flex: 1 1 100%;
+}
+
+.wabi-msm-scope .manage-semesters-timespan {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.wabi-msm-scope .manage-semesters-timespan-field {
+  display: grid;
+  gap: 2px;
+  font-size: 0.72rem;
+  color: var(--ink-4);
+}
+
+.wabi-msm-scope .manage-semesters-timespan-end {
+  align-self: center;
+  white-space: nowrap;
+}
+
+/* Sidebar course rows: one line each, long names are cut off with an ellipsis. */
+.wabi-plan-course {
+  min-width: 0;
+}
+
+.wabi-plan-course-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Wabi-Sabi task window (add / edit task): one scroll region, quiet fields ---------- */
+.wabi-task-modal {
+  width: min(600px, 100%);
+  max-height: calc(100vh - 96px);
+  padding: 0 30px 22px;
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  border-radius: 2px;
+  background: var(--wabi-paper);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.22);
+  overflow-y: auto; /* the only scroll region */
+}
+
+.wabi-task-modal .fn-task-modal-head {
+  border-bottom: 1px solid var(--wabi-ink);
+  background: var(--wabi-paper);
+  padding: 28px 0 12px; /* the sticky header owns the top padding so scrolled content never peeks above it */
+}
+
+.wabi-task-modal .fn-task-modal-head h2 {
+  font-size: 24px;
+  color: var(--wabi-ink);
+}
+
+.wabi-task-modal .fn-stamp-line {
+  margin: 0 0 4px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wabi-muted);
+}
+
+/* No nested scrollers: the form and its grid just flow inside the modal. */
+.wabi-task-modal .fn-task-form {
+  flex: none;
+  overflow: visible;
+}
+
+.wabi-task-modal .fn-task-form-subtype-picker {
+  display: flex;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.wabi-task-modal .fn-task-form-subtype-picker button {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wabi-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.wabi-task-modal .fn-task-form-subtype-picker button.active {
+  border-color: var(--wabi-sage);
+  background: var(--wabi-sage);
+  color: var(--wabi-paper);
+  box-shadow: none;
+}
+
+.wabi-task-modal .fn-task-form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 14px;
+  overflow: visible;
+  padding: 18px 0 8px;
+}
+
+.wabi-task-modal .fn-task-form-notice {
+  grid-column: 1 / -1;
+  order: 15;
+  margin: -6px 0 0;
+  font-size: 11.5px;
+  color: var(--wabi-faint);
+}
+
+.wabi-task-modal .fn-task-form-notes { order: 20; }
+
+.wabi-task-modal .fn-task-form .field span {
+  font-size: 10px;
+  color: var(--wabi-muted);
+}
+
+.wabi-task-modal .fn-task-form input,
+.wabi-task-modal .fn-task-form select,
+.wabi-task-modal .fn-task-form textarea {
+  border: 0;
+  border-bottom: 1px solid var(--wabi-rule-soft, var(--line));
+  border-radius: 0;
+  background: transparent;
+  color: var(--wabi-ink);
+  font-size: 15px;
+  padding: 7px 2px;
+  min-height: 0;
+}
+
+.wabi-task-modal .fn-task-form input:focus,
+.wabi-task-modal .fn-task-form select:focus,
+.wabi-task-modal .fn-task-form textarea:focus {
+  outline: none;
+  border-bottom-color: var(--wabi-sage);
+}
+
+.wabi-task-modal .fn-task-form textarea {
+  min-height: 88px;
+  padding: 8px;
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  background: var(--wabi-paper-1);
+}
+
+.wabi-task-modal .fn-task-form-schedule {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--wabi-rule-soft, var(--line));
+}
+
+.wabi-task-modal details.fn-task-form-schedule summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--wabi-muted);
+}
+
+.wabi-task-modal details.fn-task-form-schedule[open] summary { margin-bottom: 10px; }
+
+.wabi-task-modal .fn-task-modal-footer {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--wabi-rule-soft, var(--line));
+  background: var(--wabi-paper);
+}
+
+.wabi-task-modal .fn-task-modal-footer button[type="submit"] {
+  background: var(--wabi-ink);
+  color: var(--wabi-paper);
+  border: 0;
+}
+
+/* Wabi-Sabi Plan page: the current semester is plain text on the heading row (no card). */
+.wabi-plan-current-semester {
+  align-self: end;
+  font: 400 clamp(22px, 2.4vw, 34px) var(--font-serif);
+  color: var(--wabi-ink);
+  white-space: nowrap;
+}
+
+.semester-board[hidden] { display: none; }
+
+.wabi-task-message {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--wabi-vermilion);
+  font-size: 13px;
+}
+
+/* Wabi-Sabi calendar: small window to mark a scheduled item done */
+.calendar-item-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5300;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.28);
+}
+
+.calendar-item-popup {
+  box-sizing: border-box;
+  width: min(260px, calc(100vw - 32px));
+  padding: 14px 16px 12px;
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  border-left: 3px solid var(--entry-color, var(--wabi-sage));
+  background: var(--wabi-paper);
+  color: var(--wabi-ink);
+  box-shadow: 0 14px 36px rgb(0 0 0 / 0.22);
+}
+
+.calendar-item-popup h3 { margin: 1px 0 2px; font: 500 17px var(--font-serif); overflow-wrap: anywhere; }
+.calendar-item-popup-eyebrow { margin: 0; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--wabi-muted); }
+.calendar-item-popup-when { margin: 0 0 12px; font-size: 12px; color: var(--wabi-muted); }
+
+.calendar-item-popup-done {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid var(--wabi-sage);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--wabi-sage-deep, var(--wabi-sage));
+  font: 600 12.5px var(--font-sans, inherit);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.calendar-item-popup-done:hover { background: var(--wabi-paper-2); }
+.calendar-item-popup-done.is-done { background: var(--wabi-sage); color: var(--wabi-paper); }
+
+.calendar-item-popup-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+.calendar-item-popup-actions .ghost-button { min-height: 0; padding: 3px 8px; font-size: 10.5px; }
+:root[data-app-style="wabi-sabi"] .calendar-pill.timetable-pill { cursor: pointer; }
+:root[data-app-style="wabi-sabi"] .calendar-pill.timetable-pill.done { opacity: 0.55; text-decoration: line-through; }
+
+/* ---------- Wabi-Sabi: new daily to-do window ---------- */
+.timetable-modal.wabi-todo-modal {
+  width: min(460px, calc(100vw - 32px));
+  padding: 22px 26px 18px;
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  border-radius: 2px;
+  background: var(--wabi-paper);
+}
+
+.wabi-todo-modal .timetable-modal-head {
+  border: 0;
+  padding: 0 0 4px;
+}
+
+.wabi-todo-modal .timetable-modal-head strong {
+  font: 400 12px var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wabi-muted);
+}
+
+.wabi-todo-modal .timetable-modal-form { gap: 14px; }
+
+/* The title is the hero: big, borderless, underlined */
+.wabi-todo-modal .wabi-todo-title input {
+  border: 0;
+  border-bottom: 1px solid var(--wabi-ink);
+  border-radius: 0;
+  background: transparent;
+  padding: 6px 0 8px;
+  font: 400 24px var(--font-serif);
+  color: var(--wabi-ink);
+}
+
+.wabi-todo-modal .wabi-todo-title > span { display: none; }
+.wabi-todo-modal .wabi-todo-title input:focus { outline: none; border-bottom-color: var(--wabi-sage); }
+
+.wabi-todo-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+}
+
+.wabi-todo-when .field { flex: 1 1 120px; min-width: 0; }
+
+.wabi-todo-modal .field > span {
+  font: 400 10px var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wabi-muted);
+}
+
+.wabi-todo-modal .field input:not([type="checkbox"]),
+.wabi-todo-modal .field textarea {
+  border: 0;
+  border-bottom: 1px solid var(--wabi-rule-soft, var(--line));
+  border-radius: 0;
+  background: transparent;
+  color: var(--wabi-ink);
+  padding: 6px 2px;
+}
+
+.wabi-todo-modal .field textarea {
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  background: var(--wabi-paper-1);
+  padding: 8px;
+  min-height: 56px;
+}
+
+.wabi-todo-chip {
+  min-height: 0;
+  padding: 6px 12px;
+  border: 1px dashed var(--wabi-faint, var(--line));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wabi-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.wabi-todo-chip:hover { border-color: var(--wabi-sage); color: var(--wabi-sage-deep, var(--wabi-sage)); }
+
+.wabi-todo-modal .timetable-modal-toggle { font-size: 13px; color: var(--wabi-muted); }
+
+.wabi-todo-modal .timetable-modal-form > button:not(.ghost-button) {
+  align-self: flex-end;
+  min-width: 120px;
+  padding: 9px 22px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--wabi-ink);
+  color: var(--wabi-paper);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wabi-todo-modal .timetable-modal-manage-link {
+  align-self: center;
+  border: 0;
+  background: none;
+  padding: 0;
+  min-height: 0;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--wabi-faint);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ---------- Wabi-Sabi: unscheduled items in the day panel (round tick + calm row) ---------- */
+:root[data-app-style="wabi-sabi"] .calendar-day-side-panel .calendar-timeline-entry.unscheduled {
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  border-left: 3px solid var(--entry-color, var(--wabi-sage));
+  border-radius: 2px;
+  background: var(--wabi-paper-1);
+}
+
+:root[data-app-style="wabi-sabi"] .calendar-day-side-panel .calendar-timeline-entry.unscheduled .calendar-timeline-entry-copy {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+:root[data-app-style="wabi-sabi"] .calendar-day-side-panel .calendar-timeline-entry.unscheduled .calendar-timeline-entry-copy strong {
+  font: 500 15px var(--font-serif);
+  color: var(--wabi-ink);
+}
+
+:root[data-app-style="wabi-sabi"] .calendar-day-side-panel .calendar-timeline-entry.unscheduled .timetable-todo-icon { display: none; }
+
+:root[data-app-style="wabi-sabi"] .calendar-day-side-panel .calendar-timeline-entry.unscheduled .calendar-timeline-entry-copy span {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--wabi-muted);
+}
+
+:root[data-app-style="wabi-sabi"] .calendar-day-side-panel .calendar-timeline-entry.unscheduled .calendar-timeline-entry-actions {
+  grid-column: 1 / -1;
+}
+
+:root[data-app-style="wabi-sabi"] .calendar-day-side-panel .calendar-timeline-entry.unscheduled .calendar-timeline-checkbox {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  aspect-ratio: 1;
+  align-self: center;
+  margin: 0;
+  border: 1.5px solid var(--wabi-faint, var(--line));
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+:root[data-app-style="wabi-sabi"] .calendar-day-side-panel .calendar-timeline-entry.unscheduled .calendar-timeline-checkbox:hover { border-color: var(--wabi-sage); }
+
+:root[data-app-style="wabi-sabi"] .calendar-day-side-panel .calendar-timeline-entry.unscheduled .calendar-timeline-checkbox:checked {
+  border-color: var(--wabi-sage);
+  background: var(--wabi-sage);
+}
+
+
+:root[data-app-style="wabi-sabi"] .calendar-day-side-panel .calendar-timeline-entry.unscheduled.done .calendar-timeline-entry-copy {
+  opacity: 0.5;
+}
+
+:root[data-app-style="wabi-sabi"] .calendar-day-side-panel .calendar-timeline-entry.unscheduled.done .calendar-timeline-entry-copy strong { text-decoration: line-through; }
+
+.wabi-todo-kind {
+  display: flex;
+  gap: 6px;
+}
+
+.wabi-todo-kind button {
+  min-height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wabi-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.wabi-todo-kind button.active {
+  border-color: var(--wabi-sage);
+  background: var(--wabi-sage);
+  color: var(--wabi-paper);
+}
+
+.wabi-todo-course { display: grid; gap: 12px; }
+.wabi-todo-modal select { border: 0; border-bottom: 1px solid var(--wabi-rule-soft, var(--line)); border-radius: 0; background: transparent; color: var(--wabi-ink); padding: 6px 2px; }
+
+/* Edit Semester: keep a task's scheduled lines tight under its name */
+.wabi-msm-scope .manage-semesters-unit-row {
+  row-gap: 0;
+}
+
+.wabi-msm-scope .manage-semesters-scheduled-list {
+  gap: 0;
+  margin-top: -2px;
+  padding-left: 6px;
+}
+
+.wabi-msm-scope .manage-semesters-scheduled-row {
+  padding: 0 0 0 2px;
+  background: transparent;
+  min-height: 0;
+}
+
+.wabi-msm-scope .manage-semesters-scheduled-row .section-note {
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Wabi-Sabi dashboard: coming-up deadlines */
+.wabi-deadline-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: var(--wabi-rule-soft);
+}
+
+.wabi-deadline-row.next .wabi-task-title { font-size: 18px; }
+.wabi-deadline-main { display: grid; gap: 3px; min-width: 0; }
+.wabi-deadline-status { font: 400 11.5px var(--font-sans); letter-spacing: 0.06em; color: var(--wabi-muted); }
+.wabi-deadline-next { margin-right: 8px; font-style: normal; font-weight: 600; letter-spacing: 0.14em; color: var(--wabi-vermilion); }
+.wabi-deadline-row .wabi-task-due { display: grid; gap: 2px; white-space: nowrap; }
+.wabi-deadline-row .wabi-task-due small { font-size: 11px; color: var(--wabi-faint); }
+.wabi-deadline-focus { padding: 6px 14px; }
+
+/* Wabi-Sabi sidebar: Timer submenu tasks */
+.wabi-plan-task {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  min-width: 0;
+  padding: 3px 0 3px 22px;
+  font: 400 12px var(--font-serif);
+  color: var(--wabi-muted);
+}
+
+.wabi-plan-task:hover { color: var(--wabi-vermilion); }
+.wabi-plan-task.selected { color: var(--wabi-ink); font-weight: 600; }
+.wabi-plan-task.selected::before { content: "\2022"; margin-left: -12px; margin-right: 6px; color: var(--wabi-sage); }
+.wabi-plan-task-empty { padding-left: 22px; }
+
+/* Wabi-Sabi: session logs window */
+.wabi-logs-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5100;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.34);
+  padding: 24px;
+}
+
+.wabi-logs {
+  box-sizing: border-box;
+  width: min(620px, 100%);
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  background: var(--wabi-paper);
+  color: var(--wabi-ink);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.24);
+}
+
+.wabi-logs-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 22px 26px 12px;
+  border-bottom: 1px solid var(--wabi-ink);
+}
+
+.wabi-logs-head h2 { margin: 2px 0 0; font: 400 24px var(--font-serif); }
+
+.wabi-logs-body {
+  overflow-y: auto; /* the only scroll region */
+  padding: 6px 26px 20px;
+}
+
+.wabi-logs-day-label { margin: 18px 0 4px; font: 400 10.5px var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--wabi-muted); }
+
+.wabi-logs-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--wabi-rule-soft, var(--line));
+}
+
+.wabi-logs-main { min-width: 0; flex: 1; }
+.wabi-logs-line { display: flex; align-items: baseline; gap: 10px; }
+.wabi-logs-line strong { font: 500 15px var(--font-serif); overflow-wrap: anywhere; }
+.wabi-logs-time { font: 400 12px var(--font-mono); color: var(--wabi-muted); }
+.wabi-logs-mins { margin-left: auto; font-size: 12.5px; color: var(--wabi-muted); white-space: nowrap; }
+.wabi-logs-meta { margin: 2px 0 0; font-size: 11.5px; letter-spacing: 0.04em; color: var(--wabi-faint); }
+.wabi-logs-note { margin: 6px 0 0; padding-left: 10px; border-left: 2px solid var(--wabi-sage); font-size: 13.5px; white-space: pre-wrap; }
+.wabi-logs-note-edit { margin-top: 8px; display: grid; gap: 6px; }
+.wabi-logs-note-edit textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--wabi-rule-soft, var(--line)); background: var(--wabi-paper-1); color: var(--wabi-ink); padding: 8px; font: inherit; resize: vertical; }
+.wabi-logs-note-actions { display: flex; gap: 8px; }
+.wabi-logs-row .msm-menu { flex: none; }
+.wabi-logs-body { padding-bottom: 72px; } /* room for the last row's menu to open */
+
+/* Wabi-Sabi timer: one centred column, vertically centred in the page */
+.wabi-timer-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 150px);
+  padding: 0 0 24px;
+  text-align: center;
+}
+
+.wabi-timer-head { text-align: center; }
+.wabi-timer-head h2 { font-size: 30px; }
+
+.wabi-timer-body {
+  flex-direction: column;
+  align-items: center;
+  gap: 30px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.wabi-timer-clock-col {
+  align-items: center;
+  gap: 22px;
+}
+
+.wabi-timer-clock,
+.wabi-timer-clock-input {
+  font-size: 128px;
+  text-align: center;
+}
+
+.wabi-timer-actions { justify-content: center; flex-wrap: wrap; }
+
+.wabi-timer-modes-col {
+  flex: none;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wabi-timer-mode-grid {
+  justify-content: center;
+  max-width: 620px;
+}
+
+.wabi-timer-mode-card { text-align: left; }
+.wabi-timer-custom-row { justify-content: center; }
+
+/* Wabi-Sabi sidebar: Notes submenu */
+.wabi-notes-menu { gap: 0; }
+.wabi-notes-menu-item { padding-left: 0; padding-top: 5px; padding-bottom: 5px; font-size: 13px; }
+.wabi-notes-menu-item.selected::before { margin-left: -12px; }
+
+/* Wabi-Sabi timer: title pinned to the top-left, the clock stays centred */
+.wabi-timer-grid { position: relative; }
+
+.wabi-timer-head {
+  position: absolute;
+  top: 6px;
+  left: 0;
+  text-align: left;
+}
+
+/* Wabi-Sabi timer: all six presets on one line */
+.wabi-timer-mode-grid {
+  flex-wrap: nowrap;
+  max-width: 100%;
+  width: max-content;
+}
+
+.wabi-timer-mode-card {
+  min-width: 0;
+  flex: 0 1 auto;
+  padding: 7px 14px;
+  white-space: nowrap;
+}
+
+/* Wabi-Sabi Notes: References / Summaries pick a course from tabs along the top (no side shelf) */
+:root[data-app-style="wabi-sabi"] .wabi-vault .vault-space-panel.wabi-vault-tabbed {
+  display: block;
+  padding-top: 8px;
+}
+
+.wabi-vault-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: 0 0 18px;
+  border-bottom: var(--wabi-rule-soft);
+}
+
+.wabi-vault-tab-group { display: contents; }
+
+.wabi-vault-tab-semester {
+  align-self: center;
+  margin-right: 4px;
+  font: 400 10px var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wabi-faint);
+}
+
+.wabi-vault-tab {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 220px;
+  padding: 7px 12px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  font: 400 13px var(--font-sans);
+  color: var(--wabi-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wabi-vault-tab > span { flex: none; width: 7px; height: 7px; border-radius: 50%; }
+.wabi-vault-tab:hover { color: var(--wabi-ink); }
+.wabi-vault-tab.active { color: var(--wabi-ink); border-bottom-color: var(--wabi-sage); }
+
+/* the course picker is the tabs now, so the old semester select + chips are hidden */
+:root[data-app-style="wabi-sabi"] .wabi-vault .wabi-vault-tabbed .vault-toolbar { display: flex; justify-content: flex-end; }
+:root[data-app-style="wabi-sabi"] .wabi-vault .wabi-vault-tabbed .vault-toolbar-main { display: none; }
+:root[data-app-style="wabi-sabi"] .wabi-vault .wabi-vault-tabbed > .vault-document-wrap,
+:root[data-app-style="wabi-sabi"] .wabi-vault .wabi-vault-tabbed > .summaries-layout,
+:root[data-app-style="wabi-sabi"] .wabi-vault .wabi-vault-tabbed > .vault-split { grid-column: auto; }
+
+/* ---------- Wabi-Sabi Circle feed: calmer, tighter ---------- */
+:root[data-app-style="wabi-sabi"] .wabi-feed-composer {
+  padding: 10px 0 12px;
+  border-top: 0;
+  border-bottom: var(--wabi-rule-soft);
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-composer .arena-input { font-size: 17px; }
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-composer .feed-action-icon { opacity: 0.55; }
+:root[data-app-style="wabi-sabi"] .wabi-feed-composer .feed-action-icon:hover { opacity: 1; }
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-composer .arena-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  border-radius: 999px;
+  color: var(--wabi-ink);
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-composer .arena-btn:disabled { opacity: 0.4; }
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-main .section-label {
+  margin: 14px 0 0;
+  padding: 0 0 8px;
+  border-bottom: 0;
+  font-size: 10px;
+  color: var(--wabi-faint);
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-card {
+  grid-template-columns: 128px minmax(0, 1fr);
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__head { padding: 18px 14px 12px 0; }
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .social-name-button--strong { font-size: 16px; }
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__head span { font-size: 10px; }
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__body {
+  gap: 6px;
+  padding: 16px 0 6px;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__body > p {
+  font-size: 19px;
+  line-height: 1.4;
+}
+
+/* the session sits under the quote as one quiet line: subject · length · preset */
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__session {
+  border-left: 0;
+  padding: 0;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__session > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__session strong,
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__session small {
+  font-size: 12px;
+  color: var(--wabi-faint);
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__session small::before {
+  content: "\00b7";
+  margin-right: 8px;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__reactions,
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__comments-shell {
+  padding: 0 0 6px;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__comments-shell { padding-bottom: 14px; }
+
+/* ---------- Wabi-Sabi Circle: attendance as quiet chips ---------- */
+:root[data-app-style="wabi-sabi"] .wabi-attendance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: none;
+  margin: 14px 0 18px;
+  border-top: 0;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-attendance-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 14px 6px 12px;
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  border-radius: 999px;
+  transition: border-color 0.15s;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-attendance-row:hover { border-color: var(--wabi-sage); }
+
+:root[data-app-style="wabi-sabi"] .wabi-attendance-name {
+  font-size: 14px;
+  color: var(--wabi-muted);
+}
+
+/* sitting = a filled green dot and full-ink name; resting = a hollow dot */
+:root[data-app-style="wabi-sabi"] .wabi-attendance-row::before {
+  content: "";
+  order: -1;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--wabi-faint);
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-attendance-row:has(.sitting)::before {
+  border-color: var(--wabi-sage);
+  background: var(--wabi-sage);
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-attendance-row:has(.sitting) .wabi-attendance-name { color: var(--wabi-ink); }
+
+/* the state is carried by the dot; keep the word for screen readers only */
+:root[data-app-style="wabi-sabi"] .wabi-attendance-state {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* Wabi-Sabi Rest: keep the games close under the header card */
+.wabi-break-lower { margin-top: 18px; }
+
+/* ---------- Wabi-Sabi standings: one calm ledger ---------- */
+:root[data-app-style="wabi-sabi"] .wabi-standings {
+  max-width: 860px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 36px;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-standings > * { flex: 0 0 100%; }
+
+/* scope and period tabs share one line */
+:root[data-app-style="wabi-sabi"] .wabi-standings > .arena-scope-toggle,
+:root[data-app-style="wabi-sabi"] .wabi-standings > .arena-period-chips {
+  flex: 0 0 auto;
+  padding-bottom: 14px;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-standings > .arena-period-chips { margin-left: auto; }
+
+/* podium: a slim top-three strip instead of tall cards */
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-podium { margin-top: 4px; }
+
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-podium-col {
+  min-height: 0;
+  gap: 3px;
+  padding: 12px 20px 14px;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-podium-col > strong { font-size: 18px; }
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-rank-badge { font-size: 26px; }
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-podium-block small { display: none; }
+
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-podium-col:nth-child(2),
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-podium-col:nth-child(1),
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-podium-col:nth-child(3) { background: transparent; }
+
+/* the list: tighter rows, small rank, friend code and glow removed */
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-row {
+  padding: 9px 4px;
+  min-height: 0;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-person span { display: none; }
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-person strong { font-size: 16px; }
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-score { text-align: right; }
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-score strong { font-size: 15px; }
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-rank { font-size: 12px; }
+
+/* Wabi-Sabi Rest: original header size, with the clock at 0.75x and no dead space under the rock */
+/* the whole card at 0.75x: box, ring, text, clock and buttons */
+.wabi-rest-card {
+  width: auto;
+  margin: 0;
+  padding: 26px 0 22px;
+}
+
+.wabi-rest-card .wabi-rest-ring { width: 84px; height: 84px; }
+.wabi-rest-card h2 { font-size: 18px; margin-top: 18px; }
+.wabi-rest-card > p { font-size: 10.5px; margin-top: 6px; max-width: 300px; }
+
+.wabi-rest-card .wabi-rest-clock,
+.wabi-rest-card .wabi-rest-clock-input { font-size: 22.5px; margin-top: 13px; }
+
+.wabi-rest-card .wabi-rest-clock-input { width: 120px; }
+.wabi-rest-card .wabi-rest-actions { margin-top: 16px; gap: 10px; }
+.wabi-rest-card .wabi-btn-solid { font-size: 9px; padding: 9px 20px; }
+.wabi-rest-card .wabi-text-link { font-size: 9px; }
+
+.wabi-break-grid { padding-bottom: 4px; }
+.wabi-break-grid .wabi-pet-rock { margin-top: 18px; padding-top: 12px; padding-bottom: 0; gap: 4px; }
+
+/* Wabi-Sabi dashboard: "Something else" picker (reuses the session-logs window frame) */
+.wabi-picker { width: min(540px, 100%); }
+.wabi-picker-ahead { margin-top: 26px; }
+.wabi-picker-day { margin: 12px 0 2px; font: 400 12px var(--font-sans); letter-spacing: 0.06em; color: var(--wabi-muted); }
+
+.wabi-picker-item {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  width: 100%;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--wabi-rule-soft, var(--line));
+  font: 400 15px var(--font-serif);
+  color: var(--wabi-ink);
+}
+
+.wabi-picker-item:hover { color: var(--wabi-sage); }
+.wabi-picker-item em { font: 400 11.5px var(--font-sans); font-style: normal; letter-spacing: 0.04em; color: var(--wabi-faint); white-space: nowrap; }
+
+.wabi-picker-foot { padding: 12px 26px 18px; border-top: 1px solid var(--wabi-rule-soft, var(--line)); }
+
+/* Wabi-Sabi: keep the sidebar perfectly still while the page scrolls or reflows */
+:root[data-app-style="wabi-sabi"] {
+  scrollbar-gutter: stable; /* the earlier `:root ... html` selector never matched, so the gutter was never reserved */
+}
+
+
+/* Falling petals: isolate their constant animation from the rest of the page so it cannot cause repaints elsewhere (e.g. the sidebar) */
+.sakura-scatter {
+  contain: layout paint;
+  transform: translateZ(0);
+}
+
+.sakura-petal { backface-visibility: hidden; }
+
+/* Wabi-Sabi Rest: the header card spans exactly the games column; the rock sits top-left above the XP bar */
+.wabi-break-grid {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  column-gap: 30px;
+  align-items: start;
+}
+
+.wabi-break-grid > .wabi-rest-card { grid-column: 2; grid-row: 1; }
+.wabi-break-grid > .wabi-break-lower { grid-column: 1 / -1; grid-row: 2; }
+.wabi-break-grid > .wabi-meditation-room { grid-column: 1 / -1; }
+
+.wabi-break-grid > .wabi-pet-rock {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  padding: 0;
+  border-top: 0;
+  text-align: center;
+  justify-self: center;
+}
+
+.wabi-break-grid > .wabi-pet-rock .wabi-faint-text { font-size: 10.5px; line-height: 1.3; }
+
+@media (max-width: 960px) {
+  .wabi-break-grid { display: block; }
+  .wabi-break-grid > .wabi-pet-rock { margin: 18px auto 0; }
+}
+
+/* Wabi-Sabi Rest room: everything fits the window, nothing scrolls */
+:root[data-app-style="wabi-sabi"]:has(.wabi-break-grid) { overflow: hidden; }
+
+.wabi-break-grid:has(> .wabi-rest-card) {
+  height: calc(100vh - 130px);
+  grid-template-rows: auto minmax(0, 1fr);
+  padding-bottom: 0;
+}
+
+/* the rock sits vertically centred beside the card */
+.wabi-break-grid > .wabi-pet-rock { align-self: center; }
+
+.wabi-break-grid > .wabi-break-lower {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 30px;
+  min-height: 0;
+  margin-top: 14px;
+  align-items: stretch;
+}
+
+.wabi-break-lower .wabi-xp-water { min-height: 0; padding: 14px 0; }
+.wabi-break-lower .wabi-xp-water-track { flex: 1; height: auto; min-height: 40px; }
+
+.wabi-break-lower .wabi-games-col { display: flex; flex-direction: column; min-height: 0; }
+.wabi-break-lower .wabi-games-grid {
+  flex: 1;
+  min-height: 0;
+  margin-top: 10px;
+  gap: 10px;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+}
+
+.wabi-break-lower .wabi-game-card {
+  min-height: 0;
+  padding: 8px 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Wabi-Sabi: the sidebar never scrolls (its menus always fit) */
+:root[data-app-style="wabi-sabi"] .wabi-nav { overflow: visible; }
+
+/* Rest room: the games block fills the remaining height (no dead space at the bottom) */
+.wabi-break-grid > .wabi-break-lower { align-self: stretch; }
+
+/* Scrolling: the fixed sidebar and the fixed petal-texture layer each get their own compositor layer, so
+   scrolling the page never repaints them (that repaint is what made the sidebar lag). The wheel is left
+   to the browser now that the sidebar has no scroll area of its own. */
+:root[data-app-style="wabi-sabi"] .wabi-sidebar {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+[data-app-style="field-notebook"][data-palette="sakura"] body::after,
+[data-app-style="wabi-sabi"][data-palette="sakura"] body::after {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* Rest room: use the full window height (the earlier reservation left ~80px of dead space) and sit the rock lower */
+.wabi-break-grid:has(> .wabi-rest-card) { height: calc(100vh - 52px); }
+.wabi-break-grid > .wabi-pet-rock { transform: translateY(80px); }
+
+/* Edit Semester: a task name is plain text now (edit it from the ⋯ menu), so no input-style hover box */
+.wabi-msm-scope .manage-semesters-unit-label:hover,
+.wabi-msm-scope .manage-semesters-unit-label:focus {
+  border-color: transparent;
+  background: transparent;
+}
+
+.wabi-msm-scope .manage-semesters-unit-label { cursor: default; }
+
+/* ---------- Wabi-Sabi Circle: profile pictures in the feed and standings ---------- */
+:root[data-app-style="wabi-sabi"] .wabi-circle-root .arena-avatar {
+  border-radius: 50%;
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  box-shadow: none;
+  cursor: zoom-in;
+}
+
+/* feed: the picture sits just below the name and date */
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__head > div { order: 1; }
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__head > .arena-avatar {
+  display: grid;
+  order: 2;
+  width: 40px;
+  height: 40px;
+  font-size: 0.9rem;
+}
+:root[data-app-style="wabi-sabi"] .wabi-feed-card .feed-card__head > .feed-edit-button { order: 3; }
+
+/* standings rows: a small picture right after the name */
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-row {
+  grid-template-columns: 34px auto 1fr auto;
+  gap: 10px;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-row .arena-lb-rank,
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-row .arena-rank-badge { grid-column: 1; }
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-row .arena-lb-person { grid-column: 2; }
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-row .arena-avatar {
+  display: grid;
+  grid-column: 3;
+  justify-self: start;
+  width: 26px;
+  height: 26px;
+  font-size: 0.7rem;
+}
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-row .arena-lb-score { grid-column: 4; }
+
+/* podium: a small picture under the hours */
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-podium-col > .arena-avatar {
+  display: grid;
+  order: 4;
+  width: 30px;
+  height: 30px;
+  font-size: 0.75rem;
+}
+
+.wabi-avatar-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 5400;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.5);
+  cursor: zoom-out;
+}
+
+.wabi-avatar-lightbox-card .arena-avatar {
+  width: min(280px, 70vw);
+  height: min(280px, 70vw);
+  border-radius: 50%;
+  font-size: 6rem;
+  cursor: zoom-out;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.4);
+}
+
+/* Options -> Profile pictures off: no pictures in the feed or the standings */
+:root[data-hide-avatars="true"] .feed-card__head > .arena-avatar,
+:root[data-hide-avatars="true"] .arena-podium-col > .arena-avatar,
+:root[data-hide-avatars="true"] .arena-lb-row .arena-avatar {
+  display: none !important;
+}
+
+/* Rest room: a watercolour Japanese tree in the top-left, just below the top edge of the header card; click for the next one */
+.wabi-break-grid > .wabi-rest-tree {
+  all: unset;
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+  justify-self: center;
+  /* a box as tall as the pine (the tallest tree): every tree sits on its bottom edge, not its top */
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 150px;
+  height: 131px; /* pine height (115px) + 16px: the whole baseline sits 16px lower */
+  margin-top: 12px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wabi-rest-tree img {
+  display: block;
+  height: auto;
+  transform-origin: bottom center;
+  transition: transform 0.25s ease;
+  pointer-events: none;
+}
+
+.wabi-rest-tree:hover img { transform: scale(1.03); }
+.wabi-rest-tree:focus-visible { outline: 1px dashed var(--wabi-faint); outline-offset: 4px; }
+
+/* Standings rows: rank | name | picture on one line, hours pushed to the right
+   (the earlier column placement wrapped the name under the picture) */
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-row {
+  grid-template-columns: 40px auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto;
+  align-items: center;
+  column-gap: 12px;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-row > * { grid-row: 1; }
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-row .arena-lb-rank,
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-row .arena-rank-badge { grid-column: 1; }
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-row .arena-lb-person { grid-column: 2; }
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-row .arena-avatar { grid-column: 3; justify-self: start; }
+:root[data-app-style="wabi-sabi"] .wabi-standings .arena-lb-row .arena-lb-score { grid-column: 5; }
+
+/* ---------- Wabi-Sabi Rest: achievement board ---------- */
+.wabi-break-grid > .wabi-ach { grid-column: 1 / -1; }
+
+.wabi-ach {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: calc(100vh - 52px);
+  min-height: 0;
+}
+
+.wabi-ach-tray {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-height: 72px;
+  padding: 6px 2px;
+  border-bottom: var(--wabi-rule-soft);
+}
+
+.wabi-ach-hint,
+.wabi-ach-empty { margin: 0; font: italic 400 14px var(--font-serif); color: var(--wabi-faint); }
+
+.wabi-ach-board {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border: var(--wabi-rule-soft);
+  background: var(--wabi-paper-1);
+  overflow: hidden;
+}
+
+.wabi-ach-empty { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+
+.wabi-ach-icon {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--wabi-paper);
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  font-size: 30px;
+  line-height: 1;
+  user-select: none;
+  touch-action: none;
+}
+
+.wabi-ach-tray-icon { all: unset; box-sizing: border-box; display: grid; place-items: center; border-radius: 50%; background: var(--wabi-paper); border: 1px solid var(--wabi-rule-soft, var(--line)); font-size: 30px; line-height: 1; cursor: grab; touch-action: none; user-select: none; }
+.wabi-ach-tray-icon:hover { border-color: var(--wabi-sage); }
+.wabi-ach-tray-icon.is-dragging { opacity: 0.35; }
+
+.wabi-ach-placed { position: absolute; transform: translate(-50%, -50%); cursor: default; box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); }
+
+.wabi-ach-ghost {
+  position: fixed;
+  z-index: 5500;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  cursor: grabbing;
+  opacity: 0.9;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 0.25);
+}
+
+.wabi-ach-ghost.is-valid { border-color: var(--wabi-sage); }
+.wabi-ach-ghost.is-blocked { border-color: var(--wabi-vermilion); border-style: dashed; }
+
+.wabi-ach-tip {
+  position: fixed;
+  z-index: 5600;
+  display: grid;
+  gap: 2px;
+  max-width: 240px;
+  padding: 7px 10px;
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  background: var(--wabi-paper);
+  color: var(--wabi-ink);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+  pointer-events: none;
+}
+
+.wabi-ach-tip strong { font: 600 12px var(--font-sans); }
+.wabi-ach-tip span { font: 400 11px var(--font-sans); color: var(--wabi-muted); }
+
+/* ---------- Achievement board: a white brick wall, sprayed with graffiti ---------- */
+.wabi-ach-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.wabi-ach-board {
+  position: relative;
+  flex: none;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.wabi-ach-wall { position: absolute; inset: 0; display: block; }
+
+.wabi-ach-board .wabi-ach-empty { color: #a39d8e; }
+
+.wabi-ach-piece {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%) rotate(var(--tilt, 0deg));
+  cursor: default;
+  user-select: none;
+  touch-action: none;
+}
+
+/* the artwork itself: an image with its own outline, extruded shadow and drips */
+.wabi-ach-art { display: block; max-width: none; pointer-events: none; user-select: none; }
+/* paint sinks into the wall: brick tone and mortar lines show through it */
+.wabi-ach-piece .wabi-ach-art { mix-blend-mode: multiply; }
+
+/* spraying it on: the paint sweeps across and sharpens out of a blur */
+.wabi-ach-piece.is-spraying .wabi-ach-art {
+  animation: ach-spray-in 0.85s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  -webkit-mask-image: linear-gradient(90deg, #000 0 34%, transparent 46%);
+  mask-image: linear-gradient(90deg, #000 0 34%, transparent 46%);
+  -webkit-mask-size: 300% 100%;
+  mask-size: 300% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: 100% 0;
+  mask-position: 100% 0;
+}
+
+@keyframes ach-spray-in {
+  from { opacity: 0.4; filter: blur(7px); -webkit-mask-position: 100% 0; mask-position: 100% 0; }
+  to { opacity: 1; filter: blur(0); -webkit-mask-position: 0 0; mask-position: 0 0; }
+}
+
+.wabi-ach-tray-icon { width: 60px; height: 60px; }
+
+/* while dragging: a can-of-paint preview in the colour it will spray */
+.wabi-ach-ghost {
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--spray) 45%, transparent), transparent 70%);
+  box-shadow: none;
+  opacity: 1;
+  filter: none;
+}
+
+.wabi-ach-ghost { background: none; }
+.wabi-ach-ghost.is-valid .wabi-ach-art { filter: drop-shadow(0 0 4px var(--spray)); }
+.wabi-ach-ghost.is-blocked .wabi-ach-art { filter: grayscale(1) opacity(0.55); }
+
+/* Achievement wall: the reset switch is an ordinary-looking brick that happens to be clickable */
+.wabi-ach-secret {
+  all: unset;
+  position: absolute;
+  z-index: 1;
+  cursor: default;
+}
+
+.wabi-ach-secret:focus-visible { outline: 1px dashed var(--wabi-faint); outline-offset: -3px; }
+
+.wabi-ach-confirm {
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 32px));
+  padding: 22px 24px 20px;
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  background: var(--wabi-paper);
+  color: var(--wabi-ink);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.24);
+}
+
+.wabi-ach-confirm h3 { margin: 0 0 6px; font: 500 20px var(--font-serif); }
+.wabi-ach-confirm p { margin: 0 0 18px; font-size: 13.5px; color: var(--wabi-muted); }
+.wabi-ach-confirm-actions { display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
+
+.wabi-ach-tray-icon { position: relative; }
+.wabi-ach-count {
+  position: absolute;
+  right: -4px;
+  bottom: -2px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--wabi-ink);
+  color: var(--wabi-paper);
+  font: 600 10px var(--font-sans);
+  line-height: 15px;
+}
+
+.wabi-todo-newtask { display: grid; gap: 10px; }
+
+/* ---------- Achievements: ema plaques, tokonoma shelf, ink scroll (and the earlier wall) ---------- */
+.wabi-ach-host {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  /* No gap: the album is the only child now that the display picker is gone, and a gap here just
+     left a strip of empty room above the book. */
+  height: calc(100vh - 52px);
+  min-height: 0;
+}
+
+.wabi-ach-host .wabi-ach { height: auto; flex: 1; min-height: 0; }
+
+/* Unused while the album is the only achievement display - kept for the other displays' sake. */
+.wabi-ach-views { display: flex; gap: 6px; align-items: center; }
+.wabi-ach-views button {
+  all: unset;
+  cursor: pointer;
+  padding: 4px 12px;
+  border-bottom: 1px solid transparent;
+  font: 400 11px var(--font-sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wabi-faint);
+}
+.wabi-ach-views button:hover { color: var(--wabi-ink); }
+.wabi-ach-views button.active { color: var(--wabi-ink); border-bottom-color: var(--wabi-sage); }
+
+.wabi-ink { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+
+.wabi-ink-hint, .wabi-ink-empty { margin: 0; font: italic 400 14px var(--font-serif); color: var(--wabi-faint); }
+.wabi-ink-board { position: relative; flex: 1; min-height: 0; overflow: auto; border: var(--wabi-rule-soft); }
+.wabi-ink-canvas { position: relative; min-width: 100%; min-height: 100%; }
+.wabi-ink-empty { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+
+.wabi-ink-piece { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; }
+.wabi-ink-piece img { flex: none; }
+.wabi-ink-piece img { display: block; max-width: none; mix-blend-mode: multiply; pointer-events: none; user-select: none; }
+/* Real supplied illustrations are full colour already - multiply would just muddy them, unlike
+   the generated ink art (which was drawn assuming it). */
+.wabi-ink-piece img.wabi-real-art { mix-blend-mode: normal; filter: drop-shadow(0 2px 3px rgb(60 40 20 / 0.22)); }
+
+/* --- ema: wooden plaques hung on a rack under a tiled eave --- */
+.wabi-ink--ema .wabi-ink-canvas { background: linear-gradient(#f0eadb, #e9e2d1); }
+.wabi-ema-eave {
+  position: absolute; left: 0; right: 0; top: 0; height: 62px;
+  background:
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.07) 0 2px, transparent 2px 30px),
+    linear-gradient(#5a4c40, #3f352c);
+  border-bottom: 5px solid #2f2721;
+  box-shadow: 0 8px 14px rgb(0 0 0 / 0.16);
+}
+.wabi-ema-post { position: absolute; top: 62px; bottom: 0; width: 14px; background: linear-gradient(90deg, #7a5d3d, #a5814f 50%, #7a5d3d); opacity: 0.85; }
+.wabi-ema-post--left { left: 2.5%; }
+.wabi-ema-post--right { right: 2.5%; }
+.wabi-ink-piece--ema {
+  background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22 preserveAspectRatio=%22none%22%3E%3Cdefs%3E%3ClinearGradient id=%22w%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23d8b98a%22/%3E%3Cstop offset=%220.5%22 stop-color=%22%23c9a672%22/%3E%3Cstop offset=%221%22 stop-color=%22%23b58e5e%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpolygon points=%2250%2C2 98%2C24 98%2C98 2%2C98 2%2C24%22 fill=%22url%28%23w%29%22 stroke=%22%236b4e2e%22 stroke-width=%222.4%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M8 40H92M8 62H92M8 84H92%22 stroke=%22%238b6a42%22 stroke-width=%220.7%22 opacity=%220.35%22/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  transform-origin: 50% -14px;
+  animation: ema-sway 5.5s ease-in-out infinite alternate;
+  animation-delay: var(--delay, 0s);
+  filter: drop-shadow(0 4px 5px rgb(0 0 0 / 0.25));
+}
+.wabi-ink-piece--ema::before { content: ""; position: absolute; left: 50%; top: -16px; width: 1.5px; height: 16px; background: #5b4630; }
+.wabi-ink-piece--ema::after { content: ""; position: absolute; left: 50%; top: -19px; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: #3f352c; }
+.wabi-ink-piece--ema img { margin-top: 12%; }
+@keyframes ema-sway { from { transform: translate(-50%, -50%) rotate(-1.6deg); } to { transform: translate(-50%, -50%) rotate(1.6deg); } }
+
+/* --- shelf: an alcove with wooden boards; objects stand on them --- */
+.wabi-ink--shelf .wabi-ink-canvas { background: linear-gradient(#eee6d4, #e6dcc6); }
+.wabi-shelf-board {
+  position: absolute; left: 3%; right: 3%; height: 11px;
+  background: linear-gradient(#a98358, #7e5f3c);
+  box-shadow: 0 10px 14px rgb(60 40 20 / 0.22);
+  border-radius: 1px;
+}
+.wabi-ink-piece--shelf img { filter: drop-shadow(0 7px 4px rgb(60 40 20 / 0.22)); }
+
+/* --- scroll: ink on a long paper scroll with rollers --- */
+.wabi-ink--scroll .wabi-ink-canvas { background: linear-gradient(#f2ead6, #ebe2cb); }
+.wabi-ink--scroll .wabi-ink-board { border-color: #cfc3a8; }
+.wabi-ink--scroll .wabi-ink-canvas::before,
+.wabi-ink--scroll .wabi-ink-canvas::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 34px; z-index: 0;
+  background: repeating-linear-gradient(90deg, #6c6a52 0 14px, #5e5c46 14px 16px);
+  opacity: 0.85;
+}
+.wabi-ink--scroll .wabi-ink-canvas::before { top: 0; }
+.wabi-ink--scroll .wabi-ink-canvas::after { bottom: 0; }
+.wabi-scroll-roller { position: absolute; top: 0; bottom: 0; width: 26px; z-index: 1; background: linear-gradient(90deg, #6d4f31, #a17d4d 50%, #6d4f31); box-shadow: 0 0 10px rgb(0 0 0 / 0.25); }
+.wabi-scroll-roller--left { left: 0; }
+.wabi-scroll-roller--right { right: 0; }
+.wabi-scroll-brush { position: absolute; left: 40px; right: 40px; top: 42%; width: calc(100% - 80px); height: 60px; opacity: 0.09; pointer-events: none; }
+.wabi-scroll-brush path { fill: none; stroke: #1c1a18; stroke-width: 4; stroke-linecap: round; }
+
+/* --- book: a closed hardcover album on the desk, opened with a real hinge-flip --- */
+:root {
+  --book-cloth: #38455d;
+  --book-cloth-lift: #43526d;
+  --book-cloth-deep: #27324a;
+  --book-cloth-edge: #1d2536;
+  --book-brass: #f3ecda;
+  --book-brass-deep: #b5a98c;
+  --book-seal: #a8412c;
+  --book-paper: #eee5cf;
+  --book-paper-edge: #e9dfc7;
+  --book-paper-edge-deep: #d6c9aa;
+}
+:root[data-theme="dark"] {
+  --book-cloth: #2c374b;
+  --book-cloth-lift: #35425a;
+  --book-cloth-deep: #212a3b;
+  --book-cloth-edge: #171d29;
+  --book-paper: #d8cdb3;
+  --book-paper-edge: #d2c6aa;
+  --book-paper-edge-deep: #b9ab8b;
+}
+
+.wabi-ink--book { min-height: 0; }
+
+.wabi-book-scene {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: var(--wabi-rule-soft);
+  outline: none;
+  /* The desk below is ten stacked gradients, and .wabi-book-shoji over it is a blur + mask - all of
+     it completely static. Containing paint here keeps a repaint inside the book (a page turn) from
+     dragging the whole desk through the rasteriser with it. */
+  contain: paint;
+  /* A lamplit plank desk: grain streaks, a couple of knots, and light pooling from above. */
+  background:
+    radial-gradient(ellipse 70% 60% at 42% 38%, rgb(255 232 190 / 0.24), transparent 70%),
+    radial-gradient(ellipse 120% 95% at 50% 50%, transparent 50%, rgb(30 15 3 / 0.32)),
+    radial-gradient(ellipse 90px 20px at 17% 20%, rgb(55 28 8 / 0.55) 0 5%, transparent 13%, rgb(55 28 8 / 0.2) 19%, transparent 27%, rgb(55 28 8 / 0.15) 37%, transparent 47%, rgb(55 28 8 / 0.1) 60%, transparent 76%),
+    radial-gradient(ellipse 64px 13px at 62% 86%, rgb(55 28 8 / 0.45) 0 6%, transparent 15%, rgb(55 28 8 / 0.16) 23%, transparent 33%, rgb(55 28 8 / 0.1) 46%, transparent 64%),
+    linear-gradient(180deg, transparent calc(34% - 1px), rgb(30 14 3 / 0.45) calc(34% - 1px) 34%, rgb(255 230 190 / 0.08) 34% calc(34% + 1px), transparent calc(34% + 1px) calc(70% - 1px), rgb(30 14 3 / 0.45) calc(70% - 1px) 70%, rgb(255 230 190 / 0.08) 70% calc(70% + 1px), transparent calc(70% + 1px)),
+    repeating-linear-gradient(179.3deg, rgb(60 32 10 / 0.10) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(180.8deg, rgb(60 32 10 / 0.08) 0 2px, transparent 2px 11px),
+    repeating-linear-gradient(180.3deg, rgb(70 38 12 / 0.12) 0 7px, transparent 7px 41px, rgb(70 38 12 / 0.07) 41px 44px, transparent 44px 67px),
+    linear-gradient(90deg, rgb(0 0 0 / 0.06), rgb(255 255 255 / 0.03) 40%, rgb(0 0 0 / 0.07)),
+    linear-gradient(180deg, #ad8056 0 34%, #a37750 34% 70%, #b0855a 70%);
+  box-shadow: inset 0 0 60px rgb(0 0 0 / 0.32);
+}
+:root[data-theme="dark"] .wabi-book-scene {
+  background:
+    radial-gradient(ellipse 70% 60% at 42% 38%, rgb(255 232 190 / 0.10), transparent 70%),
+    radial-gradient(ellipse 120% 95% at 50% 50%, transparent 50%, rgb(30 15 3 / 0.5)),
+    radial-gradient(ellipse 90px 20px at 17% 20%, rgb(55 28 8 / 0.55) 0 5%, transparent 13%, rgb(55 28 8 / 0.2) 19%, transparent 27%, rgb(55 28 8 / 0.15) 37%, transparent 47%, rgb(55 28 8 / 0.1) 60%, transparent 76%),
+    radial-gradient(ellipse 64px 13px at 62% 86%, rgb(55 28 8 / 0.45) 0 6%, transparent 15%, rgb(55 28 8 / 0.16) 23%, transparent 33%, rgb(55 28 8 / 0.1) 46%, transparent 64%),
+    linear-gradient(180deg, transparent calc(34% - 1px), rgb(30 14 3 / 0.45) calc(34% - 1px) 34%, rgb(255 230 190 / 0.06) 34% calc(34% + 1px), transparent calc(34% + 1px) calc(70% - 1px), rgb(30 14 3 / 0.45) calc(70% - 1px) 70%, rgb(255 230 190 / 0.06) 70% calc(70% + 1px), transparent calc(70% + 1px)),
+    repeating-linear-gradient(179.3deg, rgb(60 32 10 / 0.10) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(180.8deg, rgb(60 32 10 / 0.08) 0 2px, transparent 2px 11px),
+    repeating-linear-gradient(180.3deg, rgb(70 38 12 / 0.12) 0 7px, transparent 7px 41px, rgb(70 38 12 / 0.07) 41px 44px, transparent 44px 67px),
+    linear-gradient(90deg, rgb(0 0 0 / 0.06), rgb(255 255 255 / 0.03) 40%, rgb(0 0 0 / 0.07)),
+    linear-gradient(180deg, #3f2c1e 0 34%, #3a281b 34% 70%, #45301f 70%);
+}
+
+/* A soft diagonal streak of window light across the desk. */
+.wabi-book-shoji {
+  position: absolute;
+  left: -25%;
+  top: -35%;
+  width: 95%;
+  height: 120%;
+  pointer-events: none;
+  opacity: 0.9;
+  transform: rotate(-16deg) skewX(-18deg);
+  background:
+    repeating-linear-gradient(90deg, rgb(40 20 5 / 0.12) 0 5px, rgb(255 238 205 / 0.09) 5px 62px),
+    repeating-linear-gradient(0deg, rgb(40 20 5 / 0.12) 0 5px, transparent 5px 44px);
+  mask-image: radial-gradient(ellipse 55% 55% at 45% 50%, #000 15%, transparent 72%);
+  filter: blur(2.5px);
+}
+:root[data-theme="dark"] .wabi-book-shoji { opacity: 0.35; }
+
+/* A teacup and a resting pen/brush, for a lived-in desk rather than an empty stage. */
+/* An ink-dish: a lacquered rim in three receding bevels around a near-black pool. Ported
+   straight from the approved design's own layered radial/conic gradients. */
+.wabi-book-cup { position: absolute; border-radius: 50%; pointer-events: none; filter: drop-shadow(2px 3px 3px rgb(18 8 0 / 0.5)); }
+.wabi-book-cup-rim {
+  position: absolute; inset: 0; border-radius: 50%;
+  background:
+    radial-gradient(circle at 36% 30%, rgb(210 170 130 / 0.22), transparent 38%),
+    conic-gradient(from 20deg, rgb(0 0 0 / 0.25), rgb(150 105 70 / 0.18) 8%, rgb(0 0 0 / 0.1) 14%, rgb(0 0 0 / 0.3) 23%, rgb(120 85 55 / 0.14) 31%, rgb(0 0 0 / 0.05) 40%, rgb(0 0 0 / 0.32) 52%, rgb(140 95 60 / 0.16) 60%, rgb(0 0 0 / 0.18) 71%, rgb(0 0 0 / 0.35) 82%, rgb(150 105 70 / 0.12) 91%, rgb(0 0 0 / 0.25)),
+    repeating-radial-gradient(circle, transparent 0 3px, rgb(0 0 0 / 0.07) 3px 4px),
+    radial-gradient(circle, #4a2f20 0 55%, #3a2317 72%, #24150d 100%);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.55), inset 3px 3px 5px rgb(215 175 135 / 0.22), inset -4px -5px 7px rgb(0 0 0 / 0.55);
+}
+.wabi-book-cup-inner {
+  position: absolute; inset: 17%; border-radius: 50%;
+  background: conic-gradient(from 200deg, rgb(0 0 0 / 0.3), rgb(160 115 78 / 0.2) 12%, rgb(0 0 0 / 0.2) 30%, rgb(0 0 0 / 0.4) 55%, rgb(150 108 72 / 0.16) 75%, rgb(0 0 0 / 0.3)), radial-gradient(circle, #4d3223 0 70%, #3b2518);
+  box-shadow: inset 1px 1px 1px rgb(225 190 150 / 0.3), 0 0 0 1px rgb(0 0 0 / 0.35), 2px 3px 5px rgb(0 0 0 / 0.45);
+}
+.wabi-book-cup-well {
+  position: absolute; inset: 22%; border-radius: 50%;
+  background: radial-gradient(circle at 38% 34%, rgb(190 160 130 / 0.35), transparent 45%), linear-gradient(135deg, #6a4b37, #3a2518 60%, #22140c);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.4);
+}
+.wabi-book-cup-pool {
+  position: absolute; inset: 26%; border-radius: 50%;
+  background: radial-gradient(ellipse 30% 18% at 36% 30%, rgb(215 222 232 / 0.38), transparent 72%), radial-gradient(ellipse 12% 7% at 66% 70%, rgb(200 205 215 / 0.12), transparent 70%), radial-gradient(circle at 55% 55%, #0a090a, #030303 70%, #000);
+  box-shadow: inset 3px 4px 6px rgb(0 0 0 / 0.95), inset -1px -1px 1px rgb(120 90 65 / 0.35);
+}
+:root[data-theme="dark"] .wabi-book-cup { filter: drop-shadow(2px 3px 3px rgb(18 8 0 / 0.5)) brightness(0.72) saturate(0.9); }
+
+/* A calligraphy brush: an asymmetric ink-dark tip over a banded bamboo shaft, two joint marks
+   picked out with sharp colour stops rather than separate rings. Also a direct port. */
+.wabi-book-pen { position: absolute; pointer-events: none; filter: drop-shadow(2px 3px 3px rgb(18 8 0 / 0.45)); }
+.wabi-book-pen-tip {
+  position: absolute; left: 0; right: 0; top: 0; height: var(--pen-tip);
+  clip-path: polygon(50% 0, 62% 18%, 100% 100%, 0 100%, 40% 16%);
+  background: linear-gradient(90deg, rgb(0 0 0 / 0.4), rgb(255 255 255 / 0.18) 35%, rgb(0 0 0 / 0.3)), linear-gradient(180deg, #050404 0, #0d0a08 30%, #1c140d 48%, rgb(60 40 22 / 0.9) 64%, #9c7a4c 82%, #c4a06a);
+}
+.wabi-book-pen-shaft {
+  position: absolute; left: 0; right: 0; top: calc(var(--pen-tip) - 1px); bottom: 0;
+  border-radius: 0 0 45% 45% / 0 0 6px 6px;
+  background:
+    linear-gradient(180deg, transparent 0 14%, rgb(70 42 18 / 0.8) 14% 14.6%, rgb(255 235 195 / 0.35) 14.6% 15.2%, rgb(120 80 40 / 0.25) 15.2% 16.5%, transparent 16.5% 58%, rgb(70 42 18 / 0.75) 58% 58.5%, rgb(255 235 195 / 0.3) 58.5% 59.1%, rgb(120 80 40 / 0.22) 59.1% 60.3%, transparent 60.3%),
+    radial-gradient(ellipse 60% 1.4% at 40% 34%, rgb(60 35 15 / 0.45), transparent),
+    radial-gradient(ellipse 50% 1% at 60% 76%, rgb(60 35 15 / 0.35), transparent),
+    linear-gradient(180deg, rgb(40 25 10 / 0.25), transparent 6%, transparent 94%, rgb(60 35 12 / 0.35)),
+    repeating-linear-gradient(90deg, rgb(90 60 25 / 0.12) 0 1px, transparent 1px 2px),
+    linear-gradient(90deg, #6e4d26 0, #b88e55 14%, #e6c48c 34%, #d6b077 50%, #b38850 72%, #7f5a2d 90%, #5a3d1c);
+}
+.wabi-book-pen-cap { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border-radius: 0 0 50% 50%; background: linear-gradient(90deg, #4a3016, #8a6636 40%, #5a3c1c); }
+:root[data-theme="dark"] .wabi-book-pen { filter: drop-shadow(2px 3px 3px rgb(18 8 0 / 0.45)) brightness(0.72) saturate(0.9); }
+
+/* --- the book itself: a stage box containing a sliding "camera" that reveals either the centred
+   closed book or the full two-page spread. Flat 2D throughout - no perspective/3D transforms.
+   A real 3D rotateY turn was tried and reverted: under both headless Chromium and (going by the
+   original "shift" complaints) WebKitGTK's compositor, a backface-hidden face past 90deg doesn't
+   reliably vanish - it paints as an opaque blank rectangle over whatever's behind it instead. The
+   flip is a scaleX squish to a sliver at the spine, then (invisible at zero width) a hard jump of
+   `left`/transform-origin to the opposite side of the spine before scaling back out - so the leaf
+   still relocates across the spine like a real turned page, without any 3D compositing. --- */
+.wabi-book-stage {
+  position: absolute;
+  transform: rotate(-0.8deg) translateZ(0);
+}
+.wabi-book-slide {
+  position: absolute;
+  inset: 0;
+}
+
+.wabi-book-groundshadow { position: absolute; border-radius: 3px; background: rgb(25 12 2 / 0.35); transition: opacity 0.9s ease; }
+
+.wabi-book-board {
+  position: absolute;
+  top: 0;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25), inset 0 0 0.3em rgb(210 205 190 / 0.25);
+  background:
+    radial-gradient(circle at 70% 60%, rgb(8 16 34 / 0.2), transparent 70%),
+    radial-gradient(circle at 30% 78%, rgb(130 150 180 / 0.1), transparent 70%),
+    radial-gradient(circle at 82% 22%, rgb(130 150 180 / 0.08), transparent 70%),
+    repeating-linear-gradient(0deg, rgb(255 255 255 / 0.035) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgb(0 0 0 / 0.07) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse 90% 70% at 38% 30%, var(--book-cloth-lift), var(--book-cloth) 78%);
+}
+.wabi-book-board--left {
+  left: 0;
+  border-radius: 4px 1px 1px 4px;
+  background:
+    radial-gradient(circle at 0 0, rgb(215 208 190 / 0.3), transparent 11%),
+    radial-gradient(circle at 0 100%, rgb(215 208 190 / 0.3), transparent 11%),
+    radial-gradient(circle at 70% 60%, rgb(8 16 34 / 0.2), transparent 70%),
+    radial-gradient(circle at 30% 78%, rgb(130 150 180 / 0.1), transparent 70%),
+    radial-gradient(circle at 82% 22%, rgb(130 150 180 / 0.08), transparent 70%),
+    repeating-linear-gradient(0deg, rgb(255 255 255 / 0.035) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgb(0 0 0 / 0.07) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse 90% 70% at 38% 30%, var(--book-cloth-lift), var(--book-cloth) 78%);
+}
+.wabi-book-board--right {
+  border-radius: 1px 4px 4px 1px;
+  background:
+    radial-gradient(circle at 100% 0, rgb(215 208 190 / 0.3), transparent 11%),
+    radial-gradient(circle at 100% 100%, rgb(215 208 190 / 0.3), transparent 11%),
+    radial-gradient(circle at 70% 60%, rgb(8 16 34 / 0.2), transparent 70%),
+    radial-gradient(circle at 30% 78%, rgb(130 150 180 / 0.1), transparent 70%),
+    radial-gradient(circle at 82% 22%, rgb(130 150 180 / 0.08), transparent 70%),
+    repeating-linear-gradient(0deg, rgb(255 255 255 / 0.035) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgb(0 0 0 / 0.07) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse 90% 70% at 38% 30%, var(--book-cloth-lift), var(--book-cloth) 78%);
+}
+
+.wabi-book-pagebox { position: absolute; }
+
+/* A "cast shadow" overlay used only during a page turn, faded in/out by the animation. */
+
+/* --- the closed book, drawn as flat-cut polygon "faces" of one box: a cheap, convincing 3/4
+   view, ported straight from the approved design's own clip-path math --- */
+.wabi-book-closededge { position: absolute; top: 0; cursor: pointer; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.35)); }
+.wabi-book-closedface { position: absolute; inset: 0; }
+.wabi-book-closedface--board { background: var(--book-cloth-edge); }
+.wabi-book-closedface--spine { background: var(--book-cloth-deep); }
+.wabi-book-closedface--front { background: var(--book-cloth-deep); }
+.wabi-book-closedface--fore {
+  background: repeating-linear-gradient(90deg, rgb(90 68 38 / 0.22) 0 1px, transparent 1px 2.4px), linear-gradient(90deg, var(--book-paper-edge), var(--book-paper-edge-deep));
+}
+.wabi-book-closedface--tail {
+  background: repeating-linear-gradient(0deg, rgb(90 68 38 / 0.22) 0 1px, transparent 1px 2.4px), linear-gradient(180deg, var(--book-paper-edge), var(--book-paper-edge-deep));
+}
+
+/* --- the turning leaf: narrows to a sliver at the spine, jumps (invisible, at zero width) to the
+   opposite side, then widens back out - its two faces cross-fading exactly at that same instant.
+   `transform-origin` is set inline per turn direction (see BookGallery), not fixed here. --- */
+/* No permanent `will-change` here or on the cover: these elements are static except during the
+   few hundred ms of a turn, and pinning a compositor layer for each of them (leaf, two faces,
+   cover, two cover faces, slide) the whole time it just sits there cost more than it saved. The
+   WAAPI transform/opacity animations promote what they touch for their own duration anyway. */
+.wabi-book-leaf {
+  position: absolute;
+  transform-origin: 0% 50%;
+  /* The two faces are a sheet with a front and a back, so they need to keep their own places in
+     3D rather than being flattened into the leaf's plane. Nothing here sets backface-visibility:
+     the faces cross-fade on opacity instead (see BookGallery), which this compositor handles
+     reliably where backface culling did not. */
+  transform-style: preserve-3d;
+}
+.wabi-book-leaf-face {
+  position: absolute;
+  inset: 0;
+  /* A little lift, so the turning sheet reads as off the page rather than printed on it. Must be
+     box-shadow and not filter: a filter would flatten the leaf's 3D context. */
+  box-shadow: 0 0 1.1em rgb(40 25 8 / 0.26);
+}
+/* Pre-turned, so that when the leaf reaches its own half turn this face is back to square and its
+   page reads the right way round rather than mirrored. */
+.wabi-book-leaf-face--back { transform: rotateY(180deg); }
+
+/* --- the cover: cloth, a stab-bound thread with four knots down its hinge edge, a paper title
+   slip - flips on the same hinge as the leaf. The worn-corner glints and thread/knot placement
+   are the exact values from the approved design (percentages and `em`-relative sizes), not a
+   re-guess - only the wood/cloth colour tokens were swapped for this app's own theme vars. --- */
+/* Hinged at the spine and swung in 3D like a page, so the two faces need their real places in
+   depth and the inside face needs the same pre-turn the leaf's back face has. */
+.wabi-book-cover-flip { position: absolute; top: 0; transform-origin: 0% 50%; transform-style: preserve-3d; }
+.wabi-book-cover-face {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  border-radius: 2px 5px 5px 2px;
+  background:
+    radial-gradient(circle at 100% 0, rgb(215 208 190 / 0.3), transparent 11%),
+    radial-gradient(circle at 100% 100%, rgb(215 208 190 / 0.3), transparent 11%),
+    radial-gradient(circle at 70% 60%, rgb(8 16 34 / 0.2), transparent 70%),
+    radial-gradient(circle at 30% 78%, rgb(130 150 180 / 0.1), transparent 70%),
+    radial-gradient(circle at 82% 22%, rgb(130 150 180 / 0.08), transparent 70%),
+    repeating-linear-gradient(0deg, rgb(255 255 255 / 0.035) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgb(0 0 0 / 0.07) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse 90% 70% at 38% 30%, var(--book-cloth-lift), var(--book-cloth) 78%);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.28), inset 0 0 0.25em rgb(215 210 195 / 0.3), inset 0 0 1.6em rgb(0 0 0 / 0.28);
+  transition: filter 0.2s ease;
+}
+.wabi-book-cover-face:hover { filter: brightness(1.07); }
+.wabi-book-cover-bevel {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 4%;
+  border-radius: 2px 0 0 2px;
+  background: linear-gradient(90deg, rgb(0 0 0 / 0.35), rgb(255 255 255 / 0.04) 60%, transparent);
+}
+.wabi-book-cover-crease { position: absolute; left: 13%; top: 0; bottom: 0; width: 2px; background: linear-gradient(90deg, rgb(0 0 0 / 0.32), rgb(210 215 225 / 0.12)); }
+/* The binding thread: a hairline running the full height, at the same x as the four knots. */
+.wabi-book-cover-thread { position: absolute; left: calc(7% - 0.11em); top: 0; bottom: 0; width: 0.22em; background: linear-gradient(90deg, #b5a98c, #f3ecda 50%, #c4b899); box-shadow: 1px 0 1px rgb(0 0 0 / 0.45); }
+.wabi-book-stud {
+  position: absolute; left: calc(7% - 0.26em); width: 0.52em; height: 0.52em; margin-top: -0.26em;
+  border-radius: 50%; background: #0d111b;
+}
+/* A short crossbar of the same thread at each knot, reaching to the cover's own left edge. */
+.wabi-book-tick {
+  position: absolute; left: 0; width: 7%; height: 0.22em; margin-top: -0.11em;
+  background: linear-gradient(180deg, #b5a98c, #f3ecda 50%, #c4b899);
+  box-shadow: 0 1px 1px rgb(0 0 0 / 0.45);
+}
+.wabi-book-slip {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7em 0 0.55em;
+  box-sizing: border-box;
+  background: radial-gradient(ellipse at 40% 70%, rgb(150 110 50 / 0.12), transparent 70%), var(--book-paper);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.35), inset 0 0 0 1px rgb(80 58 28 / 0.25);
+}
+.wabi-book-slip-rule { position: absolute; inset: 0.22em; border: 1px solid rgb(80 58 28 / 0.35); }
+.wabi-book-slip-text { writing-mode: vertical-rl; font: 500 1.15em/1 var(--font-serif); letter-spacing: 0.25em; color: #2b261e; }
+.wabi-book-slip-seal {
+  width: 1.05em; height: 1.05em;
+  display: flex; align-items: center; justify-content: center;
+  font: 600 0.66em/1 var(--font-serif);
+  color: #f1e3cf;
+  background: radial-gradient(circle at 30% 70%, rgb(255 255 255 / 0.15), transparent 40%), var(--book-seal);
+  border-radius: 1px;
+  opacity: 0.9;
+}
+.wabi-book-cover-back { position: absolute; inset: 0; transform: rotateY(180deg); border-radius: 5px 2px 2px 5px; background: var(--book-cloth); box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25); }
+
+/* --- the album page itself: paper, a soft gutter shade, up to three rows, a page number --- */
+.wabi-album-page {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: #2b261e;
+  background: var(--book-paper);
+}
+.wabi-album-page--left { background: radial-gradient(ellipse 55% 35% at 20% 82%, rgb(160 115 55 / 0.08), transparent 70%), var(--book-paper); }
+.wabi-album-page--right { background: radial-gradient(ellipse 55% 35% at 80% 16%, rgb(160 115 55 / 0.08), transparent 70%), var(--book-paper); }
+.wabi-album-page--left::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(to left, rgb(70 45 18 / 0.34), rgb(70 45 18 / 0.13) 4%, transparent 13%, rgb(255 250 235 / 0.16) 30%, transparent 55%), linear-gradient(to right, rgb(70 45 18 / 0.09), transparent 3%);
+}
+.wabi-album-page--right::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(to right, rgb(70 45 18 / 0.34), rgb(70 45 18 / 0.13) 4%, transparent 13%, rgb(255 250 235 / 0.16) 30%, transparent 55%), linear-gradient(to left, rgb(70 45 18 / 0.09), transparent 3%);
+}
+
+/* The page is 19em tall (see computeBookGeometry: fontSize = PH / 19) and holds three rows, so a
+   row gets a shade under 5em to work in. A dated row whose name wraps and whose description ran to
+   three lines needed about 6.3em of that, and with nothing clipping it the excess simply drew over
+   the row below - which is why a date used to land on top of the previous entry's last line.
+   Two things stop that now: the budget below actually fits, and every box in the row clips, so
+   even an entry longer than anything here today can only ever lose its own last line. */
+.wabi-album-rows {
+  position: absolute;
+  left: 1.4em; right: 1.4em; top: 1.15em; bottom: 2.05em;
+  display: grid;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  row-gap: 0.4em;
+}
+.wabi-album-row { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 0.28em; }
+.wabi-album-day {
+  flex: none;
+  font: 500 0.56em/1.15 var(--font-sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6e6352;
+  /* A date is one line or it is nothing: letting it wrap would cost the row a whole line of the
+     entry underneath it. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wabi-album-row-main { flex: 1 1 auto; display: flex; gap: 0.85em; align-items: flex-start; min-height: 0; overflow: hidden; }
+
+/* A little photo-corner mount at each corner of the icon, like a page in a real photo album. */
+.wabi-album-icon { position: relative; flex: none; width: 2.9em; height: 2.9em; background: rgb(95 70 35 / 0.07); box-shadow: 0 0.06em 0.12em rgb(60 40 15 / 0.18); }
+.wabi-album-icon img { position: absolute; left: 0.28em; top: 0.28em; width: calc(100% - 0.56em); height: calc(100% - 0.56em); object-fit: contain; mix-blend-mode: multiply; }
+.wabi-album-icon img.wabi-real-art { mix-blend-mode: normal; filter: drop-shadow(0 1px 2px rgb(60 40 20 / 0.2)); }
+.wabi-album-icon i { position: absolute; width: 0.8em; height: 0.8em; }
+.wabi-album-icon i:nth-child(2) { left: -0.14em; top: -0.14em; background: linear-gradient(135deg, #3a332a 50%, transparent 50%); }
+.wabi-album-icon i:nth-child(3) { right: -0.14em; top: -0.14em; background: linear-gradient(225deg, #3a332a 50%, transparent 50%); }
+.wabi-album-icon i:nth-child(4) { left: -0.14em; bottom: -0.14em; background: linear-gradient(45deg, #3a332a 50%, transparent 50%); }
+.wabi-album-icon i:nth-child(5) { right: -0.14em; bottom: -0.14em; background: linear-gradient(315deg, #3a332a 50%, transparent 50%); }
+
+.wabi-album-copy { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 0.14em; padding-top: 0.05em; }
+/* The name keeps its own height whatever happens - it is the one line of a row that must not be
+   cut - so it is the description below that gives way when a row is tight. */
+.wabi-album-names { flex: none; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.45em; row-gap: 0; }
+.wabi-album-jp { font: 600 1.02em/1.14 var(--font-serif); letter-spacing: 0.04em; color: #2b261e; }
+/* Deliberately well below the Japanese name beside it: it is the gloss, not the heading, and
+   keeping it small also stops a long English name from wrapping the row onto a second line. */
+.wabi-album-en { font: italic 500 0.72em/1.14 var(--font-serif); color: #5a5041; }
+/* No known Japanese equivalent yet - the English name carries the row alone, so it takes the
+   same prominent styling the Japanese name would otherwise have. */
+.wabi-album-en--solo { font: 600 0.92em/1.14 var(--font-serif); font-style: normal; letter-spacing: 0.02em; color: #2b261e; }
+/* Three lines fit a dated row now that the English name is small enough not to wrap (date 0.64 +
+   name 1.16 + gaps 0.42 + three lines 2.43 = 4.65em, against the ~5em a row gets). If a name does
+   wrap, this clamp and the row's own overflow trim the description instead of letting it run into
+   the entry below. */
+.wabi-album-copy span { flex: 1 1 auto; min-height: 0; font: 400 0.6em/1.35 var(--font-sans); color: #5a5041; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+.wabi-album-empty { position: absolute; left: 1.6em; right: 1.6em; top: 0; bottom: 2.6em; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 0.5em; text-align: center; }
+.wabi-album-empty strong { font: 500 1em/1.3 var(--font-serif); color: #2b261e; }
+.wabi-album-empty span { font: 400 0.72em/1.5 var(--font-sans); color: #5a5041; }
+
+.wabi-album-pageno { position: absolute; left: 0; right: 0; bottom: 1.05em; text-align: center; font: 400 0.64em/1 var(--font-serif); color: #6e6352; }
+
+/* --- click zones down the outer edges of the spread --- */
+/* Raised with z-index, not translateZ: the slide is a perspective container now, so a translateZ
+   here would be scaled by the perspective divide instead of just lifting the zones above the page. */
+.wabi-book-zones { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.wabi-book-zone { all: unset; box-sizing: border-box; position: absolute; top: 0; bottom: 0; cursor: pointer; pointer-events: auto; }
+.wabi-book-zone--left { left: 0; }
+.wabi-book-zone--right { right: 0; }
+.wabi-book-zone:not(:disabled):hover.wabi-book-zone--left { background: linear-gradient(to right, rgb(40 25 10 / 0.1), transparent); }
+.wabi-book-zone:not(:disabled):hover.wabi-book-zone--right { background: linear-gradient(to left, rgb(40 25 10 / 0.1), transparent); }
+.wabi-book-zone:disabled { cursor: default; pointer-events: none; }
+
+/* Modern garden variants */
+.design-garden-card .garden-stage.mg-stage {
+  position: relative;
+  min-height: 220px;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  background: linear-gradient(180deg, var(--garden-sky), color-mix(in oklab, var(--garden-sky), var(--surface-inset) 60%));
+}
+
+.design-garden-card .garden-stage.mg-stage::before,
+.design-garden-card .garden-stage.mg-stage::after {
+  display: none;
+}
+
+.design-garden-card .garden-stage.mg-stems {
+  background: var(--surface-inset);
+}
+
+.mg-svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.mg-sway {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: mg-sway 6s ease-in-out infinite alternate;
+}
+
+@keyframes mg-sway {
+  from { transform: rotate(-1.4deg); }
+  to { transform: rotate(1.4deg); }
+}
+
+.mg-label {
+  fill: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mg-sway { animation: none; }
+}
+
+/* Cleaner old gardens: no blurry colour blobs behind the scene */
+.design-garden-card .garden-stage.gk-stage {
+  background: linear-gradient(180deg, var(--garden-sky), color-mix(in oklab, var(--garden-sky), var(--garden-soil) 22%));
+}
+
+.design-garden-card .garden-stage.jg-stage {
+  background: linear-gradient(180deg, var(--garden-sky), color-mix(in oklab, var(--garden-sky), var(--garden-soil) 24%));
+}
+
+.gk-sun {
+  opacity: 0.22;
+}
+
+/* "Something else" picker for the Modern and Field Notebook dashboards */
+.dpick-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5100;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.36);
+  padding: 24px;
+}
+.dpick {
+  box-sizing: border-box;
+  width: min(540px, 100%);
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.28);
+  overflow: hidden;
+}
+.dpick-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 22px 12px; }
+.dpick-head h2 { margin: 2px 0 0; font-size: 1.15rem; }
+.dpick-body { overflow-y: auto; padding: 0 22px 14px; }
+.dpick-label { margin: 10px 0 4px; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.dpick-ahead { margin-top: 22px; }
+.dpick-day { margin: 12px 0 2px; font-size: 0.78rem; color: var(--muted); }
+.dpick-empty { margin: 8px 0; color: var(--muted); font-size: 0.9rem; }
+.dpick-item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 9px 10px;
+  margin: 2px 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dpick-item:hover { background: color-mix(in oklch, var(--accent) 12%, transparent); }
+.dpick-item em { font-style: normal; font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+.dpick-foot { padding: 12px 22px 16px; border-top: 1px solid var(--line); }
+.dpick-head-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.dpick-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
+  border: 1px solid color-mix(in oklch, var(--accent) 35%, var(--line));
+}
+.dpick-current > div { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.dpick-current span { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.dpick-current em { font-style: normal; font-size: 0.78rem; color: var(--muted); }
+
+/* Field Notebook: squared paper sheet with ruled lines instead of rounded cards */
+.dpick-notebook .dpick {
+  border-radius: 0;
+  background: var(--fn-paper-1, var(--surface));
+  border: var(--fn-rule-hard, 1px solid var(--line));
+  box-shadow: 4px 4px 0 rgb(0 0 0 / 0.22);
+}
+.dpick-notebook .dpick-head { border-bottom: var(--fn-rule-soft, 1px solid var(--line)); }
+.dpick-notebook .dpick-head h2 { font-family: var(--fn-serif, Georgia, serif); }
+.dpick-notebook .dpick-item { border-radius: 0; border-bottom: var(--fn-rule-dot, 1px dotted var(--line)); margin: 0; padding: 9px 4px; }
+.dpick-notebook .dpick-item:hover { background: var(--fn-paper-3, rgb(0 0 0 / 0.05)); }
+.dpick-notebook .dpick-foot { border-top: var(--fn-rule-soft, 1px solid var(--line)); }
+
+/* What's new modal */
+.whatsnew-backdrop { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: 16px; background: oklch(0.1 0.02 250 / 0.55); backdrop-filter: blur(4px); animation: whatsnew-fade 0.2s ease-out; }
+.whatsnew-card { width: min(520px, 100%); max-height: 85vh; overflow: auto; background: var(--surface-raised); color: var(--ink); border: 1px solid var(--accent-line); border-radius: 18px; box-shadow: 0 24px 60px oklch(0 0 0 / 0.4); animation: whatsnew-pop 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+.whatsnew-hero { padding: 28px 28px 20px; background: linear-gradient(135deg, var(--accent-soft), transparent 70%); border-bottom: 1px solid var(--accent-line); }
+/* --on-accent, not a fixed light/dark value: an accent can be pale cream in one theme and deep blue
+   in another, and only the theme knows which text colour survives on top of it. */
+.whatsnew-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; }
+.whatsnew-hero h2 { margin: 12px 0 4px; font-size: 28px; line-height: 1.15; }
+.whatsnew-hero p { margin: 0; color: var(--ink-3); }
+.whatsnew-list { list-style: none; margin: 0; padding: 16px 28px; display: grid; gap: 14px; }
+.whatsnew-list li { display: flex; gap: 14px; align-items: flex-start; }
+.whatsnew-list li > div { display: grid; gap: 2px; }
+.whatsnew-list li span:last-child { color: var(--ink-2); font-size: 14px; }
+.whatsnew-icon { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: var(--accent-soft); font-size: 18px; }
+/* --accent paired with --on-accent, as .calendar-primary-button does: --on-accent is the colour each
+   theme guarantees is readable on --accent. A fixed #fff here was invisible in Field Notebook dark,
+   whose accent is a near-white cream. */
+.whatsnew-cta { display: block; margin: 4px 28px 24px auto; padding: 10px 24px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-weight: 700; cursor: pointer; }
+.whatsnew-cta:hover { background: var(--accent-strong); }
+@keyframes whatsnew-fade { from { opacity: 0; } }
+@keyframes whatsnew-pop { from { opacity: 0; transform: translateY(16px) scale(0.96); } }
+@media (prefers-reduced-motion: reduce) { .whatsnew-backdrop, .whatsnew-card { animation: none; } }
+.whatsnew-release + .whatsnew-release { border-top: 1px solid var(--accent-line); }
+.whatsnew-release-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0; padding: 18px 28px 0; font-size: 16px; }
+.whatsnew-release-version { flex: none; color: var(--ink-4); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; }
+
+/* Welcome tour - reuses the what's-new card, adds stepping */
+.tour-card { display: flex; flex-direction: column; }
+.tour-overview { padding-bottom: 8px; }
+.tour-overview li span:last-child { color: var(--ink-3); }
+.tour-stop { padding: 30px 28px 22px; text-align: center; }
+.tour-stop-icon { margin: 0 auto 14px; width: 62px; height: 62px; display: grid; place-items: center; border-radius: 18px; background: var(--accent-soft); font-size: 30px; }
+.tour-stop .whatsnew-badge { margin-bottom: 10px; }
+.tour-stop h2 { margin: 0 0 6px; font-size: 26px; }
+.tour-stop-tagline { margin: 0 0 12px; color: var(--accent); font-weight: 600; }
+.tour-stop-body { margin: 0 auto; max-width: 42ch; color: var(--ink-2); line-height: 1.55; text-align: left; }
+.tour-footer { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 28px 22px; border-top: 1px solid var(--accent-line); }
+.tour-dots { display: flex; gap: 6px; }
+.tour-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-line); transition: background 0.2s, transform 0.2s; }
+.tour-dots span.active { background: var(--accent); transform: scale(1.35); }
+.tour-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.tour-next { margin: 0; }
+@media (max-width: 420px) {
+  .tour-footer { justify-content: center; }
+  .tour-actions { margin-left: 0; }
+}
+
+/* Page guide - the question-mark popup, built on the same card as the welcome tour */
+.guide-card { max-height: 88vh; }
+.guide-hero { display: flex; align-items: flex-start; gap: 16px; }
+.guide-hero-icon { flex: none; width: 54px; height: 54px; display: grid; place-items: center; border-radius: 16px; background: var(--accent-soft); font-size: 26px; }
+.guide-hero h2 { margin: 8px 0 2px; font-size: 26px; }
+.guide-tagline { margin: 0; color: var(--accent); font-weight: 600; }
+.guide-intro { margin: 0; padding: 18px 28px 0; color: var(--ink-2); line-height: 1.55; }
+.guide-steps-heading { margin: 18px 0 0; padding: 0 28px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-4); }
+.guide-steps { margin: 10px 0 0; padding: 0 28px; list-style: none; counter-reset: guide-step; display: grid; gap: 12px; }
+.guide-steps li { counter-increment: guide-step; display: flex; gap: 14px; align-items: flex-start; }
+.guide-steps li::before {
+  content: counter(guide-step);
+  flex: none; width: 26px; height: 26px; margin-top: 1px;
+  display: grid; place-items: center;
+  border-radius: 50%; background: var(--accent-soft); color: var(--accent);
+  font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.guide-steps li > div { display: grid; gap: 2px; }
+.guide-steps li span { color: var(--ink-2); font-size: 14px; line-height: 1.5; }
+.guide-tips { margin: 18px 0 0; padding: 14px 28px; list-style: none; display: grid; gap: 8px; background: var(--surface-inset); border-block: 1px solid var(--accent-line); }
+.guide-tips li { display: flex; gap: 10px; align-items: flex-start; color: var(--ink-2); font-size: 14px; line-height: 1.5; }
+.guide-footer { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; padding: 18px 28px 22px; }
+.guide-done { margin: 0; }
+@media (max-width: 420px) {
+  .guide-hero { flex-direction: column; gap: 10px; }
 }

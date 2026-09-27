@@ -43,6 +43,11 @@ export function getTaskProgress(task: Task) {
   return Math.round((task.completedUnits / total) * 100);
 }
 
+/** Semesters that count toward workload totals: not archived. Exam-prep semesters still count as active - only archiving retires a semester's workload. */
+export function getActiveSemesterIds(state: AppState): Set<string> {
+  return new Set(state.semesters.filter((semester) => !semester.archived).map((semester) => semester.id));
+}
+
 export function getSemesterCourses(state: AppState, semesterId: string) {
   return state.courses.filter((course) => course.semesterId === semesterId);
 }
@@ -69,8 +74,17 @@ export function getRemainingUnits(task: Task) {
   return Math.max(0, task.totalUnits - task.completedUnits);
 }
 
+/** Pluralizes a task's own progress label (e.g. "Lecture" -> "lectures") instead of the generic
+ * word "unit" - every user-facing count reads in the task's own terms. */
+function pluralizeUnitLabel(label: string, count: number) {
+  const clean = label.trim() || "task";
+  const lower = clean.toLowerCase();
+  return count === 1 || lower.endsWith("s") ? lower : `${lower}s`;
+}
+
 export function calculateDailyWork(task: Task) {
   const remaining = getRemainingUnits(task);
+  const label = pluralizeUnitLabel(task.unitLabel, remaining);
   if (remaining <= 0) {
     return { unitsPerDay: 0, daysLeft: 0, message: "Finished. Keep this as revision only." };
   }
@@ -79,7 +93,7 @@ export function calculateDailyWork(task: Task) {
     return {
       unitsPerDay: remaining,
       daysLeft: null,
-      message: `${remaining} units left. Add a due date for a realistic daily target.`,
+      message: `${remaining} ${label} left. Add a due date for a realistic daily target.`,
     };
   }
 
@@ -88,7 +102,7 @@ export function calculateDailyWork(task: Task) {
     return {
       unitsPerDay: remaining,
       daysLeft,
-      message: `Due now. You need to clear ${remaining} units today.`,
+      message: `Due now. You need to clear ${remaining} ${label} today.`,
     };
   }
 
@@ -96,7 +110,7 @@ export function calculateDailyWork(task: Task) {
   return {
     unitsPerDay,
     daysLeft,
-    message: `${unitsPerDay.toFixed(1)} units per day keeps this on track.`,
+    message: `${unitsPerDay.toFixed(1)} ${pluralizeUnitLabel(task.unitLabel, unitsPerDay)} per day keeps this on track.`,
   };
 }
 
@@ -179,7 +193,7 @@ function getDueSoonTasks(tasks: Task[]) {
   });
 }
 
-function getExamPressure(exams: Exam[]) {
+export function getExamPressure(exams: Exam[]) {
   return exams.reduce((penalty, exam) => {
     const dueIn = daysUntil(exam.examDate);
     if (dueIn < 0 || dueIn > 10) return penalty;
