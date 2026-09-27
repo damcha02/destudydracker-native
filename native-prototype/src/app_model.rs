@@ -123,7 +123,7 @@ impl AppModel {
         let selected_mode = 1;
 
         Self {
-            title: "Study Tracker Native Prototype".to_string(),
+            title: crate::platform::identity::window_title(),
             status: "Stage 8: Slint adapter driving renderer-independent timer core".to_string(),
             timer: AppTimer::new(selected_mode, &modes[selected_mode]),
             dashboard: DashboardSnapshot::build(DashboardScenario::Typical, DEFAULT_HISTORY_POINTS),

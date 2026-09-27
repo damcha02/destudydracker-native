@@ -13,6 +13,28 @@ resolver = "2"
 [dependencies]
 study-tracker-core = { path = "crates/study-tracker-core" }
 slint = { version = "1.17.1", default-features = false, features = ["compat-1-2", "std", "accessibility", "backend-winit", "renderer-femtovg"] }
+# Platform-path resolution (Stage 13 shell). Small, no async runtime, no transitive bloat; chosen
+# over hand-rolled %LOCALAPPDATA% lookups so path logic is auditable in one place. Not used by
+# study-tracker-core.
+dirs = "6"
+# Logging facade. Already resolved transitively via slint -> i-slint-core, added here directly
+# only to call the macros; adds no new crate to the dependency tree.
+log = "0.4"
+# Timestamp formatting for the log file. Already resolved transitively via slint -> i-slint-core
+# (its date/time widgets); reused here for the same reason, adds no new crate.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+[target.'cfg(windows)'.dependencies]
+# MessageBoxW fallback for fatal startup errors once the release build has no console (Stage 13,
+# see src/platform/startup_error.rs). windows-sys is a thin FFI-declarations crate (no codegen
+# beyond what's referenced) and is already resolved multiple times transitively by winit/glutin.
+windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
 
 [build-dependencies]
 slint-build = "1.17.1"
+
+[target.'cfg(windows)'.build-dependencies]
+# Embeds the application icon and version/identity resource (assets/branding/app.rc) into the
+# Windows executable (Stage 13). No-op build dependency on other platforms; kept target-gated so
+# Linux/macOS builds never pull it in.
+embed-resource = "3"

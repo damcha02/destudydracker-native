@@ -180,6 +180,11 @@ export component MainWindow inherits Window {
     private property <length> timer-size: min(300px, max(236px, root.main-width - 120px));
 
     title: root.app-title;
+    // Window/taskbar icon (Stage 13). Byte-identical copy of production's own
+    // desktop/src-tauri/icons/icon.png — provenance and hashes in
+    // docs/stage13-production-shell.md. Fixes the Stage 12 finding that WM_GETICON returned
+    // nothing (no window icon set).
+    icon: @image-url("../assets/branding/icon.png");
     // Preferred (not fixed) size so the window is resizable; Stage 10 needs this for responsive checks.
     preferred-width: 1220px;
     preferred-height: 820px;

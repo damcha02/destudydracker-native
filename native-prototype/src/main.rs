@@ -1,10 +1,23 @@
+// Release builds get the Windows GUI subsystem (no console window); debug builds keep the
+// console subsystem so `cargo run`/`cargo test` and any eprintln!/panic output stay visible
+// during development. This is the standard Rust idiom for the split (the same pattern Tauri's
+// own generated `main.rs` uses in `desktop/src-tauri/src/main.rs`). No effect on non-Windows
+// targets. See docs/stage13-production-shell.md, "Windows GUI-subsystem handling".
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
+
 mod app_model;
 mod dashboard;
 mod map;
 mod map_adapter;
+mod platform;
 
 use app_model::{format_clock, AppCommand, AppModel, TimerStatus};
 use dashboard::{format_minutes, AxisMark, DashboardScenario};
+use platform::error::StartupError;
+use platform::{config, identity, logging, paths::AppPaths};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -15,7 +28,38 @@ const RUNNING_UPDATE_INTERVAL: Duration = Duration::from_millis(100);
 
 slint::include_modules!();
 
-fn main() -> Result<(), slint::PlatformError> {
+fn main() -> std::process::ExitCode {
+    match run() {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) => {
+            report_fatal_startup_error(&error);
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+/// All of startup up to and including the Slint event loop. Kept as one `Result`-returning
+/// function (Stage 13 brief §9: "use `Result` propagation rather than widespread panics") so
+/// every failure path — path resolution, logging, window/renderer creation — reports through the
+/// same `StartupError` and the same fallback in `report_fatal_startup_error`, instead of a raw
+/// panic that a release build's missing console would swallow.
+fn run() -> Result<(), StartupError> {
+    let app_paths = AppPaths::resolve()?;
+    app_paths.ensure_created()?;
+    let log_path = logging::init(&app_paths)?;
+    logging::install_panic_hook();
+
+    let runtime_config = config::RuntimeConfig::from_env();
+    log::info!(
+        "{} {} (by {}) starting; renderer={}; log file: {}",
+        identity::DISPLAY_NAME,
+        identity::version(),
+        identity::ORGANIZATION,
+        runtime_config.renderer.slint_backend_report(),
+        log_path.display(),
+    );
+    config::log_active_benchmark_overrides();
+
     let mut model = AppModel::stage_four_timer_preview();
     model.apply(AppCommand::MarkPresentationReady);
     let model = Rc::new(RefCell::new(model));
@@ -33,7 +77,24 @@ fn main() -> Result<(), slint::PlatformError> {
         .map(|spec| map_adapter::start_bench(&window, &map, &spec));
     bind_model_callbacks(&window, Rc::clone(&model), Rc::clone(&refresh_timer));
     let _diagnostics = install_diagnostics(&window);
-    window.run()
+
+    log::info!("first window created; entering the event loop");
+    window.run()?;
+    log::info!("event loop exited normally");
+    Ok(())
+}
+
+/// Last-resort reporting for a startup failure. Always logs (if logging made it far enough to
+/// initialize) and always writes to stderr (harmless even with no console attached); on Windows
+/// also shows a native message box, since a release build's missing console means stderr alone
+/// would otherwise be genuinely invisible to the user. Kept out of `study-tracker-core` and out
+/// of the normal `run()` path — this only runs once, at the very end, on the way out.
+fn report_fatal_startup_error(error: &StartupError) {
+    let message = format!("{} failed to start:\n\n{error}", identity::DISPLAY_NAME);
+    log::error!("{message}");
+    eprintln!("{message}");
+    #[cfg(windows)]
+    platform::startup_error::show_fatal_error(identity::DISPLAY_NAME, &message);
 }
 
 static FRAMES_RENDERED: AtomicU64 = AtomicU64::new(0);
