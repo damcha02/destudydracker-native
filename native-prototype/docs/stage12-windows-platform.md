@@ -4,7 +4,7 @@
 
 Is the native architecture (Rust + Slint 1.17.1 + Winit + FemtoVG, renderer-independent `study-tracker-core`) genuinely suitable for a **Windows-first** Study Tracker?
 
-**Verdict: PASS WITH CONCERNS.** Everything below was measured on one real Windows PC (specs next section). Linux figures from Stages 9–11 appear only as historical context and are never used as Windows baselines. Windows memory is reported with Windows metrics, never called PSS.
+**Verdict: PASS WITH CONCERNS.** Everything below was measured on one real Windows PC (specs next section). Linux figures from Stages 9–11 appear only as historical context and are never used as Windows baselines. Windows memory is reported with Windows metrics, never called PSS. A later section, **"Production Tauri/WebView2 same-machine comparison"**, adds a controlled A/B against the existing production app on this same PC (the verdict stays PASS WITH CONCERNS).
 
 The shape of the result: the everyday workload (timer running for hours, dashboard, idle) is excellent once one real defect found in this stage is fixed; the map is good; the concerns are emoji sequences, untested IME, incomplete accessibility, missing window icon / console subsystem, wheel tuning, and an open renderer decision for heavy vector data.
 
@@ -44,6 +44,8 @@ Rust and the MSVC Build Tools were **not installed** at the start; they were ins
 | `scripts/memory-retention-windows.ps1` | extreme-geometry retention experiment |
 | `scripts/long-run-windows.ps1` | multi-phase long-running timer time series |
 | `scripts/renderer-everyday-windows.ps1` | per-renderer startup / memory / timer CPU |
+| `scripts/win-tree.ps1` | whole-application process-tree metrics (ancestry, roles, per-PID CPU deltas, GPU engine counters); used for the production comparison |
+| `scripts/ab-everyday-windows.ps1`, `ab-longrun-windows.ps1`, `ab-startup-windows.ps1` | identical A/B phases, 56-minute time series and PrintWindow first-paint startup for native and production (production only with an isolated WebView2 profile) |
 | `docs/stage12-windows-platform.md` | this document |
 
 Production `desktop/` was not touched. Nothing was committed or pushed. The Skia experiment lives in a scratch copy outside the repository; the repository's `Cargo.toml` / `Cargo.lock` are unchanged.
@@ -317,7 +319,7 @@ No Windows-specific code was written beyond measurement tooling. Rust has direct
 
 ## Production Tauri comparison
 
-**Skipped**, deliberately. `desktop/` has no `node_modules` and no Tauri build output, and this machine has no Node/npm; building it would install dependencies inside the production directory, which must stay read-only. The WebView2 runtime (153.0.4234.48) is present, so a comparison is possible later from a separate clone or with explicit permission. No Windows comparison against Tauri/WebView2 exists yet; Linux WebKit numbers must not be used for it.
+**Done in a follow-up pass**, see "Production Tauri/WebView2 same-machine comparison" below (initially this was skipped because Node/npm were missing and building would create `node_modules` inside `desktop/`; that was later approved, `node_modules` is gitignored, and no tracked production file changed). Linux WebKit numbers are still never used for it.
 
 ## Tooling pitfalls found (kept here so nobody repeats them)
 
@@ -339,7 +341,7 @@ No Windows-specific code was written beyond measurement tooling. Rust has direct
 4. **Ship polish**: no icon, console window.
 5. **Renderer decision** open for dense vector data; FemtoVG shows large driver commit and retained high-water memory on extreme geometry; Skia has a single-huge-path cliff.
 6. **One fast machine**: no low-end / integrated-GPU / laptop-battery / HiDPI-laptop evidence; software rendering results especially do not transfer.
-7. Untested: touchpad, multi-monitor DPI transitions, real DPI change, multiline IME, sleep/hibernate, sessions over 1 h, cold boot startup, Tauri/WebView2 baseline.
+7. Untested: touchpad, multi-monitor DPI transitions, real DPI change, multiline IME, sleep/hibernate, sessions over 1 h, cold boot startup. (The Tauri/WebView2 same-machine baseline now exists; its own limits are listed in that section.)
 8. Map data provenance/licence still undocumented in production (Stage 11).
 
 ## Recommendation for Stage 12.5 (not implemented)
@@ -351,4 +353,225 @@ No Windows-specific code was written beyond measurement tooling. Rust has direct
 5. **Wheel tuning** in shared code, and a real precision-touchpad check on a laptop.
 6. **Low-end validation**: repeat the everyday scripts on an integrated-GPU laptop (battery drain during a multi-hour timer, HiDPI, software fallback), then decide renderer strategy; evaluate Skia-D3D12 further only if geometry-heavy features are planned, including the single-path case.
 7. **Extend the long run**: multi-hour session including sleep/resume and wall-clock change; optional 1 Hz tick while hidden.
-8. **Baseline against production**: Windows Tauri/WebView2 process tree, Private Bytes, startup and idle CPU, built from a clean clone with the user's permission.
+8. **Baseline against production**: done (see the production comparison section); the remaining production-side gap is a run against the *installed* v0.1.65 release and against a real, populated user profile.
+
+# Production Tauri/WebView2 same-machine comparison
+
+Question: what does the **existing production Study Tracker** (`desktop/`, Tauri + WebView2) cost on **this exact PC**, compared with the native Slint/Rust prototype, for *equivalent* behaviour? Everything above is preserved; this section adds evidence. Both apps ran on the same i9-14900KF / RTX 5070 Ti / Windows 11 machine, with identical metric definitions and measurement windows.
+
+> This comparison establishes **relative overhead on this machine**. It does **not** prove equivalent absolute behaviour on a low-power laptop CPU, and it must not be used to extrapolate battery life.
+
+## Production build environment
+
+| Item | Value |
+| --- | --- |
+| Source | `desktop/` at the repository HEAD (app version **0.1.58**, `package.json` / `tauri.conf.json`), read-only |
+| Node / npm | v24.19.0 / 11.17.0, installed via `winget install OpenJS.NodeJS.LTS` (none were installed before) |
+| Dependencies | `npm ci` (lockfile-preserving); **no tracked file changed** |
+| Build command | `npx tauri build --no-bundle` (tauri-cli 2.10.1, Rust 1.98.1). `--no-bundle` was used because `bundle.createUpdaterArtifacts: true` would otherwise require an updater signing key; it builds the real **release** application executable (`npm run build` = `tsc -b && vite build`, then a release Rust build, about 1 m 14 s) without installers |
+| Output | `desktop\src-tauri\target\release\app.exe`, **16,698,880 bytes (15.9 MB)** |
+| Runtime dependency | WebView2 Evergreen Runtime **153.0.4234.48** (machine-wide, shared with other apps; not part of the exe) |
+| Stack | Tauri 2.11.1 (`tray-icon`); plugins: single-instance, updater, notification, dialog, opener, process, log; React 19 UI; hides to tray on close |
+| Not benchmarked | Vite dev server, `tauri dev`, debug builds, browser-hosted UI |
+
+Version note: the user's **installed** Study Tracker is **v0.1.65** (`%LOCALAPPDATA%\Study Tracker\app.exe`, 19,957,760 bytes), *newer* than the repository source (0.1.58). It was **not launched** (launching it could trigger its updater) and is not measured. Findings apply to the repository build; whether 0.1.65 behaves the same is unknown.
+
+Production timer facts (read-only source inspection): the countdown is **deadline-based** (`endsAt` / `startedAt`, so correctness does not depend on tick counting); the UI ticks with `setInterval` every **500 ms** while running (`useTimerTick`); state is persisted every **30 s** (`timerPersistence.ts`) plus on transitions; each tick also syncs a tray title/tooltip through IPC; persistence is **WebView2 `localStorage`**.
+
+## Production data / profile conditions
+
+A real user profile exists on this PC (`%LOCALAPPDATA%\com.damcha.studytracker`, 488 files, 71.5 MB). It was **never used**. Every production run used a **fresh, isolated WebView2 profile** via the documented `WEBVIEW2_USER_DATA_FOLDER` environment variable (no production change, no invented flags). Isolation was **verified**, not assumed:
+
+- Before any launch, a SHA-256 fingerprint of every file path/size/mtime under the real data folder and the install folder was recorded; after all launches (dozens, over about 2 hours) both fingerprints were **identical** (`725CA163...` 488 files, `88C7A598...` 2 files).
+- The isolated profiles received all writes (about 190 files per fresh profile); no `%APPDATA%\com.damcha.studytracker` folder was created.
+- Fresh-profile defaults mean: Dashboard landing view, "Cockpit" layout, "Modern" style, western garden, telemetry **off** (opt-in), social not logged in. Network activity was limited to the automatic update check, which only shows a "New update available" notice; **"install" was never clicked** (`downloadAndInstall` is user-click only in the source, and a `--no-bundle` build is not an installed package). The single-instance plugin requires that no other Study Tracker instance is running; none was.
+- Consequence for memory numbers: an empty profile is the best case; a populated real profile (courses, sessions, notes) will use more renderer memory. Not measured.
+
+## Process tree identification
+
+The tree is derived by **strict parent-PID ancestry from the fresh root `app.exe` PID** (CIM `Win32_Process`). **25 unrelated `msedgewebview2` processes** from other applications were running throughout and were never included. Every launch produced the same **8-process tree**:
+
+| Process | Role (from command line) | Private WS (MB, timer running) | Private Bytes (MB) |
+| --- | --- | --- | --- |
+| `app.exe` | Tauri root (Rust shell, tray, IPC) | **4.2** | 6.0 |
+| `msedgewebview2` | browser process | 35.6 | 44.5 |
+| `msedgewebview2` | **renderer** (React app, JS heap, DOM) | **51.3** | 62.1 |
+| `msedgewebview2` | **GPU process** | **46.2** | 183.2 |
+| `msedgewebview2` | utility: NetworkService | 7.4 | 13.2 |
+| `msedgewebview2` | utility: AudioService | 3.5 | 9.0 |
+| `msedgewebview2` | utility: StorageService | 3.0 | 8.2 |
+| `msedgewebview2` | crashpad handler | 1.8 | 2.9 |
+| **Tree total** | | **about 153** | **about 329** |
+
+**Root-only vs whole tree** (why the tree is mandatory): the root `app.exe` alone is **4.2 MB Private WS and 0 % CPU** in every state; the tree is about 153 MB and 13-23 % CPU in the animated states. Measuring only the root would understate production memory by roughly **35x** and hide all CPU.
+
+## Measurement methodology
+
+Same Windows metrics as the native work, aggregated over the tree: **Working Set** (sum over the tree; *includes pages shared with other WebView2 processes and the runtime DLLs, so it overstates unique physical use, about 500 MB for production*), **Private Working Set** (the main metric), **Private Bytes** (commit), **CPU** as an interval (sum of per-PID CPU-time deltas / wall time, 100 % = one logical core, so 14.6 % of a core = 0.46 % of this 32-thread machine), thread count, process count. **GPU** utilization from the Windows `GPU Engine` performance counters (sum over all engines of all tree PIDs; percent of one engine). Windows metrics are never called PSS.
+
+Scripts (all under `native-prototype/scripts/`, none in `desktop/`): `win-tree.ps1` (ancestry tree, roles, per-PID CPU deltas, GPU counters, main-window selection), `ab-everyday-windows.ps1` (identical phases for both targets), `ab-longrun-windows.ps1` (time series), `ab-startup-windows.ps1` (startup).
+
+Pitfalls encountered and corrected (results below use only the corrected versions):
+
+- Selecting the Exam preset in production adds an "Exam minutes" row that moves the Start button; a first pilot clicked the wrong place and its "running" numbers were actually an idle timer. Discarded; the running state was verified by screenshot in every reported run.
+- Production Start enters an **immersive full-window timer** (tabs hidden, Pause moves); leaving it needs the small "Minimize" button. Both the immersive and the regular Timer-tab states were measured.
+- A screen-pixel "first paint" probe gave about 55 ms production startups (false positives from the transparent, unpainted WebView2 host and an overlapping window). It was replaced by `PrintWindow(PW_RENDERFULLCONTENT)` of the window's own content, verified (production is all-dark with 0 bright samples at +0.3 s and painted by +1.5 s). The bogus numbers were never used.
+- `@(Get-TreeDetail ...).Count` returned 1 (array wrapping); fixed.
+
+Fresh native reference (same script, same day) versus the previously accepted native values, to show the methodology is aligned:
+
+| Metric | Accepted earlier | Fresh reference |
+| --- | --- | --- |
+| Idle Private WS (launch + 20 s) | 42.6-43.5 MB | 42.9 MB |
+| After visiting views / timer running | 47-48 (Timer) / 53-55 | 53.4 / 53.5 |
+| Timer visible CPU | 0.26 % | 0.42 % |
+| Timer minimized CPU | 0.23 % (0 frames) | 0.21 % |
+| Startup | about 164 ms (first-frame notifier) | 206 ms (PrintWindow probe, about 40 ms probe cost) |
+
+## Production results
+
+All rows: whole process tree, 8 processes. Private WS in MB.
+
+**Baseline P0-P3** (fresh profile; production lands on the Dashboard):
+
+| Point | Threads | Working Set | Private WS | Private Bytes | CPU | GPU |
+| --- | --- | --- | --- | --- | --- | --- |
+| P0 launch + 20 s (Dashboard) | 277 | 540 | 187.4 | 341 | **22.4 %** | 0.7 % |
+| P1 idle 60 s (Dashboard) | 275 | 535 | 178.9 | 333 | **22.0 %** | 0.7 % |
+| P2 after navigating Planner, Vault, Timer | 274 | 501 | 143.3 | 371 | 0.56 % | 0 % |
+| P3 / T0 Timer tab, ready | 271 | 503 | 143.5 | 371 | 0.30 % | 0 % |
+
+**Timer T0-T5** (Exam 120 min; running state verified by screenshot):
+
+| State | Threads | Private WS | Private Bytes | CPU | GPU |
+| --- | --- | --- | --- | --- | --- |
+| T1a running, immersive timer | 269 | 148.3 | 365 | **12.7 %** | 0.8 % |
+| T1 running, regular Timer tab | 267 | 152.8 | 329 | **14.6 %** | 0.7 % |
+| T2 running, Planner visible | 268 | 155.6 | 425 | **1.2 %** | 0 % |
+| T3 running, **minimized** (from the Timer tab) | 263 | 150.7 | 329 | **13.3 %** | 1.8 % |
+| T3b running, minimized from Planner | 269 | 150.7 | 348 | 0.57 % | 0 % |
+| T5a restored, running | 280 | 151.8 | 331 | 15.2 % | 0.7 % |
+| T4 **paused** (Timer tab) | 280 | 151.5 | 307 | **16.3 %** | 0.7 % |
+| T5b resumed, running | 281 | 155.2 | 339 | 16.5 % | 0.7 % |
+| D1 running, Dashboard visible | 270 | 156.4 | 323 | **23.2 %** | 0.7 % |
+
+Run-to-run variation is real: repeating the visible running state gave 12.7-19.5 % across separate runs and the long run below averaged 15.3 %. Treat these as **about 13-19 %**.
+
+**Timer correctness after minimize/restore**: verified for both apps. Production restored showed 117:23 (expected about 117:22) in the short run and 76:20 (expected about 76:19) after the 15-minute minimize in the long run; native showed 117:59 (expected about 117:58). All within about 1 s (part of it click latency): the deadline math holds in both, independent of rendering.
+
+## Why production burns CPU: attributed to source, not guessed
+
+Measured pattern: **ready timer 0.3 %; running 13-19 %; paused 16 %; running but another view visible 0.4-1.2 %; minimized from the Timer tab 13 %; minimized from Planner 0.6 %.** Source (read-only, `desktop/src/App.css`):
+
+- `.timer-face.running::before` runs `animation: aura-pulse 3s ease-in-out infinite` and `.timer-face.paused::before` runs the same on a 6 s cycle (lines about 11234-11249): a large (`inset: -80px`) radial-gradient layer scaled continuously. It is **not** gated by `prefers-reduced-motion`. That matches "no cost when ready, cost when running **and when paused**, no cost when another view is showing".
+- The default Dashboard's *Knowledge Garden* uses `gkSway / gkTwinkle / gkDrift / gkFlap` infinite animations (lines about 7980-7998), gated by `prefers-reduced-motion: no-preference`. Controlled test in the isolated profile: default western-garden Dashboard **21-27 %**, the "Japanese Garden" variant of the same Dashboard (empty in a fresh profile) **0.23 % (0.07 % minimized)**.
+- The CPU sits in the **WebView2 GPU process (11-15 %) and renderer (5-7 %)**, not in the Tauri root. GPU *engine* utilization is small (0.7-3.9 %); the cost is compositing/driver work on the CPU side.
+- **Minimizing does not stop it**: 13 % while minimized from the Timer tab. WebView2 keeps rendering while the host window is minimized unless the host reports it hidden, and the app does not stop its own animations. (That the runtime is not throttled is an inference from behaviour; the animation in the source and the measurements are direct.)
+
+These are **application-level CSS/animation choices**, not inherent Tauri cost: the Tauri root is 4 MB / 0 % CPU, and production drops to 0.3-1 % whenever no animated element is on screen. They are, however, the *shipped behaviour* of the "leave the timer running" scenario this project cares most about. Nothing was modified or "fixed" in production.
+
+## Production long-run timer (56 min, isolated profile, 112 samples)
+
+Same phase design as the native long run (idle 3 / timer visible 12 / other view A 8 / other view B 8 / minimized 15 / restored 4 / paused 6 min; production "timer visible" is the immersive timer, other views are Planner and Vault, minimization is from the regular Timer tab; sampled every 30 s). Process count was **8 in every sample**; threads 245-270.
+
+| Phase | Production Private WS (first to last) | Production Private Bytes | Production CPU avg (max) | Prod GPU | Native fixed Private WS | Native fixed CPU |
+| --- | --- | --- | --- | --- | --- | --- |
+| Idle, Timer ready | 142.5 to 136.1 | 355 to 348 | 0.27 % (0.73) | 0 % | 43.8 to 43.7 | 0 % |
+| Timer running, visible | 144.8 to 150.2 | 362 to 368 | **15.3 % (16.5)** | 0.71 % | 48.4, 47.4, then 52.4 | 0.26 % |
+| Other view A (Planner / native Dashboard) | 154.8 to 150.4 | 432 to 408 | 0.54 % (0.86) | 0 % | 53.2 | 0.07 % |
+| Other view B (Vault / native Map) | 154.1 to 152.3 | 371 to 367 | 0.63 % (0.90) | 0 % | 54.4 | 0.09 % |
+| **Minimized (15 min)** | 154.2 to 152.4 | 339 to 336 | **15.9 % (18.4)** | **3.94 %** | 57.4 to 57.5 | 0.23 % |
+| Restored, Timer visible | 152.9 to 152.0 | 337 to 334 | 16.9 % (17.8) | 0.65 % | 57.5 | 0.24 % |
+| Paused | 152.1 to 152.1 | 312 | **15.5 % (16.5)** | 0.63 % | 57.5 | 0.03 % |
+
+Memory shape (production): warm-up from about 136-143 MB (idle) to about 150-155 MB during the first ~16 minutes (including the first navigation), then a **plateau of 150-154 MB for the remaining ~40 minutes**; Private Bytes fluctuated 312-432 MB with no trend and ended at its minimum (312). **No monotonic growth**; ordinary caching/warm-up, not a leak, at least over 56 minutes. Native fixed showed the same *shape* (plateau) at a lower level.
+
+## Startup (same first-paint probe, spawn to painted window, 10 warm launches)
+
+| App | Profile | min | median | mean | max | Processes at +3 s |
+| --- | --- | --- | --- | --- | --- | --- |
+| Native | n/a | 200 ms | **206 ms** | 208 ms | 233 ms | 1 |
+| Production | warm (reused isolated profile) | 830 ms | **835 ms** | 836 ms | 845 ms | 8 |
+| Production | fresh profile (3 launches) | 1204 ms | 1208 ms | 1210 ms | 1218 ms | 8 |
+
+WebView2 warm caching matters: a fresh profile costs about 370 ms more than a reused one. The probe reports "first painted window" (text pixels present), not "React app fully interactive". The native figure is about 40 ms above its first-frame-notifier figure (about 164 ms) because of the probe overhead; both apps use the same probe.
+
+## Optional feature measurements (reported separately; not baseline)
+
+- **Wabi-Sabi style** (isolated profile; Styles tab): Timer ready 0.16 %; Timer running **14.8 %** visible and **14.6 % minimized** (same aura animation, same immersive layout); Private WS 149-154 MB. It is not cheaper than the modern style for a running timer. A "Today view with timer running" reading was discarded (not a reliable view state).
+- **Sakura petals** are `jg-petal` elements (`jgFall` infinite animation, `prefers-reduced-motion` gated) of the *Japanese Garden* dashboard variant and only exist when the garden has content; in a fresh profile the Japanese Garden is empty ("Bare Ground") and costs 0.23 %. Measuring falling petals would require seeding garden data, which was out of scope; **not measured**.
+- Default western-garden Dashboard: 21-27 % CPU (see attribution above).
+
+## Same-machine A/B (equivalent measurements only)
+
+Native = fresh reference from this run; production = repository build with a fresh isolated profile; whole process tree; PrivWS / PrivB in MB; CPU in % of one core.
+
+| Scenario | Native procs | Prod procs | Native PrivWS | Prod PrivWS | Native PrivB | Prod PrivB | Native CPU | Prod CPU |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Idle, as launched (native Timer / prod Dashboard landing) | 1 | 8 | 42.8 | 178.9 | 115 | 333 | 0 % | 22.0 % |
+| Idle, Timer tab ready, after navigation | 1 | 8 | 53.4 | 143.5 | 132 | 371 | 0 % | 0.30 % |
+| After navigation | 1 | 8 | 53.4 | 143.3 | 133 | 371 | 0 % | 0.56 % |
+| Timer visible, running | 1 | 8 | 53.5 | 152.8 | 132 | 329 | 0.42 % | 14.6 % |
+| Timer running, other view visible | 1 | 8 | 53.8 | 155.6 | 133 | 425 | 0.07 % | 1.2 % |
+| Timer running, **minimized** | 1 | 8 | 53.9 | 150.7 | 104 | 329 | 0.21 % | 13.3 % |
+| Timer running, minimized from another view | 1 | 8 | 53.6 | 150.7 | 109 | 348 | 0 % | 0.57 % |
+| Timer **paused** | 1 | 8 | 52.7 | 151.5 | 128 | 307 | 0 % | 16.3 % |
+| Dashboard visible, timer running | 1 | 8 | 54.0 | 156.4 | 134 | 323 | 0.08 % | 23.2 % |
+| Startup (median, first paint) | | | 206 ms | 835 ms | | | | |
+| Threads (typical) | 5-8 | about 270 | | | | | | |
+
+Native views visited in "after navigation" were Dashboard and Text spike; production's were Planner and Vault. In "other view visible" the native view is the Dashboard while production's is Planner (production's Dashboard is listed separately). GPU utilization: production 0.6-3.9 %, native 0-0.17 %.
+
+## Ratios and differences (careful around zero)
+
+| Comparison | Result |
+| --- | --- |
+| Private WS, Timer running visible | production **2.9x** native (152.8 / 53.5) |
+| Private WS, idle as launched | **4.2x** (178.9 / 42.8) |
+| Private WS, minimized / paused | **2.8x / 2.9x** |
+| Private WS, long-run plateau vs native fixed plateau | production 150-154 vs native 47-57: **2.7-3.2x** |
+| Private Bytes (commit), running visible / minimized / paused | 2.5x / 3.2x / 2.4x |
+| Whole-tree Working Set (includes shared pages) | about 510 MB vs about 90 MB (overstates the real difference; use Private WS) |
+| Processes / threads | 8 vs 1 / about 270 vs 5-8 |
+| Startup (warm profile, first paint) | **4.1x** (835 vs 206 ms); fresh profile 5.9x |
+| CPU, Timer running visible | native 0.42 %, production 14.6 %: **+14.2 percentage points** |
+| CPU, running **minimized** | native 0.21 %, production 13.3 %: **+13.1 pp** (long run: 15.9 % vs 0.23 %, **+15.7 pp**) |
+| CPU, paused | native 0 %, production 16.3 %: **+16.3 pp** |
+| CPU, ready/idle on the Timer tab | native 0 %, production 0.30 %: +0.3 pp (essentially equal) |
+| CPU, running with a static other view showing | native 0.07 %, production 1.2 % (long run 0.54-0.63 %): +0.5 to +1.1 pp |
+| CPU, Dashboard | native 0.08 %, production 23.2 %: +23 pp |
+
+No "x-times" figure is given for CPU because the native values are near 0. On a machine-wide scale, 14.6 % of one core is 0.46 % of this 32-thread CPU; the relative overhead is what matters here.
+
+## Architectural interpretation (only what the evidence separates)
+
+- **Memory (the multi-process model)**: about **2.8x more Private WS** for the same timer. Where it sits: renderer about 51 MB (the React app), GPU process about 46 MB (with 183 MB of driver commit), browser process about 36 MB, plus utilities. The Tauri/Rust shell itself is only **4 MB**. So the extra memory is the **WebView2 runtime's multi-process architecture plus the JS/DOM app**, not Tauri's shell. This is inherent to a WebView design and independent of how well the app code is written: even a static page pays the browser/GPU/network/storage process baseline. The native app pays a single process and its own GL/driver state (43 MB idle).
+- **Timer CPU (the app, not the architecture, in this case)**: production's 13-19 % while running/paused/minimized comes from **specific infinite CSS animations that the app ships**, and it is 0.3-1 % whenever those are not on screen. A WebView app *could* avoid it (pause animations when hidden, static aura). What the architecture does contribute is that **minimizing does not stop rendering by default** and that a compositor + GPU process are involved even for a decorative glow. The native prototype does no work when nothing changes (0 rendered frames minimized after the Stage 12 fix) because Slint only repaints on invalidation and a running countdown is only a text change once per second.
+- **Startup (the runtime)**: 4x slower is dominated by starting the WebView2 runtime processes and loading/hydrating a large React bundle; a fresh profile adds about 370 ms.
+- **Timer correctness and background behaviour**: correctness is deadline-based and independent of rendering in **both** apps; production's timer keeps running exactly right while minimized; it just does needless rendering.
+- **Feature equivalence**: production also does persistence (30 s heartbeat), tray sync, notifications, an update check and much more; the native prototype's timer has none of that yet. Part of the production cost (persistence, IPC) would reappear in a real native app; the measured production CPU is dominated by the animations, not by those features, but this was not isolated.
+- **Architectural vs implementation**: fewer processes, lower private memory, faster start and zero idle rendering are mostly architectural. The 13-19 % CPU gap is mostly a **production implementation choice** that the same team could fix cheaply *without* migrating; native gets "no work when nothing changes" by default rather than by discipline.
+
+## Limitations
+
+1. **Powerful desktop CPU/GPU** (24 cores, RTX 5070 Ti): absolute CPU percentages are small in machine terms; a low-power laptop would show larger percentages and battery impact, but that is not measured and not extrapolated.
+2. Production was measured with a **fresh, empty profile** on **repository version 0.1.58**; the user's installed 0.1.65 and a populated profile were not measured (both could differ; memory likely higher).
+3. The native prototype is not feature-equivalent (no persistence, tray, notifications, network); the native "timer" is the Stage 7/8 prototype.
+4. Windows Working Set totals for WebView2 include shared pages; Private WS is the fair metric. Interval CPU windows were 20-30 s; run-to-run production CPU varied by about 3 percentage points.
+5. First-paint startup is a PrintWindow probe, not "fully interactive"; native probe overhead is about 40 ms.
+6. Sakura petals, real-data dashboards, the tray/hide-to-tray path, notifications, sleep/hibernate and production runs longer than 56 minutes were not measured.
+7. Production continues WebView2 rendering while minimized; this is a measured fact, the runtime-level reason is inferred.
+
+## Production source integrity
+
+`git diff -- desktop` is **empty** (exit 0) and no production file content changed. `git status` still lists `desktop/src-tauri/Cargo.toml` as modified: the Tauri CLI rewrote the file at build start (mtime changed) with **byte-identical content** (1009 bytes, `cmp` identical to `HEAD:desktop/src-tauri/Cargo.toml`), and with `core.autocrlf=true` git keeps flagging the re-saved LF file. It was deliberately **not** "restored" (that would only rewrite it). Generated, gitignored artefacts under `desktop/`: `node_modules/`, `dist/`, `src-tauri/gen/`, `src-tauri/target/`. Nothing under `desktop/` may be committed. Real user data and the installed app were verified unchanged (fingerprints above).
+
+## Updated Stage 12 verdict
+
+**PASS WITH CONCERNS (unchanged).** The production comparison **strengthens** the case for the native Windows architecture on the dimensions this product cares about (2.8-4x lower private memory, 4x faster start, one process instead of eight, no rendering work when nothing changes, correct background timer), but the verdict is about **native Windows feasibility**, and the concerns that hold it at "with concerns" are all native-side and untouched by this comparison: Japanese IME untested (blocked), emoji variation-selector tofu, incomplete accessibility (map not focusable, no live regions, Narrator not exercised), no window icon and a console window, wheel tuning, an open renderer decision for dense geometry, and validation only on one fast machine. A large production advantage is useful evidence, not a substitute for those items.
+
+## Stage 12.5 recommendation (not implemented)
+
+**Is the evidence now sufficient to make the architecture decision?** **Yes**, for the decision itself: keep Rust for the shared core, adopt **Slint + Winit + FemtoVG** as the Windows-first UI baseline, keep the renderer swappable behind the same UI (Skia-D3D12 as a documented fallback), and treat "no per-tick model replacement, deadline-based timers, repaint only on change" as architectural rules. The same-machine A/B removes the biggest open question (how the current production compares on real Windows/WebView2), and the native measurements are self-consistent across builds. The missing **low-power Windows laptop** should be a **pre-release validation gate**, not a blocker for the decision or for starting migration, because (a) the relative ranking is unlikely to invert (production also pays the 8-process/GPU baseline on a laptop), and (b) what a laptop would add is the *size* of the battery/thermal difference, which does not change the architecture choice.
+
+Recommended Stage 12.5 scope: (1) freeze the architecture and record the decision with this evidence; (2) make the gating items explicit with owners: Japanese IME manual test, emoji VS16 root cause, Narrator/NVDA + map focus, window icon and GUI subsystem, wheel tuning; (3) schedule the low-power-laptop validation (battery drain over a multi-hour timer, integrated GPU, HiDPI, software-render fallback) before any public release; (4) define the migration order, starting with the timer + persistence + tray/notification adapters because they carry the "cheap to leave open" requirement; (5) optionally file the two production observations (infinite `aura-pulse` while running/paused and not stopped when minimized; western-garden Dashboard cost) as independent, non-blocking findings for the current production app, since fixing them does not require migration.
