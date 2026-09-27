@@ -5,9 +5,10 @@ mod map_adapter;
 
 use app_model::{format_clock, AppCommand, AppModel, TimerStatus};
 use dashboard::{format_minutes, AxisMark, DashboardScenario};
-use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 const RUNNING_UPDATE_INTERVAL: Duration = Duration::from_millis(100);
@@ -31,7 +32,61 @@ fn main() -> Result<(), slint::PlatformError> {
         .ok()
         .map(|spec| map_adapter::start_bench(&window, &map, &spec));
     bind_model_callbacks(&window, Rc::clone(&model), Rc::clone(&refresh_timer));
+    let _diagnostics = install_diagnostics(&window);
     window.run()
+}
+
+static FRAMES_RENDERED: AtomicU64 = AtomicU64::new(0);
+static TIMER_TICKS: AtomicU64 = AtomicU64::new(0);
+
+/// Diagnostic hooks (off by default; used by the Windows benchmark scripts):
+/// - `STUDY_NATIVE_STARTUP_REPORT=1` prints `FIRST_FRAME <ms since main>` once, after the first rendered frame.
+/// - `STUDY_NATIVE_FRAME_STATS=1` prints `STATS <secs> frames=<n> ticks=<n>` every 10 s: frames actually rendered
+///   and Rust timer-tick callbacks in that interval (shows how often the UI redraws / the model refreshes).
+///
+/// The returned timer must stay alive for the duration of the event loop.
+fn install_diagnostics(window: &MainWindow) -> Option<Timer> {
+    let startup = std::env::var_os("STUDY_NATIVE_STARTUP_REPORT").is_some();
+    let stats = std::env::var_os("STUDY_NATIVE_FRAME_STATS").is_some();
+    if !startup && !stats {
+        return None;
+    }
+    let started = Instant::now();
+    let mut reported = false;
+    let result = window.window().set_rendering_notifier(move |state, _| {
+        if matches!(state, slint::RenderingState::AfterRendering) {
+            FRAMES_RENDERED.fetch_add(1, Ordering::Relaxed);
+            if startup && !reported {
+                reported = true;
+                println!(
+                    "FIRST_FRAME {:.1}",
+                    started.elapsed().as_secs_f64() * 1000.0
+                );
+            }
+        }
+    });
+    if let Err(error) = result {
+        eprintln!("rendering notifier unavailable: {error}");
+    }
+    if !stats {
+        return None;
+    }
+    let timer = Timer::default();
+    let mut last = (0u64, 0u64);
+    timer.start(TimerMode::Repeated, Duration::from_secs(10), move || {
+        let now = (
+            FRAMES_RENDERED.load(Ordering::Relaxed),
+            TIMER_TICKS.load(Ordering::Relaxed),
+        );
+        println!(
+            "STATS {:.0} frames={} ticks={}",
+            started.elapsed().as_secs_f64(),
+            now.0 - last.0,
+            now.1 - last.1
+        );
+        last = now;
+    });
+    Some(timer)
 }
 
 /// Optional environment overrides so benchmarks and screenshots can start in a known state
@@ -143,6 +198,7 @@ fn sync_refresh_timer(window: &MainWindow, model: Rc<RefCell<AppModel>>, refresh
     let weak_window = window.as_weak();
     let timer_for_callback = Rc::clone(&refresh_timer);
     refresh_timer.start(TimerMode::Repeated, RUNNING_UPDATE_INTERVAL, move || {
+        TIMER_TICKS.fetch_add(1, Ordering::Relaxed);
         let now = Instant::now();
         model.borrow_mut().apply(AppCommand::Refresh(now));
         if let Some(window) = weak_window.upgrade() {
@@ -193,7 +249,9 @@ fn apply_model_to_window(window: &MainWindow, model: &AppModel, now: Instant) {
             index: index as i32,
         })
         .collect::<Vec<_>>();
-    window.set_modes(ModelRc::new(Rc::new(VecModel::from(modes))));
+    if !model_matches(&window.get_modes(), &modes) {
+        window.set_modes(ModelRc::new(Rc::new(VecModel::from(modes))));
+    }
 
     let notes = model
         .session_notes()
@@ -205,7 +263,20 @@ fn apply_model_to_window(window: &MainWindow, model: &AppModel, now: Instant) {
             confidence: note.confidence() as i32,
         })
         .collect::<Vec<_>>();
-    window.set_session_notes(ModelRc::new(Rc::new(VecModel::from(notes))));
+    if !model_matches(&window.get_session_notes(), &notes) {
+        window.set_session_notes(ModelRc::new(Rc::new(VecModel::from(notes))));
+    }
+}
+
+/// True when `current` already holds exactly `rows`. `apply_model_to_window` runs every 100 ms while the timer
+/// runs; installing a fresh model object each time makes Slint rebuild the repeaters and repaint (2 frames per
+/// tick, even minimized) although nothing changed (Stage 12 finding), so unchanged models are left alone.
+fn model_matches<T: Clone + PartialEq + 'static>(current: &ModelRc<T>, rows: &[T]) -> bool {
+    current.row_count() == rows.len()
+        && rows
+            .iter()
+            .enumerate()
+            .all(|(i, row)| current.row_data(i).as_ref() == Some(row))
 }
 
 const HISTORY_RANGES: [usize; 3] = [30, 365, 1_000];
@@ -481,5 +552,25 @@ fn format_duration_label(duration: Duration) -> String {
         format!("{minutes}m {seconds:02}s")
     } else {
         format!("{seconds}s")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn model_of(rows: &[i32]) -> ModelRc<i32> {
+        ModelRc::new(Rc::new(VecModel::from(rows.to_vec())))
+    }
+
+    /// The 100 ms timer refresh must not replace unchanged models (Stage 12: doing so repainted at 20 fps).
+    #[test]
+    fn model_matches_only_when_rows_are_identical() {
+        let current = model_of(&[1, 2, 3]);
+        assert!(model_matches(&current, &[1, 2, 3]));
+        assert!(!model_matches(&current, &[1, 2, 4]), "changed row");
+        assert!(!model_matches(&current, &[1, 2]), "shorter");
+        assert!(!model_matches(&current, &[1, 2, 3, 4]), "longer");
+        assert!(model_matches(&model_of(&[]), &[]), "empty equals empty");
     }
 }
