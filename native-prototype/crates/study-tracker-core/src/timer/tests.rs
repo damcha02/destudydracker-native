@@ -399,3 +399,120 @@ fn manual_save_event_keeps_session_identity_outside_core() {
     // The domain exposes ranges/context only. A persistence or app service must assign IDs.
     assert_eq!(timer.context, TimerContext::default());
 }
+
+// --- Stage 14: large clock jumps, sleep/suspend simulation, and clock-anomaly safety. ---
+// None of these sleep in the test process itself; a "jump" is just a `ClockObservation` far
+// from the previous one, which is exactly what a real suspend/resume produces (monotonic and
+// wall clocks both stop advancing while suspended, then resume from wherever they left off).
+
+#[test]
+fn focus_still_active_after_a_long_absence_shows_correct_remaining() {
+    let mut timer = focus_timer(); // 25 minutes = 1500s
+    timer.apply(TimerCommand::Start, clock(0));
+
+    // "Absence" here is simulated exactly like a real OS suspend: the next observation simply
+    // arrives with both clocks far ahead of the last one seen by the core; nothing in between
+    // was ever delivered, matching what actually happens across a real sleep/resume cycle.
+    let events = timer.apply(TimerCommand::ObserveTime, clock(600)); // 10 minutes later
+    assert!(events.is_empty(), "still well inside the countdown");
+    assert_eq!(timer.phase, TimerPhase::Study);
+    assert!(timer.running);
+    assert_eq!(timer.display_seconds(clock(600)), 1500 - 600);
+}
+
+#[test]
+fn duplicate_observation_after_completion_does_not_duplicate_the_session_range() {
+    let mut timer = exam_timer(); // 90 minutes = 5400s, no break phase to fall into
+    timer.apply(TimerCommand::Start, clock(0));
+
+    let first = timer.apply(TimerCommand::ObserveTime, clock(5400));
+    assert_eq!(
+        first
+            .iter()
+            .filter(|event| matches!(event, TimerEvent::SessionRangeReady { .. }))
+            .count(),
+        1
+    );
+    assert!(first
+        .iter()
+        .any(|event| matches!(event, TimerEvent::Completed { .. })));
+    assert_eq!(timer.phase, TimerPhase::Idle);
+    assert!(!timer.running);
+
+    // A second, later observation must be a pure no-op: the timer is already idle, so
+    // `observe_time`'s own `!self.running` guard short-circuits before any completion logic runs.
+    let second = timer.apply(TimerCommand::ObserveTime, clock(999_999));
+    assert!(second.is_empty());
+    let third = timer.apply(TimerCommand::ObserveTime, clock(1_000_000));
+    assert!(third.is_empty());
+}
+
+#[test]
+fn paused_gap_is_excluded_no_matter_how_large() {
+    let mut timer = focus_timer();
+    timer.apply(TimerCommand::Start, clock(0));
+    timer.apply(TimerCommand::Pause, clock(20));
+    assert_eq!(timer.remaining_seconds, 1500 - 20);
+
+    // A ten-year gap while paused - a real "left the laptop closed" scenario, not just a sleep.
+    let ten_years_secs = 10 * 365 * 24 * 3600;
+    timer.apply(TimerCommand::Resume, clock(ten_years_secs));
+    assert_eq!(
+        timer.display_seconds(clock(ten_years_secs + 5)),
+        1500 - 20 - 5
+    );
+}
+
+#[test]
+fn endless_reports_correct_elapsed_across_a_large_monotonic_jump() {
+    let mut timer = endless_timer();
+    timer.apply(TimerCommand::Start, clock(0));
+
+    let far_future = clock(100_000); // ~27.8 hours
+    assert_eq!(timer.display_seconds(far_future), 100_000);
+    assert_eq!(timer.phase, TimerPhase::Stopwatch);
+    assert!(timer.running);
+}
+
+#[test]
+fn backward_wall_clock_on_an_open_segment_clamps_to_zero_instead_of_underflowing() {
+    let mut timer = endless_timer();
+    timer.apply(TimerCommand::Start, clock(1_000));
+    // A wall-clock observation earlier than the segment's own start (e.g. an NTP step back)
+    // must not panic and must not report negative/underflowed active time.
+    let anomalous = ClockObservation::new(1_000_500, wall(500).unix_millis);
+    assert_eq!(timer.active_seconds(anomalous), 0);
+    // CompleteManually is guarded by `active_seconds(clock) == 0`, so it must safely no-op here
+    // rather than emit a bogus zero-length session.
+    let events = timer.apply(TimerCommand::CompleteManually, anomalous);
+    assert!(events.is_empty());
+    assert!(
+        timer.running,
+        "an anomalous clock must not silently end the session"
+    );
+}
+
+#[test]
+fn restore_drops_a_malformed_active_segment_instead_of_reporting_negative_duration() {
+    let mut timer = focus_timer();
+    timer.apply(TimerCommand::Start, clock(0));
+    let mut snapshot = timer.snapshot_for_persistence(clock(30));
+    // Corrupt the one segment as a buggy/partial write might: ended_at before started_at.
+    snapshot.active_segments = vec![ActiveSegment {
+        started_at: wall(30),
+        ended_at: Some(wall(10)),
+    }];
+    snapshot.running = false;
+    snapshot.last_alive_at = Some(wall(30));
+
+    let outcome = restore_timer(RestoreInput {
+        snapshot,
+        existing_recovered_keys: Vec::new(),
+        now: clock(30),
+    });
+
+    assert!(
+        outcome.timer.active_segments.is_empty(),
+        "the malformed segment must be dropped, not kept with a negative/garbage duration"
+    );
+}

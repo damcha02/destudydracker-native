@@ -13,6 +13,7 @@ mod dashboard;
 mod map;
 mod map_adapter;
 mod platform;
+mod timer_controller;
 
 use app_model::{format_clock, AppCommand, AppModel, TimerStatus};
 use dashboard::{format_minutes, AxisMark, DashboardScenario};
@@ -180,6 +181,23 @@ fn apply_startup_options(window: &MainWindow, model: &mut AppModel) {
     }) {
         window.window().set_size(slint::LogicalSize::new(w, h));
     }
+    // Stage 14 benchmark hooks: let the Windows perf scripts (T14-0..T14-6, see
+    // docs/stage14-timer-productionization.md) put the timer into a running state without any
+    // synthetic mouse/keyboard input at all - starting the app is enough. Both are no-ops unless
+    // set; `STUDY_NATIVE_TIMER_AUTOSTART` alone starts whatever mode is already selected.
+    if let Some(index) = std::env::var("STUDY_NATIVE_TIMER_MODE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
+        model.apply(AppCommand::SetMode(index));
+    }
+    if std::env::var_os("STUDY_NATIVE_TIMER_AUTOSTART").is_some() {
+        let now = Instant::now();
+        model.apply(AppCommand::Start(now));
+        if std::env::var_os("STUDY_NATIVE_TIMER_AUTOPAUSE").is_some() {
+            model.apply(AppCommand::Pause(now));
+        }
+    }
 }
 
 /// `STUDY_NATIVE_MAP_LEVEL=0..10` selects the initial map stress level (see `StressLevel::ALL`).
@@ -263,7 +281,19 @@ fn sync_refresh_timer(window: &MainWindow, model: Rc<RefCell<AppModel>>, refresh
         let now = Instant::now();
         model.borrow_mut().apply(AppCommand::Refresh(now));
         if let Some(window) = weak_window.upgrade() {
-            apply_model_to_window(&window, &model.borrow(), now);
+            // Stage 14 finding: Slint/the FemtoVG-Winit backend does not itself skip a repaint
+            // just because the window is minimized - every scalar property write below
+            // (`set_timer_text`, `set_timer_progress`, ...) still triggered a real render pass
+            // each tick even while minimized, at ~2 fps and a small but real CPU cost, exactly
+            // the class of waste Rule A already eliminated for unchanged *models*. Correctness
+            // never depended on this push (it's already timestamp-derived - see `AppModel::clock`
+            // and `study_tracker_core::timer`), so it's safe to skip entirely while minimized;
+            // the very next tick after restore pushes fresh, correct values within one
+            // `RUNNING_UPDATE_INTERVAL` (100 ms), matching Rule B in
+            // docs/stage12_5-architecture-freeze.md, section 10.
+            if !window.window().is_minimized() {
+                apply_model_to_window(&window, &model.borrow(), now);
+            }
             if !model.borrow().timer().is_running() {
                 timer_for_callback.stop();
             }

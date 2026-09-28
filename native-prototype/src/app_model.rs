@@ -1,8 +1,8 @@
 use crate::dashboard::{DashboardScenario, DashboardSnapshot};
+use crate::timer_controller::{NullPersistencePort, TimerApplicationEffect, TimerController};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use study_tracker_core::timer::{
-    ClockObservation, CompletionReason, TimerCommand, TimerConfig, TimerContext, TimerEvent,
-    TimerMode, TimerPhase, TimerState as CoreTimerState,
+    ClockObservation, TimerCommand, TimerConfig, TimerMode, TimerPhase,
 };
 
 const DEFAULT_HISTORY_POINTS: usize = 30;
@@ -22,11 +22,16 @@ pub struct AppModel {
     wall_origin_unix_millis: i64,
 }
 
+/// The Slint-facing timer wrapper. As of Stage 14 this is a thin read/effect-forwarding shell
+/// around [`TimerController`] (application layer) - it owns no transition logic of its own; see
+/// `docs/stage14-timer-productionization.md` for the full architecture writeup.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppTimer {
-    selected_mode: usize,
-    core: CoreTimerState,
-    last_completion: Option<TimerPhase>,
+    controller: TimerController,
+    /// Effects the most recent command produced, for callers (tests today; a future Stage 16
+    /// session subsystem) that want to react to a completed session range. Cleared and replaced
+    /// on every `apply_events`, never accumulated across commands.
+    pending_effects: Vec<TimerApplicationEffect>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,6 +59,7 @@ pub enum ModeTone {
     DeepWork,
     Exam,
     Demo,
+    Endless,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,6 +125,21 @@ impl AppModel {
                 ModeTone::Exam,
             ),
             TimerModeConfig::new("Demo", "00:10", 0, 10, 0, TimerMode::Focus, ModeTone::Demo),
+            // Matches production's Endless mode (desktop/src/App.tsx: mode "endless" / phase
+            // "stopwatch" - counts up, no end time). Appended last rather than in production's
+            // own picker order so every existing index-based test/reference above stays valid;
+            // Sprint and Custom (production's other two presets) are deliberately not
+            // reproduced yet - see docs/stage14-timer-productionization.md, "Production
+            // divergences".
+            TimerModeConfig::new(
+                "Endless",
+                "Counts up",
+                0,
+                0,
+                0,
+                TimerMode::Endless,
+                ModeTone::Endless,
+            ),
         ];
         let selected_mode = 1;
 
@@ -162,7 +183,7 @@ impl AppModel {
                 self.status = "Stage 8 timer UI is backed by study-tracker-core".to_string();
             }
             AppCommand::Start(now) => {
-                let command = if self.timer.core.phase == TimerPhase::Idle {
+                let command = if self.timer.controller.core().phase == TimerPhase::Idle {
                     TimerCommand::Start
                 } else {
                     TimerCommand::Resume
@@ -170,18 +191,20 @@ impl AppModel {
                 self.apply_timer_command(command, now);
             }
             AppCommand::Pause(now) => self.apply_timer_command(TimerCommand::Pause, now),
-            AppCommand::Reset => {
-                self.timer
-                    .core
-                    .apply(TimerCommand::Reset, self.clock(self.clock_origin));
-                self.timer.last_completion = None;
-            }
+            AppCommand::Reset => self.apply_timer_command(TimerCommand::Reset, self.clock_origin),
             AppCommand::SetMode(index) => {
                 if index < self.modes.len()
-                    && self.timer.core.phase == TimerPhase::Idle
-                    && !self.timer.core.running
+                    && self.timer.controller.core().phase == TimerPhase::Idle
+                    && !self.timer.controller.core().running
                 {
-                    self.timer = AppTimer::new(index, &self.modes[index]);
+                    // Reinitialize in place rather than building a whole new `AppTimer`: this
+                    // keeps the same persistence port instance across a mode switch instead of
+                    // silently discarding it (relevant once Stage 15's real adapter replaces
+                    // `NullPersistencePort` - a fresh port per mode switch would be a bug then).
+                    self.timer
+                        .controller
+                        .reinitialize(index, self.modes[index].core_config());
+                    self.timer.pending_effects.clear();
                 }
             }
             AppCommand::Refresh(now) => self.apply_timer_command(TimerCommand::ObserveTime, now),
@@ -253,46 +276,44 @@ impl AppModel {
 
     fn apply_timer_command(&mut self, command: TimerCommand, now: Instant) {
         let clock = self.clock(now);
-        let events = self.timer.core.apply(command, clock);
-        self.timer.apply_events(&events);
+        self.timer.pending_effects = self.timer.controller.apply(command, clock);
+    }
+
+    /// Application effects (session ranges, completions) produced by the most recent timer
+    /// command. Not yet consumed by anything (Stage 16 owns the session subsystem that will);
+    /// exposed now so tests - and this crate's own future callers - can observe routing without
+    /// waiting for that stage. Cleared and replaced on every command, never accumulated.
+    /// Exercised by this module's own tests below; not yet called from `main.rs` (there is no
+    /// Slint-facing surface for a session range until Stage 16 exists).
+    #[allow(dead_code)]
+    pub fn timer_effects(&self) -> &[TimerApplicationEffect] {
+        &self.timer.pending_effects
     }
 }
 
 impl AppTimer {
     fn new(selected_mode: usize, mode: &TimerModeConfig) -> Self {
         Self {
-            selected_mode,
-            core: CoreTimerState::new(mode.core_config(), TimerContext::default()),
-            last_completion: None,
-        }
-    }
-
-    fn apply_events(&mut self, events: &[TimerEvent]) {
-        for event in events {
-            if let TimerEvent::Completed { phase, reason } = event {
-                if *reason == CompletionReason::CountdownElapsed {
-                    self.last_completion = Some(*phase);
-                }
-            }
-            if matches!(
-                event,
-                TimerEvent::Started { .. } | TimerEvent::Resumed { .. } | TimerEvent::Reset
-            ) {
-                self.last_completion = None;
-            }
+            controller: TimerController::new(
+                selected_mode,
+                mode.core_config(),
+                Box::new(NullPersistencePort),
+            ),
+            pending_effects: Vec::new(),
         }
     }
 
     pub fn selected_mode(&self) -> usize {
-        self.selected_mode
+        self.controller.selected_mode()
     }
 
     pub fn status(&self) -> TimerStatus {
-        if self.last_completion.is_some() && self.core.phase == TimerPhase::Idle {
+        let core = self.controller.core();
+        if self.controller.last_completion().is_some() && core.phase == TimerPhase::Idle {
             TimerStatus::Completed
-        } else if self.core.running {
+        } else if core.running {
             TimerStatus::Running
-        } else if self.core.phase == TimerPhase::Idle {
+        } else if core.phase == TimerPhase::Idle {
             TimerStatus::Ready
         } else {
             TimerStatus::Paused
@@ -300,46 +321,45 @@ impl AppTimer {
     }
 
     pub fn status_label(&self) -> &'static str {
-        match self.core.phase {
-            TimerPhase::Break if self.core.running => "Break",
+        let core = self.controller.core();
+        match core.phase {
+            TimerPhase::Break if core.running => "Break",
             TimerPhase::Break => "Break paused",
-            TimerPhase::Exam if self.core.running => "Exam",
-            TimerPhase::Stopwatch if self.core.running => "Stopwatch",
+            TimerPhase::Exam if core.running => "Exam",
+            TimerPhase::Stopwatch if core.running => "Stopwatch",
             _ => self.status().as_str(),
         }
     }
 
     pub fn is_running(&self) -> bool {
-        self.core.running
+        self.controller.core().running
     }
 
     pub fn duration(&self) -> Duration {
-        let seconds = match self.core.phase {
-            TimerPhase::Break => self.core.config.break_seconds,
-            TimerPhase::Exam => self.core.config.exam_seconds,
-            TimerPhase::Stopwatch => self
-                .core
-                .display_seconds(ClockObservation::new(0, 0))
-                .max(1),
-            _ => self.core.config.study_seconds,
+        let core = self.controller.core();
+        let seconds = match core.phase {
+            TimerPhase::Break => core.config.break_seconds,
+            TimerPhase::Exam => core.config.exam_seconds,
+            TimerPhase::Stopwatch => core.display_seconds(ClockObservation::new(0, 0)).max(1),
+            _ => core.config.study_seconds,
         };
         Duration::from_secs(seconds.max(1))
     }
 
     pub fn remaining(&self, clock: ClockObservation) -> Duration {
-        Duration::from_secs(self.core.display_seconds(clock))
+        Duration::from_secs(self.controller.core().display_seconds(clock))
     }
 
     pub fn elapsed(&self, clock: ClockObservation) -> Duration {
-        if self.core.phase == TimerPhase::Stopwatch {
-            Duration::from_secs(self.core.display_seconds(clock))
+        if self.controller.core().phase == TimerPhase::Stopwatch {
+            Duration::from_secs(self.controller.core().display_seconds(clock))
         } else {
             self.duration().saturating_sub(self.remaining(clock))
         }
     }
 
     pub fn progress_fraction(&self, clock: ClockObservation) -> f32 {
-        if self.core.phase == TimerPhase::Stopwatch {
+        if self.controller.core().phase == TimerPhase::Stopwatch {
             return 1.0;
         }
         let total = self.duration().as_secs_f32();
@@ -417,6 +437,9 @@ impl ModeTone {
             ModeTone::DeepWork => 1,
             ModeTone::Exam => 2,
             ModeTone::Demo => 3,
+            // Falls through Theme.tone()'s default branch (ui/theme.slint) to Theme.primary -
+            // deliberately reused rather than adding a 5th Slint accent color for one preset.
+            ModeTone::Endless => 4,
         }
     }
 }
@@ -622,6 +645,59 @@ mod tests {
         model.apply(AppCommand::SetMode(0));
 
         assert_eq!(model.timer().selected_mode(), 1);
+    }
+
+    #[test]
+    fn endless_mode_is_selectable_and_counts_up_without_an_end_time() {
+        let now = Instant::now();
+        let mut model = model_at(now);
+        let endless_index = model
+            .modes()
+            .iter()
+            .position(|m| m.label() == "Endless")
+            .expect("Endless must be one of the selectable modes");
+
+        model.apply(AppCommand::SetMode(endless_index));
+        assert_eq!(model.timer().selected_mode(), endless_index);
+        assert_eq!(model.timer().status(), TimerStatus::Ready);
+
+        model.apply(AppCommand::Start(now));
+        assert_eq!(model.timer().status(), TimerStatus::Running);
+        assert_eq!(
+            model
+                .timer()
+                .remaining(model.clock(now + Duration::from_secs(90))),
+            Duration::from_secs(90),
+            "Endless counts elapsed time up, not down"
+        );
+    }
+
+    #[test]
+    fn completion_exposes_a_session_range_application_effect() {
+        let now = Instant::now();
+        let mut model = model_at(now);
+
+        // Demo preset (index 3): 10s study, no break, so completion goes straight to idle with
+        // exactly one recorded session range - the same effect a real UI/Stage 16 would consume.
+        model.apply(AppCommand::SetMode(3));
+        model.apply(AppCommand::Start(now));
+        model.apply(AppCommand::Refresh(now + Duration::from_secs(11)));
+
+        let ranges = model
+            .timer_effects()
+            .iter()
+            .filter(|effect| {
+                matches!(
+                    effect,
+                    crate::timer_controller::TimerApplicationEffect::SessionRangeReady { .. }
+                )
+            })
+            .count();
+        assert_eq!(ranges, 1);
+
+        // The next, unrelated command's effects must not still carry the old completion.
+        model.apply(AppCommand::Reset);
+        assert!(model.timer_effects().is_empty());
     }
 
     #[test]
