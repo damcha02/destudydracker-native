@@ -1,0 +1,67 @@
+{
+  "app": "study-tracker",
+  "backupVersion": 2,
+  "exportedAt": "2026-09-27T12:00:00.000Z",
+  "state": {
+    "sessions": [
+      {
+        "id": "session-fixture-1",
+        "courseId": null,
+        "kind": "study",
+        "startedAt": "2026-09-20T09:00:00.000Z",
+        "endedAt": "2026-09-20T09:52:00.000Z",
+        "minutes": 52
+      }
+    ],
+    "courses": [
+      {
+        "id": "course-fixture-1",
+        "name": "Sample Course (fixture data, not real)",
+        "targetGrade": 5
+      }
+    ],
+    "semesters": [],
+    "tasks": [],
+    "exams": [],
+    "calendarEntries": [],
+    "lifetimeStudyMinutes": 52,
+    "lifetimeStudySessions": 1,
+    "activeTab": "timer",
+    "settings": {
+      "accent": "sage",
+      "dailyGoalMinutes": 120,
+      "telemetryEnabled": false
+    },
+    "social": {
+      "userId": "fixture-user-id-not-real",
+      "deviceSecret": "fixture-device-secret-not-real",
+      "friendCode": "FIX-0000"
+    },
+    "timer": {
+      "phase": "study",
+      "mode": "focus",
+      "remainingSeconds": 1800,
+      "loggedSplitSeconds": 0,
+      "activeSegments": [
+        { "startedAt": "2026-09-27T11:30:00.000Z", "endedAt": null }
+      ],
+      "running": true,
+      "studyMinutes": 52,
+      "breakMinutes": 17,
+      "examMinutes": 90,
+      "startedAt": "2026-09-27T11:30:00.000Z",
+      "endsAt": "2026-09-27T12:22:00.000Z",
+      "semesterId": null,
+      "courseId": "course-fixture-1",
+      "taskId": null,
+      "goal": "Review sample chapter (fixture)",
+      "learned": "",
+      "blocker": "",
+      "nextStep": "",
+      "confidence": 4,
+      "presetLabel": "Deep Work",
+      "lastAliveAt": "2026-09-27T11:45:00.000Z"
+    }
+  },
+  "preferences": {}
+}

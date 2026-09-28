@@ -26,7 +26,7 @@
 //! **What is explicitly not final**: [`NullPersistencePort`], the only port wired into `main.rs`
 //! today. It performs no I/O and does not survive a restart. That is intentional - Stage 15 owns
 //! the real, durable adapter (a file-backed store, per `docs/stage12_5-architecture-freeze.md`
-//! ยง13-ยง14), and it must implement [`TimerPersistencePort`] and replace `NullPersistencePort` in
+//! section 13-section 14), and it must implement [`TimerPersistencePort`] and replace `NullPersistencePort` in
 //! `main.rs`, not introduce a second, parallel persistence architecture.
 
 #[cfg(test)]
@@ -232,6 +232,19 @@ impl TimerController {
                 self.last_completion = None;
             }
         }
+    }
+
+    /// Writes the controller's current state to the port immediately, bypassing the usual "only
+    /// on a core-emitted `PersistenceRequested` event" rule. Used exactly once by the Stage 15
+    /// adapter layer, right after [`TimerController::restore`]: writing the recovered/reset (or
+    /// merely time-adjusted) state back immediately closes the window where an unclean exit right
+    /// after a restart could otherwise see the exact same stale snapshot on the *next* restart and
+    /// recover the exact same abandoned session a second time (see
+    /// `docs/stage15-persistence-migration.md`, "Idempotence"). Not called anywhere else -
+    /// ordinary running/paused ticks must keep going through `apply`, never this.
+    pub fn force_persist(&mut self, clock: ClockObservation) {
+        self.persistence
+            .persist(self.core.snapshot_for_persistence(clock));
     }
 
     pub fn selected_mode(&self) -> usize {
@@ -472,6 +485,27 @@ mod tests {
         );
         assert_eq!(calls[1].phase, TimerPhase::Study);
         assert!(!calls[1].running);
+    }
+
+    #[test]
+    fn force_persist_writes_immediately_without_a_command() {
+        let log = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        struct SharedLogPort(std::rc::Rc<std::cell::RefCell<Vec<TimerSnapshot>>>);
+        impl TimerPersistencePort for SharedLogPort {
+            fn persist(&mut self, snapshot: TimerSnapshot) {
+                self.0.borrow_mut().push(snapshot);
+            }
+            fn load(&self) -> Option<TimerSnapshot> {
+                self.0.borrow().last().cloned()
+            }
+        }
+        let mut ctl = TimerController::new(0, focus_config(), Box::new(SharedLogPort(log.clone())));
+        assert!(
+            log.borrow().is_empty(),
+            "construction alone must not persist"
+        );
+        ctl.force_persist(clock(0));
+        assert_eq!(log.borrow().len(), 1);
     }
 
     // --- Recovery: every case fed as an injected snapshot, per the Stage 14 brief -----------

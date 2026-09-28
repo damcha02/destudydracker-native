@@ -1,8 +1,10 @@
 use crate::dashboard::{DashboardScenario, DashboardSnapshot};
-use crate::timer_controller::{NullPersistencePort, TimerApplicationEffect, TimerController};
+use crate::timer_controller::{
+    NullPersistencePort, TimerApplicationEffect, TimerController, TimerPersistencePort,
+};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use study_tracker_core::timer::{
-    ClockObservation, TimerCommand, TimerConfig, TimerMode, TimerPhase,
+    ClockObservation, RestoreInput, TimerCommand, TimerConfig, TimerMode, TimerPhase, TimerSnapshot,
 };
 
 const DEFAULT_HISTORY_POINTS: usize = 30;
@@ -88,15 +90,19 @@ pub enum AppCommand {
 }
 
 impl AppModel {
+    /// The Stage 4-14 demo/test entry point: always starts fresh idle with `NullPersistencePort`
+    /// (no real storage). `main.rs`'s real runtime uses `with_timer_persistence` instead as of
+    /// Stage 15; this constructor is kept, `#[allow(dead_code)]`-marked, purely because every
+    /// existing test in this module (and `main.rs`'s own dashboard/map/text-view regression
+    /// checks - see docs/stage14-timer-productionization.md section 28) still deliberately builds its
+    /// model this way, since none of them need real storage.
+    #[allow(dead_code)]
     pub fn stage_four_timer_preview() -> Self {
         Self::stage_four_timer_preview_with_clock(Instant::now(), system_unix_millis())
     }
 
-    fn stage_four_timer_preview_with_clock(
-        clock_origin: Instant,
-        wall_origin_unix_millis: i64,
-    ) -> Self {
-        let modes = vec![
+    fn default_modes() -> Vec<TimerModeConfig> {
+        vec![
             TimerModeConfig::new(
                 "Pomodoro",
                 "25 / 5",
@@ -140,7 +146,38 @@ impl AppModel {
                 TimerMode::Endless,
                 ModeTone::Endless,
             ),
-        ];
+        ]
+    }
+
+    fn default_session_notes() -> Vec<SessionNote> {
+        vec![
+            SessionNote::new(
+                "Analysis problem set",
+                "General focus · 52 min · confidence 4/5",
+                52,
+                4,
+            ),
+            SessionNote::new(
+                "Physics derivation",
+                "Exam prep · 90 min · confidence 3/5",
+                90,
+                3,
+            ),
+            SessionNote::new(
+                "Linear algebra review",
+                "Pomodoro · 25 min · confidence 5/5",
+                25,
+                5,
+            ),
+        ]
+    }
+
+    #[allow(dead_code)] // only reachable via stage_four_timer_preview - see its own doc comment
+    fn stage_four_timer_preview_with_clock(
+        clock_origin: Instant,
+        wall_origin_unix_millis: i64,
+    ) -> Self {
+        let modes = Self::default_modes();
         let selected_mode = 1;
 
         Self {
@@ -152,29 +189,88 @@ impl AppModel {
             dashboard_points: DEFAULT_HISTORY_POINTS,
             plot_size: (600.0, 300.0),
             modes,
-            session_notes: vec![
-                SessionNote::new(
-                    "Analysis problem set",
-                    "General focus · 52 min · confidence 4/5",
-                    52,
-                    4,
-                ),
-                SessionNote::new(
-                    "Physics derivation",
-                    "Exam prep · 90 min · confidence 3/5",
-                    90,
-                    3,
-                ),
-                SessionNote::new(
-                    "Linear algebra review",
-                    "Pomodoro · 25 min · confidence 5/5",
-                    25,
-                    5,
-                ),
-            ],
+            session_notes: Self::default_session_notes(),
             clock_origin,
             wall_origin_unix_millis,
         }
+    }
+
+    /// The real Stage 15 runtime entry point: builds the same modes/dashboard/session-notes as
+    /// [`AppModel::stage_four_timer_preview`], but wires the given (real, durable) persistence
+    /// port into the timer instead of `NullPersistencePort`, and - if the port already has a
+    /// snapshot to offer - restores from it instead of starting fresh idle. Returns any
+    /// application effects an abandoned/recovered session produced, so `main.rs` can log (Stage
+    /// 16 will actually consume) them.
+    ///
+    /// Not used by any test in this module - every existing test deliberately keeps using
+    /// `stage_four_timer_preview`'s `NullPersistencePort` path, since none of them need real
+    /// storage and the trait-object indirection would only make them harder to read. This
+    /// function's own storage behavior is exercised by `persistence::timer_port`'s and
+    /// `persistence::migration`'s tests, and by `TimerController::restore`'s tests directly.
+    pub fn with_timer_persistence(
+        persistence: Box<dyn TimerPersistencePort>,
+    ) -> (Self, Vec<TimerApplicationEffect>) {
+        Self::with_timer_persistence_and_clock(persistence, Instant::now(), system_unix_millis())
+    }
+
+    fn with_timer_persistence_and_clock(
+        persistence: Box<dyn TimerPersistencePort>,
+        clock_origin: Instant,
+        wall_origin_unix_millis: i64,
+    ) -> (Self, Vec<TimerApplicationEffect>) {
+        let modes = Self::default_modes();
+        let default_selected_mode = 1;
+        let loaded_snapshot = persistence.load();
+
+        let (timer, effects) = match loaded_snapshot {
+            Some(snapshot) => {
+                // Pick whichever preset tile the restored config actually matches, by label
+                // first (exact preset match) and by mode second (same kind of timer, different
+                // preset - e.g. a custom duration production doesn't have a native tile for
+                // yet), falling back to the ordinary default so the UI never ends up with no
+                // tile selected at all.
+                let selected_mode = modes
+                    .iter()
+                    .position(|mode| mode.label() == snapshot.config.preset_label)
+                    .or_else(|| modes.iter().position(|mode| mode.mode() == snapshot.mode))
+                    .unwrap_or(default_selected_mode);
+                AppTimer::restore(
+                    selected_mode,
+                    snapshot,
+                    persistence,
+                    ClockObservation::new(0, wall_origin_unix_millis),
+                )
+            }
+            None => (
+                AppTimer::new_with_persistence(
+                    default_selected_mode,
+                    &modes[default_selected_mode],
+                    persistence,
+                ),
+                Vec::new(),
+            ),
+        };
+
+        (
+            Self {
+                title: crate::platform::identity::window_title(),
+                status: "Stage 8: Slint adapter driving renderer-independent timer core"
+                    .to_string(),
+                timer,
+                dashboard: DashboardSnapshot::build(
+                    DashboardScenario::Typical,
+                    DEFAULT_HISTORY_POINTS,
+                ),
+                dashboard_scenario: DashboardScenario::Typical,
+                dashboard_points: DEFAULT_HISTORY_POINTS,
+                plot_size: (600.0, 300.0),
+                modes,
+                session_notes: Self::default_session_notes(),
+                clock_origin,
+                wall_origin_unix_millis,
+            },
+            effects,
+        )
     }
 
     pub fn apply(&mut self, command: AppCommand) {
@@ -292,15 +388,50 @@ impl AppModel {
 }
 
 impl AppTimer {
+    #[allow(dead_code)] // only reachable via AppModel::stage_four_timer_preview (tests only)
     fn new(selected_mode: usize, mode: &TimerModeConfig) -> Self {
+        Self::new_with_persistence(selected_mode, mode, Box::new(NullPersistencePort))
+    }
+
+    fn new_with_persistence(
+        selected_mode: usize,
+        mode: &TimerModeConfig,
+        persistence: Box<dyn TimerPersistencePort>,
+    ) -> Self {
         Self {
-            controller: TimerController::new(
-                selected_mode,
-                mode.core_config(),
-                Box::new(NullPersistencePort),
-            ),
+            controller: TimerController::new(selected_mode, mode.core_config(), persistence),
             pending_effects: Vec::new(),
         }
+    }
+
+    /// Builds an `AppTimer` from a previously persisted snapshot (Stage 15's real startup path).
+    /// Immediately writes the resulting (recovered-and-reset, or merely time-adjusted) state back
+    /// through the port - see `TimerController::force_persist`'s doc comment for exactly why: it
+    /// closes the window where a crash right after this restart could otherwise see the same
+    /// stale snapshot again on the *next* restart and recover the same abandoned session twice.
+    fn restore(
+        selected_mode: usize,
+        snapshot: TimerSnapshot,
+        persistence: Box<dyn TimerPersistencePort>,
+        now: ClockObservation,
+    ) -> (Self, Vec<TimerApplicationEffect>) {
+        let (mut controller, effects) = TimerController::restore(
+            selected_mode,
+            RestoreInput {
+                snapshot,
+                existing_recovered_keys: Vec::new(),
+                now,
+            },
+            persistence,
+        );
+        controller.force_persist(now);
+        (
+            Self {
+                controller,
+                pending_effects: effects.clone(),
+            },
+            effects,
+        )
     }
 
     pub fn selected_mode(&self) -> usize {
@@ -415,6 +546,10 @@ impl TimerModeConfig {
         self.tone
     }
 
+    pub fn mode(&self) -> TimerMode {
+        self.mode
+    }
+
     fn duration(&self) -> Duration {
         Duration::from_secs(self.minutes * 60 + self.seconds)
     }
@@ -494,7 +629,14 @@ fn system_unix_millis() -> i64 {
 mod tests {
     use super::{format_clock, AppCommand, AppModel, TimerStatus};
     use crate::dashboard::DashboardScenario;
+    use crate::timer_controller::TimerPersistencePort;
+    use std::cell::RefCell;
+    use std::rc::Rc;
     use std::time::{Duration, Instant};
+    use study_tracker_core::timer::{
+        ActiveSegment, TimerConfig, TimerContext, TimerMode, TimerPhase, TimerSnapshot,
+        WallTimestamp,
+    };
 
     fn model_at(now: Instant) -> AppModel {
         AppModel::stage_four_timer_preview_with_clock(now, 0)
@@ -698,6 +840,165 @@ mod tests {
         // The next, unrelated command's effects must not still carry the old completion.
         model.apply(AppCommand::Reset);
         assert!(model.timer_effects().is_empty());
+    }
+
+    // --- Stage 15: real-persistence wiring (TimerController's own restore/recovery correctness
+    // is exercised exhaustively in timer_controller.rs; these tests cover the one thing that
+    // lives only here - that AppModel::with_timer_persistence wires a loaded snapshot into the
+    // right preset tile and force-persists exactly once after a restore). ------------------------
+
+    struct FixedLoadPort {
+        initial: Option<TimerSnapshot>,
+        persisted: Rc<RefCell<Vec<TimerSnapshot>>>,
+    }
+    impl TimerPersistencePort for FixedLoadPort {
+        fn persist(&mut self, snapshot: TimerSnapshot) {
+            self.persisted.borrow_mut().push(snapshot);
+        }
+        fn load(&self) -> Option<TimerSnapshot> {
+            self.initial.clone()
+        }
+    }
+
+    fn wall(seconds: i64) -> WallTimestamp {
+        WallTimestamp::from_unix_millis(seconds * 1000)
+    }
+
+    #[test]
+    fn with_timer_persistence_starts_fresh_and_writes_nothing_when_the_port_has_no_snapshot() {
+        let persisted = Rc::new(RefCell::new(Vec::new()));
+        let port = FixedLoadPort {
+            initial: None,
+            persisted: persisted.clone(),
+        };
+        let (model, effects) =
+            AppModel::with_timer_persistence_and_clock(Box::new(port), Instant::now(), 1_000_000);
+        assert!(effects.is_empty());
+        assert_eq!(model.timer().status(), TimerStatus::Ready);
+        assert_eq!(
+            model.timer().selected_mode(),
+            1,
+            "the ordinary default preset"
+        );
+        assert!(
+            persisted.borrow().is_empty(),
+            "a fresh start with nothing to restore must not write anything on its own"
+        );
+    }
+
+    #[test]
+    fn with_timer_persistence_restores_a_running_deep_work_session_into_its_own_preset_tile() {
+        let persisted = Rc::new(RefCell::new(Vec::new()));
+        let now_wall = 1_000_000i64;
+        let snapshot = TimerSnapshot {
+            phase: TimerPhase::Study,
+            mode: TimerMode::Focus,
+            remaining_seconds: 3000,
+            logged_split_seconds: 0,
+            active_segments: vec![ActiveSegment {
+                started_at: wall(now_wall - 100),
+                ended_at: None,
+            }],
+            running: true,
+            config: TimerConfig {
+                mode: TimerMode::Focus,
+                study_seconds: 52 * 60,
+                break_seconds: 17 * 60,
+                exam_seconds: 90 * 60,
+                preset_label: "Deep Work".to_string(),
+            },
+            context: TimerContext::default(),
+            started_at: Some(wall(now_wall - 100)),
+            ends_at: Some(wall(now_wall + 3000)),
+            last_alive_at: Some(wall(now_wall - 1)),
+        };
+        let port = FixedLoadPort {
+            initial: Some(snapshot),
+            persisted: persisted.clone(),
+        };
+
+        let (model, effects) = AppModel::with_timer_persistence_and_clock(
+            Box::new(port),
+            Instant::now(),
+            now_wall * 1000,
+        );
+
+        assert!(
+            effects.is_empty(),
+            "a still-running, non-expired restore has nothing to report"
+        );
+        assert_eq!(
+            model.timer().selected_mode(),
+            1,
+            "restores into the Deep Work tile by matching its preset_label"
+        );
+        assert_eq!(model.timer().status(), TimerStatus::Running);
+        assert_eq!(
+            persisted.borrow().len(),
+            1,
+            "restore must force-persist exactly once, even when nothing else changed"
+        );
+    }
+
+    #[test]
+    fn with_timer_persistence_recovers_an_expired_session_exactly_once_and_saves_the_reset_state() {
+        let persisted = Rc::new(RefCell::new(Vec::new()));
+        let now_wall = 1_000_000i64;
+        let snapshot = TimerSnapshot {
+            phase: TimerPhase::Study,
+            mode: TimerMode::Focus,
+            remaining_seconds: 0,
+            logged_split_seconds: 0,
+            active_segments: vec![ActiveSegment {
+                started_at: wall(now_wall - 2000),
+                ended_at: None,
+            }],
+            running: true,
+            config: TimerConfig::default(),
+            context: TimerContext::default(),
+            started_at: Some(wall(now_wall - 2000)),
+            ends_at: Some(wall(now_wall - 10)), // already expired before "now"
+            last_alive_at: Some(wall(now_wall - 2000)),
+        };
+        let port = FixedLoadPort {
+            initial: Some(snapshot),
+            persisted: persisted.clone(),
+        };
+
+        let (model, effects) = AppModel::with_timer_persistence_and_clock(
+            Box::new(port),
+            Instant::now(),
+            now_wall * 1000,
+        );
+
+        assert_eq!(
+            model.timer().status(),
+            TimerStatus::Ready,
+            "recovered back to idle"
+        );
+        let session_ranges = effects
+            .iter()
+            .filter(|effect| {
+                matches!(
+                    effect,
+                    crate::timer_controller::TimerApplicationEffect::SessionRangeReady { .. }
+                )
+            })
+            .count();
+        assert_eq!(
+            session_ranges, 1,
+            "recovery must report exactly one session range"
+        );
+        assert_eq!(
+            persisted.borrow().len(),
+            1,
+            "the recovered-and-reset state must be force-persisted so a repeat restart cannot recover the same session again"
+        );
+        assert_eq!(
+            persisted.borrow()[0].phase,
+            TimerPhase::Idle,
+            "what gets saved back is the reset idle state, not the stale expired one"
+        );
     }
 
     #[test]

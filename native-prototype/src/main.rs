@@ -12,6 +12,7 @@ mod app_model;
 mod dashboard;
 mod map;
 mod map_adapter;
+mod persistence;
 mod platform;
 mod timer_controller;
 
@@ -61,13 +62,61 @@ fn run() -> Result<(), StartupError> {
     );
     config::log_active_benchmark_overrides();
 
-    let mut model = AppModel::stage_four_timer_preview();
+    // Stage 15: the real, durable timer persistence adapter, replacing Stage 14's
+    // `NullPersistencePort`. One small JSON file under the app's own data directory (never
+    // production's - see `platform::paths`'s distinct app-id namespacing); if it holds a
+    // snapshot from a previous run, the timer restores/recovers from it here, before the first
+    // frame is ever shown. See docs/stage15-persistence-migration.md for the full design.
+    let store_path = app_paths.data_dir.join("store.json");
+    // Stage 15 diagnostic import: `STUDY_NATIVE_IMPORT_BACKUP=<path to a production backup.json>`
+    // runs the inspect -> (optionally) commit pipeline against this app's own isolated native
+    // store, before the timer restores from it - so an import that lands a timer section takes
+    // effect on this same launch. Off unless set; never touches anything automatically. See
+    // docs/stage15-persistence-migration.md, "Migration pipeline" and "Real production data
+    // status" - this is the explicit, user-invoked action that section requires, not an automatic
+    // migration.
+    maybe_import_production_backup(
+        &app_paths,
+        &persistence::NativeStore::new(store_path.clone()),
+    );
+    let timer_port: Box<dyn timer_controller::TimerPersistencePort> = Box::new(
+        persistence::FileTimerPersistencePort::new(persistence::NativeStore::new(store_path)),
+    );
+    let (mut model, startup_recovery_effects) = AppModel::with_timer_persistence(timer_port);
+    if !startup_recovery_effects.is_empty() {
+        // Stage 16 owns the session subsystem that will actually consume a recovered session
+        // range; Stage 15 only guarantees the effect exists, is exactly-once, and is not lost -
+        // logging it here is the honest current end of that pipeline, not a stand-in session UI.
+        log::info!(
+            "timer recovery on startup produced {} application effect(s): {startup_recovery_effects:?}",
+            startup_recovery_effects.len()
+        );
+    }
     model.apply(AppCommand::MarkPresentationReady);
     let model = Rc::new(RefCell::new(model));
     let refresh_timer = Rc::new(Timer::default());
 
     let window = MainWindow::new()?;
     apply_startup_options(&window, &mut model.borrow_mut());
+    // Stage 15 diagnostic hook, same family as STUDY_NATIVE_FRAME_STATS/STARTUP_REPORT: prints
+    // the restored-then-startup-option-applied timer state to stdout once, with zero synthetic
+    // input, so a real restart/kill-process persistence test can verify recovery from a launched-
+    // and-exited process rather than from a screenshot. Deliberately placed after
+    // `apply_startup_options` so it reflects any `STUDY_NATIVE_TIMER_MODE`/`_AUTOSTART` override
+    // too, not just what was loaded from disk. See docs/stage15-persistence-migration.md,
+    // "Restart/recovery" for how this was used.
+    if std::env::var_os("STUDY_NATIVE_TIMER_STATE_REPORT").is_some() {
+        let borrowed = model.borrow();
+        let timer = borrowed.timer();
+        let clock = borrowed.clock(Instant::now());
+        println!(
+            "TIMER_STATE mode={} status={:?} running={} remaining_secs={}",
+            timer.selected_mode(),
+            timer.status(),
+            timer.is_running(),
+            timer.remaining(clock).as_secs(),
+        );
+    }
     apply_model_to_window(&window, &model.borrow(), Instant::now());
     apply_dashboard(&window, &model.borrow());
     let map = map_adapter::new_controller(map_level_from_env());
@@ -197,6 +246,79 @@ fn apply_startup_options(window: &MainWindow, model: &mut AppModel) {
         if std::env::var_os("STUDY_NATIVE_TIMER_AUTOPAUSE").is_some() {
             model.apply(AppCommand::Pause(now));
         }
+    }
+}
+
+/// Stage 15's diagnostic production-backup import (see the call site in `run()` for the safety
+/// reasoning). Reads and reports on `STUDY_NATIVE_IMPORT_BACKUP`'s file; commits the converted
+/// timer into `native_store` unless `STUDY_NATIVE_IMPORT_DRY_RUN` is also set. Never touches the
+/// source file, never runs unless explicitly requested, never does anything with `social` or any
+/// other withheld/reserved section beyond reporting that it saw them (see
+/// `persistence::migration`'s module docs).
+fn maybe_import_production_backup(
+    app_paths: &platform::paths::AppPaths,
+    native_store: &persistence::NativeStore,
+) {
+    let Some(backup_path) = std::env::var_os("STUDY_NATIVE_IMPORT_BACKUP") else {
+        return;
+    };
+    let backup_path = std::path::PathBuf::from(backup_path);
+    let dry_run = std::env::var_os("STUDY_NATIVE_IMPORT_DRY_RUN").is_some();
+    let backup_copy_dir = app_paths.data_dir.join("imported-backups");
+    log::info!(
+        "timer backup import requested: {} (dry_run={dry_run})",
+        backup_path.display()
+    );
+    let (discovered, fields, timer_result) =
+        match persistence::migration::inspect_import(&backup_path, &backup_copy_dir) {
+            Ok(outcome) => outcome,
+            Err(err) => {
+                log::error!("import: could not read backup: {err}");
+                return;
+            }
+        };
+    log::info!(
+        "import: source backed up (unmodified) to {}",
+        discovered.source_copy_path.display()
+    );
+    for field in &fields {
+        log::info!(
+            "import: field {:?} classified as {:?} ({})",
+            field.key,
+            field.class,
+            field.note
+        );
+    }
+    let timer = match timer_result {
+        Ok(timer) => timer,
+        Err(err) => {
+            log::error!("import: timer section could not be converted, nothing imported: {err}");
+            return;
+        }
+    };
+    log::info!(
+        "import: timer section {}",
+        if timer.is_some() {
+            "converted successfully"
+        } else {
+            "absent from this backup"
+        }
+    );
+    if dry_run {
+        log::info!("import: STUDY_NATIVE_IMPORT_DRY_RUN is set, not committing anything");
+        return;
+    }
+    match persistence::migration::commit_import(native_store, &discovered, fields, timer) {
+        Ok(report) => log::info!(
+            "import: committed = {}, timer_imported = {}, source = {}, source copy = {}, {} field(s) classified, {} warning(s)",
+            report.committed,
+            report.timer_imported,
+            report.source_path.display(),
+            report.source_copy_path.display(),
+            report.fields.len(),
+            report.warnings.len(),
+        ),
+        Err(err) => log::error!("import: commit failed, native destination left unchanged: {err}"),
     }
 }
 

@@ -23,6 +23,16 @@ log = "0.4"
 # Timestamp formatting for the log file. Already resolved transitively via slint -> i-slint-core
 # (its date/time widgets); reused here for the same reason, adds no new crate.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# Native storage format and production-backup parsing (Stage 15, docs/stage15-persistence-migration.md).
+# study-tracker-core already derives Serialize/Deserialize (serde) on every DTO that crosses the
+# persistence boundary; serde_json is the plain, minimal JSON reader/writer for that boundary, not
+# a database/ORM/async runtime - the one new direct dependency this stage adds. Confined to this
+# bin crate; study-tracker-core stays free of it (and of all filesystem/serialization-format code).
+serde_json = "1"
+# Already resolved transitively (study-tracker-core depends on it directly, and slint pulls it in
+# too); added here directly only to use its `Deserialize` derive on the production-backup import
+# shape (persistence/migration.rs), adding no new crate to the dependency tree.
+serde = { version = "1", features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies]
 # MessageBoxW fallback for fatal startup errors once the release build has no console (Stage 13,

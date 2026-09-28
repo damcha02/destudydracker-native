@@ -4612,6 +4612,8 @@ dependencies = [
  "dirs",
  "embed-resource",
  "log",
+ "serde",
+ "serde_json",
  "slint",
  "slint-build",
  "study-tracker-core",

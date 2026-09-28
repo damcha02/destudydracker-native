@@ -31,7 +31,22 @@ pub struct AppPaths {
 impl AppPaths {
     /// Resolves the three directories without creating them. Fails only if the OS cannot report
     /// a local-app-data-equivalent folder at all (practically: a badly broken user profile).
+    ///
+    /// `STUDY_NATIVE_DATA_DIR`, if set, overrides `data_dir` (and, beneath it, `log_dir`)
+    /// directly instead of resolving the real per-OS known folder. This exists purely as test/
+    /// benchmark infrastructure (Stage 15's real-restart and kill-process persistence checks, and
+    /// any future automated fixture-based test that must never touch a real user-data directory
+    /// - see docs/stage15-persistence-migration.md, "Fixtures"). It has no effect unless
+    /// explicitly set; normal launches are unaffected and still resolve the real OS location.
     pub fn resolve() -> Result<Self, StartupError> {
+        if let Some(override_dir) = std::env::var_os("STUDY_NATIVE_DATA_DIR") {
+            let data_dir = PathBuf::from(override_dir);
+            return Ok(Self {
+                cache_dir: data_dir.join("cache"),
+                log_dir: data_dir.join("logs"),
+                data_dir,
+            });
+        }
         let data_root = dirs::data_local_dir().ok_or(StartupError::NoKnownFolder)?;
         let cache_root = dirs::cache_dir().unwrap_or_else(|| data_root.clone());
         let data_dir = data_root.join(APP_ID);
