@@ -8,12 +8,15 @@
     windows_subsystem = "windows"
 )]
 
+mod academic_controller;
 mod app_model;
 mod dashboard;
 mod map;
 mod map_adapter;
 mod persistence;
 mod platform;
+mod session_service;
+mod synthetic_dataset;
 mod timer_controller;
 
 use app_model::{format_clock, AppCommand, AppModel, TimerStatus};
@@ -79,14 +82,22 @@ fn run() -> Result<(), StartupError> {
         &app_paths,
         &persistence::NativeStore::new(store_path.clone()),
     );
-    let timer_port: Box<dyn timer_controller::TimerPersistencePort> = Box::new(
-        persistence::FileTimerPersistencePort::new(persistence::NativeStore::new(store_path)),
+    let timer_port: Box<dyn timer_controller::TimerPersistencePort> =
+        Box::new(persistence::FileTimerPersistencePort::new(
+            persistence::NativeStore::new(store_path.clone()),
+        ));
+    // Stage 16: the real, durable academic/planner persistence adapter, replacing
+    // `NullAcademicPersistencePort`. Reads/writes the same store file's `academic` section - see
+    // docs/stage16-academic-domain.md, "Persistence schema".
+    let academic_port: Box<dyn academic_controller::AcademicPersistencePort> = Box::new(
+        persistence::FileAcademicPersistencePort::new(persistence::NativeStore::new(store_path)),
     );
-    let (mut model, startup_recovery_effects) = AppModel::with_timer_persistence(timer_port);
+    let (mut model, startup_recovery_effects) =
+        AppModel::with_timer_persistence(timer_port, academic_port);
     if !startup_recovery_effects.is_empty() {
-        // Stage 16 owns the session subsystem that will actually consume a recovered session
-        // range; Stage 15 only guarantees the effect exists, is exactly-once, and is not lost -
-        // logging it here is the honest current end of that pipeline, not a stand-in session UI.
+        // A recovered session range was already routed into a real, persisted StudySession by
+        // `with_timer_persistence` itself before this line ever runs (see that function's own
+        // doc comment) - this log line just reports that it happened.
         log::info!(
             "timer recovery on startup produced {} application effect(s): {startup_recovery_effects:?}",
             startup_recovery_effects.len()
@@ -247,6 +258,74 @@ fn apply_startup_options(window: &MainWindow, model: &mut AppModel) {
             model.apply(AppCommand::Pause(now));
         }
     }
+    // Stage 16 diagnostic hooks: exercise the real Course/Semester/Task/Exam CRUD command path
+    // (the same one a future interactive Planner form would call) through real, persisted
+    // `AcademicState` - without adding synthetic mouse/keyboard input or a new interactive form
+    // yet (see docs/stage16-academic-domain.md, "UI integration"). Fixed, well-known ids so
+    // `STUDY_NATIVE_REMOVE_DEMO_COURSE` can target exactly what `_ADD_` created; both off unless
+    // set.
+    if std::env::var_os("STUDY_NATIVE_ADD_DEMO_COURSE").is_some() {
+        let now = Instant::now();
+        let semester_id = study_tracker_core::academic::SemesterId::new("demo-semester");
+        let course_id = study_tracker_core::academic::CourseId::new("demo-course");
+        model.apply(AppCommand::AddSemester {
+            id: semester_id.clone(),
+            name: "Fall 2026".to_string(),
+            created_at: now,
+        });
+        model.apply(AppCommand::AddCourse {
+            id: course_id,
+            semester_id,
+            name: "Analysis II".to_string(),
+            color: "blue".to_string(),
+            created_at: now,
+        });
+    }
+    if std::env::var_os("STUDY_NATIVE_REMOVE_DEMO_COURSE").is_some() {
+        model.apply(AppCommand::RemoveCourse(
+            study_tracker_core::academic::CourseId::new("demo-course"),
+        ));
+    }
+    if std::env::var_os("STUDY_NATIVE_REMOVE_DEMO_SEMESTER").is_some() {
+        model.apply(AppCommand::RemoveSemester(
+            study_tracker_core::academic::SemesterId::new("demo-semester"),
+        ));
+    }
+    // Stage 16 performance-measurement hook: loads a large, deterministic, entirely fabricated
+    // "heavy but plausible student profile" (see synthetic_dataset.rs for exact counts and
+    // rationale) and persists it, so a *later*, separate launch measures real cold-start
+    // load/parse cost at that scale (S16-P5 - see docs/stage16-academic-domain.md). Off unless
+    // set; never runs automatically.
+    if std::env::var_os("STUDY_NATIVE_GENERATE_SYNTHETIC_ACADEMIC_DATA").is_some() {
+        let state = synthetic_dataset::build_synthetic_academic_state();
+        log::info!(
+            "synthetic dataset: generated {} semester(s), {} course(s), {} task(s), {} exam(s), {} session(s), {} timetable event(s), {} holiday(s), {} daily todo(s), {} calendar entr(y/ies)",
+            state.semesters.len(),
+            state.courses.len(),
+            state.tasks.len(),
+            state.exams.len(),
+            state.sessions.len(),
+            state.timetable_events.len(),
+            state.holidays.len(),
+            state.daily_todos.len(),
+            state.calendar_entries.len(),
+        );
+        model.academic_mut().replace_all(state);
+    }
+    // Stage 16 diagnostic hook, same family as STUDY_NATIVE_TIMER_STATE_REPORT: prints real
+    // academic-domain counts to stdout once, with zero synthetic input.
+    if std::env::var_os("STUDY_NATIVE_ACADEMIC_STATE_REPORT").is_some() {
+        let state = model.academic().state();
+        println!(
+            "ACADEMIC_STATE semesters={} courses={} tasks={} exams={} sessions={} lifetime_minutes={}",
+            state.semesters.len(),
+            state.courses.len(),
+            state.tasks.len(),
+            state.exams.len(),
+            state.sessions.len(),
+            state.lifetime_study_minutes,
+        );
+    }
 }
 
 /// Stage 15's diagnostic production-backup import (see the call site in `run()` for the safety
@@ -269,7 +348,7 @@ fn maybe_import_production_backup(
         "timer backup import requested: {} (dry_run={dry_run})",
         backup_path.display()
     );
-    let (discovered, fields, timer_result) =
+    let (discovered, fields, timer_result, academic, academic_warnings) =
         match persistence::migration::inspect_import(&backup_path, &backup_copy_dir) {
             Ok(outcome) => outcome,
             Err(err) => {
@@ -289,6 +368,21 @@ fn maybe_import_production_backup(
             field.note
         );
     }
+    for warning in &academic_warnings {
+        log::warn!("import: academic conversion - {warning}");
+    }
+    log::info!(
+        "import: academic section converted: {} semester(s), {} course(s), {} task(s), {} exam(s), {} session(s), {} timetable event(s), {} holiday(s), {} daily todo(s), {} calendar entr(y/ies)",
+        academic.semesters.len(),
+        academic.courses.len(),
+        academic.tasks.len(),
+        academic.exams.len(),
+        academic.sessions.len(),
+        academic.timetable_events.len(),
+        academic.holidays.len(),
+        academic.daily_todos.len(),
+        academic.calendar_entries.len(),
+    );
     let timer = match timer_result {
         Ok(timer) => timer,
         Err(err) => {
@@ -308,11 +402,13 @@ fn maybe_import_production_backup(
         log::info!("import: STUDY_NATIVE_IMPORT_DRY_RUN is set, not committing anything");
         return;
     }
-    match persistence::migration::commit_import(native_store, &discovered, fields, timer) {
+    match persistence::migration::commit_import(native_store, &discovered, fields, timer, academic)
+    {
         Ok(report) => log::info!(
-            "import: committed = {}, timer_imported = {}, source = {}, source copy = {}, {} field(s) classified, {} warning(s)",
+            "import: committed = {}, timer_imported = {}, academic = {:?}, source = {}, source copy = {}, {} field(s) classified, {} warning(s)",
             report.committed,
             report.timer_imported,
+            report.academic_summary,
             report.source_path.display(),
             report.source_copy_path.display(),
             report.fields.len(),

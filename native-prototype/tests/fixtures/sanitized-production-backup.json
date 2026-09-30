@@ -3,27 +3,133 @@
   "backupVersion": 2,
   "exportedAt": "2026-09-27T12:00:00.000Z",
   "state": {
-    "sessions": [
+    "semesters": [
       {
-        "id": "session-fixture-1",
-        "courseId": null,
-        "kind": "study",
-        "startedAt": "2026-09-20T09:00:00.000Z",
-        "endedAt": "2026-09-20T09:52:00.000Z",
-        "minutes": 52
+        "id": "semester-fixture-1",
+        "name": "Fixture Semester (not real)",
+        "createdAt": "2026-08-01T00:00:00.000Z",
+        "startDate": "2026-09-01",
+        "endDate": "2026-12-20",
+        "phase": "semester",
+        "archived": false,
+        "archivedAt": null
       }
     ],
     "courses": [
       {
         "id": "course-fixture-1",
+        "semesterId": "semester-fixture-1",
         "name": "Sample Course (fixture data, not real)",
-        "targetGrade": 5
+        "color": "blue",
+        "targetGrade": 5,
+        "createdAt": "2026-08-01T00:00:00.000Z",
+        "externalUrl": null
       }
     ],
-    "semesters": [],
-    "tasks": [],
-    "exams": [],
-    "calendarEntries": [],
+    "tasks": [
+      {
+        "id": "task-fixture-1",
+        "semesterId": "semester-fixture-1",
+        "courseId": "course-fixture-1",
+        "title": "Exercise Sheet 3 (fixture)",
+        "subtype": "Sheet",
+        "unitLabel": "Sheet",
+        "totalUnits": 1,
+        "completedUnits": 0,
+        "dueDate": "2026-10-10",
+        "priority": "medium",
+        "notes": "",
+        "createdAt": "2026-09-01T00:00:00.000Z"
+      }
+    ],
+    "exams": [
+      {
+        "id": "exam-fixture-1",
+        "semesterId": "semester-fixture-1",
+        "courseId": "course-fixture-1",
+        "title": "Midterm (fixture)",
+        "examDate": "2026-11-15",
+        "weight": 0.4,
+        "preparedness": 2,
+        "location": "Room 101"
+      }
+    ],
+    "sessions": [
+      {
+        "id": "session-fixture-1",
+        "semesterId": "semester-fixture-1",
+        "courseId": "course-fixture-1",
+        "taskId": null,
+        "kind": "study",
+        "goal": "Review sample chapter (fixture)",
+        "learned": "",
+        "blocker": "",
+        "nextStep": "",
+        "confidence": 4,
+        "startedAt": "2026-09-20T09:00:00.000Z",
+        "endedAt": "2026-09-20T09:52:00.000Z",
+        "minutes": 52,
+        "presetLabel": "Deep Work"
+      }
+    ],
+    "timetableEvents": [
+      {
+        "id": "timetable-fixture-1",
+        "semesterId": "semester-fixture-1",
+        "courseId": "course-fixture-1",
+        "kind": "occurrence",
+        "taskId": "task-fixture-1",
+        "label": "Lecture (fixture)",
+        "date": "2026-09-28",
+        "time": "09:00",
+        "endTime": "10:00",
+        "repeatWeekly": true,
+        "recurrenceEndDate": "2026-12-20",
+        "occurrenceOverrides": {},
+        "url": null,
+        "completedOccurrences": [],
+        "createdAt": "2026-08-01T00:00:00.000Z"
+      }
+    ],
+    "holidays": [
+      {
+        "id": "holiday-fixture-1",
+        "semesterId": "semester-fixture-1",
+        "startDate": "2026-12-21",
+        "endDate": "2027-01-05",
+        "label": "Winter break (fixture)",
+        "createdAt": "2026-08-01T00:00:00.000Z"
+      }
+    ],
+    "dailyTodos": [
+      {
+        "id": "daily-todo-fixture-1",
+        "date": "2026-09-28",
+        "time": null,
+        "endTime": null,
+        "title": "Buy notebook (fixture)",
+        "notes": "",
+        "completed": false,
+        "completedAt": null,
+        "createdAt": "2026-09-27T00:00:00.000Z",
+        "repeatWeekly": false,
+        "completedOccurrences": [],
+        "recurrenceEndDate": null,
+        "skippedOccurrences": [],
+        "occurrenceTimes": {}
+      }
+    ],
+    "calendarEntries": [
+      {
+        "id": "calendar-entry-fixture-1",
+        "taskId": "task-fixture-1",
+        "date": "2026-10-05",
+        "unitAmount": 1,
+        "completed": false,
+        "completedAt": null,
+        "createdAt": "2026-09-27T00:00:00.000Z"
+      }
+    ],
     "lifetimeStudyMinutes": 52,
     "lifetimeStudySessions": 1,
     "activeTab": "timer",

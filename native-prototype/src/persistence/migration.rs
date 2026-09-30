@@ -23,7 +23,9 @@ use serde_json::{Map, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::persistence::migration_academic::convert_academic;
 use crate::persistence::store::StoreEnvelope;
+use study_tracker_core::academic::AcademicState;
 use study_tracker_core::timer::{
     ActiveSegment, TimerConfig, TimerContext, TimerMode, TimerPhase, TimerSnapshot, WallTimestamp,
 };
@@ -83,7 +85,8 @@ pub struct FieldReport {
 /// `Reserved` (see `classify_fields`), never silently dropped.
 fn known_field_class(key: &str) -> Option<FieldClass> {
     match key {
-        "timer" => Some(FieldClass::Consumed),
+        "timer" | "semesters" | "courses" | "tasks" | "exams" | "sessions" | "timetableEvents"
+        | "holidays" | "dailyTodos" | "calendarEntries" => Some(FieldClass::Consumed),
         "social" => Some(FieldClass::Withheld),
         _ => None,
     }
@@ -180,8 +183,11 @@ pub fn classify_fields(state: &Map<String, Value>) -> Vec<FieldReport> {
                     "device secret / friend code / verified-session anchor / cached network \
                      state - withheld, never written to the native store (see Stage 15 section 24/section 25)"
                 }
+                (_, FieldClass::Consumed) => {
+                    "converted into the native academic-domain store (see Stage 16 section 15)"
+                }
                 (_, FieldClass::Reserved) => {
-                    "preserved opaquely for a later stage's own domain; not modeled by Stage 15"
+                    "preserved opaquely for a later stage's own domain; not modeled yet"
                 }
                 _ => "",
             };
@@ -345,8 +351,40 @@ pub struct ImportReport {
     pub source_copy_path: PathBuf,
     pub fields: Vec<FieldReport>,
     pub timer_imported: bool,
+    pub academic_summary: AcademicImportSummary,
     pub warnings: Vec<String>,
     pub committed: bool,
+}
+
+/// Counts, for a human-readable report line - not itself load-bearing for correctness (the real
+/// data is in the committed `AcademicState`).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct AcademicImportSummary {
+    pub semesters: usize,
+    pub courses: usize,
+    pub tasks: usize,
+    pub exams: usize,
+    pub sessions: usize,
+    pub timetable_events: usize,
+    pub holidays: usize,
+    pub daily_todos: usize,
+    pub calendar_entries: usize,
+}
+
+impl AcademicImportSummary {
+    fn from_state(state: &AcademicState) -> Self {
+        Self {
+            semesters: state.semesters.len(),
+            courses: state.courses.len(),
+            tasks: state.tasks.len(),
+            exams: state.exams.len(),
+            sessions: state.sessions.len(),
+            timetable_events: state.timetable_events.len(),
+            holidays: state.holidays.len(),
+            daily_todos: state.daily_todos.len(),
+            calendar_entries: state.calendar_entries.len(),
+        }
+    }
 }
 
 /// The full pipeline's outer shell: DISCOVER -> READ -> BACKUP COPY -> PARSE -> CLASSIFY ->
@@ -362,22 +400,44 @@ pub fn inspect_import(
         DiscoverOutcome,
         Vec<FieldReport>,
         Result<Option<TimerSnapshot>, String>,
+        AcademicState,
+        Vec<String>,
     ),
     ImportError,
 > {
     let discovered = discover_and_read(source_path, backup_copy_dir)?;
     let fields = classify_fields(&discovered.state);
     let timer = convert_timer(&discovered.state);
-    Ok((discovered, fields, timer))
+    let import_time = WallTimestamp::from_unix_millis(current_unix_millis());
+    let (academic, academic_warnings) = convert_academic(&discovered.state, import_time);
+    Ok((discovered, fields, timer, academic, academic_warnings))
 }
 
-/// COMMIT: writes the converted timer (and nothing else - `Withheld`/`Reserved` sections are
-/// deliberately NOT copied into the native destination store by this pipeline; see the module
-/// docs and section 24/section 25 of the brief) to `destination_store`, then reads it back and compares
-/// field-for-field against what was about to be written, per section 13.2 of the architecture freeze
-/// ("validation after migration: round-trip every migrated record... before considering that
-/// record migrated"). On any failure - conversion error, write error, or a read-back mismatch -
-/// the destination is left exactly as it was found (rollback), never partially written.
+fn current_unix_millis() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis().min(i64::MAX as u128) as i64)
+        .unwrap_or(0)
+}
+
+/// COMMIT: writes the converted timer and academic sections (and nothing else - `Withheld`/
+/// `Reserved` sections are deliberately NOT copied into the native destination store by this
+/// pipeline; see the module docs and section 24/section 25 of the brief) to `destination_store`,
+/// then reads it back and compares field-for-field against what was about to be written, per
+/// section 13.2 of the architecture freeze ("validation after migration: round-trip every
+/// migrated record... before considering that record migrated"). On any failure - conversion
+/// error, write error, or a read-back mismatch - the destination is left exactly as it was found
+/// (rollback), never partially written. Both sections are written in the same envelope save (one
+/// atomic file replace - see `store.rs`'s "Atomic writes and backups"), so a commit can never
+/// leave the timer and academic sections written from two different import attempts.
+///
+/// Both `timer` and `academic` **fully replace** whatever the destination already had for those
+/// two sections (never merged in) - matching production's own `restoreBackup`, which likewise
+/// overwrites the relevant `localStorage` sections wholesale rather than merging a restored
+/// backup into what's already there. This is also what makes repeated import of the same backup
+/// trivially idempotent: the same source converts to the same `AcademicState` every time, so a
+/// second import produces a byte-identical result, not a duplicate.
 ///
 /// `discovered`/`fields` are folded into the returned [`ImportReport`] verbatim, so a caller (see
 /// `main.rs`'s `maybe_import_production_backup`) can log/inspect the *whole* report from one
@@ -387,6 +447,7 @@ pub fn commit_import(
     discovered: &DiscoverOutcome,
     fields: Vec<FieldReport>,
     timer: Option<TimerSnapshot>,
+    academic: AcademicState,
 ) -> Result<ImportReport, String> {
     let (mut envelope, _warnings) = destination_store
         .load()
@@ -394,6 +455,7 @@ pub fn commit_import(
     let pre_import_envelope = envelope.clone();
 
     envelope.timer = timer.clone();
+    envelope.academic = Some(academic.clone());
     destination_store
         .save(&envelope)
         .map_err(|err| format!("failed to write the native destination: {err}"))?;
@@ -408,18 +470,20 @@ pub fn commit_import(
             ));
         }
     };
-    if read_back.timer != timer {
+    if read_back.timer != timer || read_back.academic.as_ref() != Some(&academic) {
         let _ = destination_store.save(&pre_import_envelope);
         return Err(
             "read-back verification found a mismatch after import, rolled back".to_string(),
         );
     }
 
+    let academic_summary = AcademicImportSummary::from_state(&academic);
     Ok(ImportReport {
         source_path: discovered.source_path.clone(),
         source_copy_path: discovered.source_copy_path.clone(),
         fields,
         timer_imported: timer.is_some(),
+        academic_summary,
         warnings,
         committed: true,
     })
@@ -563,8 +627,8 @@ mod tests {
         let find = |key: &str| fields.iter().find(|f| f.key == key).unwrap().class;
         assert_eq!(find("timer"), FieldClass::Consumed);
         assert_eq!(find("social"), FieldClass::Withheld);
-        assert_eq!(find("sessions"), FieldClass::Reserved);
-        assert_eq!(find("courses"), FieldClass::Reserved);
+        assert_eq!(find("sessions"), FieldClass::Consumed);
+        assert_eq!(find("courses"), FieldClass::Consumed);
     }
 
     #[test]
@@ -695,13 +759,14 @@ mod tests {
             "backup.json",
             &minimal_valid_backup(valid_timer_json()),
         );
-        let (discovered, fields, timer_result) =
+        let (discovered, fields, timer_result, academic, academic_warnings) =
             inspect_import(&source, &dir.0.join("copies")).unwrap();
         assert!(fields.iter().any(|f| f.key == "timer"));
+        assert!(academic_warnings.is_empty());
         let timer = timer_result.expect("valid timer converts cleanly");
 
-        let report =
-            commit_import(&store, &discovered, fields, timer.clone()).expect("commit succeeds");
+        let report = commit_import(&store, &discovered, fields, timer.clone(), academic)
+            .expect("commit succeeds");
         assert!(report.committed);
         assert_eq!(report.timer_imported, timer.is_some());
         assert_eq!(report.source_copy_path, discovered.source_copy_path);
@@ -718,9 +783,9 @@ mod tests {
             "backup.json",
             &minimal_valid_backup(valid_timer_json()),
         );
-        let (discovered, fields, timer_result) =
+        let (discovered, fields, timer_result, academic, _academic_warnings) =
             inspect_import(&source, &dir.0.join("copies")).unwrap();
-        commit_import(&store, &discovered, fields, timer_result.unwrap()).unwrap();
+        commit_import(&store, &discovered, fields, timer_result.unwrap(), academic).unwrap();
 
         let raw = fs::read_to_string(store.path()).unwrap();
         assert!(!raw.contains("deviceSecret"));
@@ -736,12 +801,14 @@ mod tests {
             "backup.json",
             &minimal_valid_backup(valid_timer_json()),
         );
-        let (d1, f1, timer1) = inspect_import(&source, &dir.0.join("copies")).unwrap();
-        commit_import(&store, &d1, f1, timer1.unwrap()).unwrap();
+        let (d1, f1, timer1, academic1, _w1) =
+            inspect_import(&source, &dir.0.join("copies")).unwrap();
+        commit_import(&store, &d1, f1, timer1.unwrap(), academic1).unwrap();
         let (loaded_once, _) = store.load().unwrap();
 
-        let (d2, f2, timer2) = inspect_import(&source, &dir.0.join("copies")).unwrap();
-        commit_import(&store, &d2, f2, timer2.unwrap()).unwrap();
+        let (d2, f2, timer2, academic2, _w2) =
+            inspect_import(&source, &dir.0.join("copies")).unwrap();
+        commit_import(&store, &d2, f2, timer2.unwrap(), academic2).unwrap();
         let (loaded_twice, _) = store.load().unwrap();
 
         assert_eq!(
@@ -771,6 +838,7 @@ mod tests {
         store
             .save(&StoreEnvelope {
                 timer: Some(prior.clone()),
+                academic: None,
                 other: Map::new(),
             })
             .unwrap();
@@ -797,16 +865,26 @@ mod tests {
     #[test]
     fn preserve_reserved_sections_carries_reserved_data_and_never_a_withheld_key() {
         let dir = temp_dir("preserve-reserved");
+        // `sessions`/`courses` are Consumed as of Stage 16 (see `known_field_class`) - use a
+        // genuinely still-Reserved section (`settings`, not yet owned by any native domain) plus
+        // an unknown-to-this-build field to exercise the Reserved path instead.
         let source = write_fixture(
             &dir.0,
             "backup.json",
-            &minimal_valid_backup(valid_timer_json()),
+            &minimal_valid_backup(valid_timer_json()).replacen(
+                "\"courses\": []",
+                "\"courses\": [], \"settings\": {\"accent\": \"sage\"}",
+                1,
+            ),
         );
         let outcome = discover_and_read(&source, &dir.0.join("copies")).unwrap();
         let fields = classify_fields(&outcome.state);
         let preserved = preserve_reserved_sections(&outcome.state, &fields);
-        assert!(preserved.contains_key("sessions"));
-        assert!(preserved.contains_key("courses"));
+        assert!(preserved.contains_key("settings"));
+        assert!(
+            !preserved.contains_key("sessions"),
+            "Consumed keys are handled by convert_academic, not this opaque-preservation path"
+        );
         assert!(
             !preserved.contains_key("social"),
             "Withheld keys must never be preserved, even opaquely"

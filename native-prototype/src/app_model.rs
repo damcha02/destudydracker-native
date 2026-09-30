@@ -1,25 +1,42 @@
+use crate::academic_controller::{
+    AcademicController, AcademicPersistencePort, NullAcademicPersistencePort,
+};
 use crate::dashboard::{DashboardScenario, DashboardSnapshot};
 use crate::timer_controller::{
     NullPersistencePort, TimerApplicationEffect, TimerController, TimerPersistencePort,
 };
+use chrono::FixedOffset;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use study_tracker_core::academic::{
+    Course, CourseId, Semester, SemesterId, SessionKind, StudySession,
+};
 use study_tracker_core::timer::{
     ClockObservation, RestoreInput, TimerCommand, TimerConfig, TimerMode, TimerPhase, TimerSnapshot,
 };
 
 const DEFAULT_HISTORY_POINTS: usize = 30;
+/// How many recent sessions the session-notes card surfaces - `AcademicState::sessions` is
+/// already newest-first (see `study-tracker-core`'s own doc comments), so this is simply "the
+/// first N"; production's own equivalent panel shows a scrollable full list ("scroll for more" -
+/// see `App.tsx`), which this Slint surface does not yet replicate (see
+/// `docs/stage16-academic-domain.md` section 22, "UI integration").
+const RECENT_SESSIONS_SHOWN: usize = 8;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AppModel {
     title: String,
     status: String,
     timer: AppTimer,
+    academic: AcademicController,
+    /// Captured once per `AppModel` (not read fresh per Timer completion) - see
+    /// `session_service`'s module docs for why this is a deliberate simplification rather than a
+    /// per-instant timezone lookup.
+    local_offset: FixedOffset,
     dashboard: DashboardSnapshot,
     dashboard_scenario: DashboardScenario,
     dashboard_points: usize,
     plot_size: (f32, f32),
     modes: Vec<TimerModeConfig>,
-    session_notes: Vec<SessionNote>,
     clock_origin: Instant,
     wall_origin_unix_millis: i64,
 }
@@ -87,6 +104,22 @@ pub enum AppCommand {
     SelectHistoryFraction(f32),
     StepHistory(i32),
     ResizeHistoryPlot(f32, f32),
+    /// Stage 16's minimal real CRUD surface (see `docs/stage16-academic-domain.md` section 22,
+    /// "UI integration", for why this is intentionally not yet a full interactive Planner form).
+    AddSemester {
+        id: SemesterId,
+        name: String,
+        created_at: Instant,
+    },
+    AddCourse {
+        id: CourseId,
+        semester_id: SemesterId,
+        name: String,
+        color: String,
+        created_at: Instant,
+    },
+    RemoveCourse(CourseId),
+    RemoveSemester(SemesterId),
 }
 
 impl AppModel {
@@ -149,29 +182,6 @@ impl AppModel {
         ]
     }
 
-    fn default_session_notes() -> Vec<SessionNote> {
-        vec![
-            SessionNote::new(
-                "Analysis problem set",
-                "General focus · 52 min · confidence 4/5",
-                52,
-                4,
-            ),
-            SessionNote::new(
-                "Physics derivation",
-                "Exam prep · 90 min · confidence 3/5",
-                90,
-                3,
-            ),
-            SessionNote::new(
-                "Linear algebra review",
-                "Pomodoro · 25 min · confidence 5/5",
-                25,
-                5,
-            ),
-        ]
-    }
-
     #[allow(dead_code)] // only reachable via stage_four_timer_preview - see its own doc comment
     fn stage_four_timer_preview_with_clock(
         clock_origin: Instant,
@@ -184,43 +194,61 @@ impl AppModel {
             title: crate::platform::identity::window_title(),
             status: "Stage 8: Slint adapter driving renderer-independent timer core".to_string(),
             timer: AppTimer::new(selected_mode, &modes[selected_mode]),
+            academic: AcademicController::new(Box::new(NullAcademicPersistencePort)),
+            // A deterministic, host-independent offset for the demo/test path - see the
+            // `local_offset` field's own doc comment. Real runtime uses the actual OS offset
+            // (`with_timer_persistence_and_clock`, below).
+            local_offset: FixedOffset::east_opt(0).expect("UTC is always a valid fixed offset"),
             dashboard: DashboardSnapshot::build(DashboardScenario::Typical, DEFAULT_HISTORY_POINTS),
             dashboard_scenario: DashboardScenario::Typical,
             dashboard_points: DEFAULT_HISTORY_POINTS,
             plot_size: (600.0, 300.0),
             modes,
-            session_notes: Self::default_session_notes(),
             clock_origin,
             wall_origin_unix_millis,
         }
     }
 
-    /// The real Stage 15 runtime entry point: builds the same modes/dashboard/session-notes as
+    /// The real Stage 15/16 runtime entry point: builds the same modes/dashboard as
     /// [`AppModel::stage_four_timer_preview`], but wires the given (real, durable) persistence
-    /// port into the timer instead of `NullPersistencePort`, and - if the port already has a
-    /// snapshot to offer - restores from it instead of starting fresh idle. Returns any
-    /// application effects an abandoned/recovered session produced, so `main.rs` can log (Stage
-    /// 16 will actually consume) them.
+    /// ports into the timer and academic domain instead of their `Null*` equivalents, and - if
+    /// the timer port already has a snapshot to offer - restores from it instead of starting
+    /// fresh idle. A restored/recovered session range is routed into a real, persisted
+    /// `StudySession` exactly like a live completion would be (see
+    /// `AcademicController::route_timer_effects`) before this function returns, so recovery
+    /// creates its session before the first frame is ever shown - not on some later tick.
     ///
     /// Not used by any test in this module - every existing test deliberately keeps using
-    /// `stage_four_timer_preview`'s `NullPersistencePort` path, since none of them need real
-    /// storage and the trait-object indirection would only make them harder to read. This
-    /// function's own storage behavior is exercised by `persistence::timer_port`'s and
-    /// `persistence::migration`'s tests, and by `TimerController::restore`'s tests directly.
+    /// `stage_four_timer_preview`'s `Null*Port`s, since none of them need real storage and the
+    /// trait-object indirection would only make them harder to read. This function's own storage
+    /// behavior is exercised by `persistence::timer_port`'s, `persistence::academic_port`'s, and
+    /// `persistence::migration`'s tests, and by `TimerController::restore`'s tests directly; the
+    /// startup-recovery-creates-a-session behavior is exercised by this module's own
+    /// `with_timer_persistence_*` tests, below.
     pub fn with_timer_persistence(
-        persistence: Box<dyn TimerPersistencePort>,
+        timer_persistence: Box<dyn TimerPersistencePort>,
+        academic_persistence: Box<dyn AcademicPersistencePort>,
     ) -> (Self, Vec<TimerApplicationEffect>) {
-        Self::with_timer_persistence_and_clock(persistence, Instant::now(), system_unix_millis())
+        Self::with_timer_persistence_and_clock(
+            timer_persistence,
+            academic_persistence,
+            Instant::now(),
+            system_unix_millis(),
+            *chrono::Local::now().offset(),
+        )
     }
 
     fn with_timer_persistence_and_clock(
-        persistence: Box<dyn TimerPersistencePort>,
+        timer_persistence: Box<dyn TimerPersistencePort>,
+        academic_persistence: Box<dyn AcademicPersistencePort>,
         clock_origin: Instant,
         wall_origin_unix_millis: i64,
+        local_offset: FixedOffset,
     ) -> (Self, Vec<TimerApplicationEffect>) {
         let modes = Self::default_modes();
         let default_selected_mode = 1;
-        let loaded_snapshot = persistence.load();
+        let loaded_snapshot = timer_persistence.load();
+        let now = ClockObservation::new(0, wall_origin_unix_millis);
 
         let (timer, effects) = match loaded_snapshot {
             Some(snapshot) => {
@@ -234,22 +262,20 @@ impl AppModel {
                     .position(|mode| mode.label() == snapshot.config.preset_label)
                     .or_else(|| modes.iter().position(|mode| mode.mode() == snapshot.mode))
                     .unwrap_or(default_selected_mode);
-                AppTimer::restore(
-                    selected_mode,
-                    snapshot,
-                    persistence,
-                    ClockObservation::new(0, wall_origin_unix_millis),
-                )
+                AppTimer::restore(selected_mode, snapshot, timer_persistence, now)
             }
             None => (
                 AppTimer::new_with_persistence(
                     default_selected_mode,
                     &modes[default_selected_mode],
-                    persistence,
+                    timer_persistence,
                 ),
                 Vec::new(),
             ),
         };
+
+        let mut academic = AcademicController::load_or_new(academic_persistence);
+        academic.route_timer_effects(&effects, local_offset, now);
 
         (
             Self {
@@ -257,6 +283,8 @@ impl AppModel {
                 status: "Stage 8: Slint adapter driving renderer-independent timer core"
                     .to_string(),
                 timer,
+                academic,
+                local_offset,
                 dashboard: DashboardSnapshot::build(
                     DashboardScenario::Typical,
                     DEFAULT_HISTORY_POINTS,
@@ -265,7 +293,6 @@ impl AppModel {
                 dashboard_points: DEFAULT_HISTORY_POINTS,
                 plot_size: (600.0, 300.0),
                 modes,
-                session_notes: Self::default_session_notes(),
                 clock_origin,
                 wall_origin_unix_millis,
             },
@@ -322,6 +349,27 @@ impl AppModel {
                 self.plot_size = (width, height);
                 self.dashboard.history.set_plot_size(width, height);
             }
+            AppCommand::AddSemester {
+                id,
+                name,
+                created_at,
+            } => {
+                let wall = self.clock(created_at).wall;
+                self.academic.add_semester(Semester::new(id, name, wall));
+            }
+            AppCommand::AddCourse {
+                id,
+                semester_id,
+                name,
+                color,
+                created_at,
+            } => {
+                let wall = self.clock(created_at).wall;
+                self.academic
+                    .add_course(Course::new(id, semester_id, name, color, wall));
+            }
+            AppCommand::RemoveCourse(id) => self.academic.remove_course(&id),
+            AppCommand::RemoveSemester(id) => self.academic.remove_semester(&id),
         }
     }
 
@@ -341,8 +389,31 @@ impl AppModel {
         &self.modes
     }
 
-    pub fn session_notes(&self) -> &[SessionNote] {
-        &self.session_notes
+    /// The most recent real, persisted study sessions (newest first - see
+    /// `AcademicState::add_study_sessions`), mapped into the Slint-facing `SessionNote` shape.
+    /// Replaces the Stage 4-15 hardcoded demo list: this is real domain data flowing all the way
+    /// from a completed/recovered Timer session through `AcademicController`/`AcademicState`'s
+    /// persistence to the same UI card that used to show three fixed placeholder rows (see
+    /// `docs/stage16-academic-domain.md` section 22 for the before/after).
+    pub fn session_notes(&self) -> Vec<SessionNote> {
+        self.academic
+            .state()
+            .sessions
+            .iter()
+            .take(RECENT_SESSIONS_SHOWN)
+            .map(SessionNote::from_study_session)
+            .collect()
+    }
+
+    pub fn academic(&self) -> &AcademicController {
+        &self.academic
+    }
+
+    /// Only used by the `STUDY_NATIVE_GENERATE_SYNTHETIC_ACADEMIC_DATA` diagnostic hook
+    /// (`main.rs`) to bulk-load a synthetic performance-measurement dataset; ordinary CRUD goes
+    /// through `AppCommand`, not this direct handle.
+    pub fn academic_mut(&mut self) -> &mut AcademicController {
+        &mut self.academic
     }
 
     pub fn dashboard(&self) -> &DashboardSnapshot {
@@ -373,6 +444,14 @@ impl AppModel {
     fn apply_timer_command(&mut self, command: TimerCommand, now: Instant) {
         let clock = self.clock(now);
         self.timer.pending_effects = self.timer.controller.apply(command, clock);
+        // The Timer -> StudySession bridge (Stage 16's "hard acceptance item"): every command
+        // that might have produced a `SessionRangeReady` (completion, manual save, ...) is routed
+        // through the same real, persisted path a startup recovery uses (see
+        // `with_timer_persistence_and_clock`) - `route_timer_effects` itself is a no-op for any
+        // effect that isn't a session range, so this is safe to call unconditionally after every
+        // command rather than threading a "did this produce a session" check through here too.
+        self.academic
+            .route_timer_effects(&self.timer.pending_effects, self.local_offset, clock);
     }
 
     /// Application effects (session ranges, completions) produced by the most recent timer
@@ -580,17 +659,29 @@ impl ModeTone {
 }
 
 impl SessionNote {
-    fn new(
-        title: impl Into<String>,
-        detail: impl Into<String>,
-        minutes: u16,
-        confidence: u8,
-    ) -> Self {
+    /// Maps a real, persisted [`StudySession`] into this card's display shape. Pure presentation
+    /// mapping - no domain logic lives here (matching this crate's usual boundary: `AppModel`'s
+    /// read-side methods only ever format already-computed domain data for Slint).
+    fn from_study_session(session: &StudySession) -> Self {
+        let title = if session.goal.trim().is_empty() {
+            session.preset_label.clone()
+        } else {
+            session.goal.clone()
+        };
+        let kind_label = match session.kind {
+            SessionKind::Exam => "Exam",
+            SessionKind::Break => "Break",
+            SessionKind::Study => "Study",
+        };
+        let detail = format!(
+            "{kind_label} · {} min · confidence {}/5",
+            session.minutes, session.confidence
+        );
         Self {
-            title: title.into(),
-            detail: detail.into(),
-            minutes,
-            confidence: confidence.min(5),
+            title,
+            detail,
+            minutes: session.minutes.min(u32::from(u16::MAX)) as u16,
+            confidence: session.confidence.min(5),
         }
     }
 
@@ -628,8 +719,10 @@ fn system_unix_millis() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::{format_clock, AppCommand, AppModel, TimerStatus};
+    use crate::academic_controller::NullAcademicPersistencePort;
     use crate::dashboard::DashboardScenario;
     use crate::timer_controller::TimerPersistencePort;
+    use chrono::FixedOffset;
     use std::cell::RefCell;
     use std::rc::Rc;
     use std::time::{Duration, Instant};
@@ -837,9 +930,22 @@ mod tests {
             .count();
         assert_eq!(ranges, 1);
 
-        // The next, unrelated command's effects must not still carry the old completion.
+        // Stage 16: that effect must have become a real, persisted StudySession, visible through
+        // the same session-notes card `main.rs` renders (see `session_notes()`'s own doc comment)
+        // - not just an ephemeral effect value nothing ever consumes.
+        assert_eq!(model.academic().state().sessions.len(), 1);
+        assert_eq!(model.academic().state().lifetime_study_sessions, 1);
+        assert_eq!(model.session_notes().len(), 1);
+
+        // The next, unrelated command's effects must not still carry the old completion...
         model.apply(AppCommand::Reset);
         assert!(model.timer_effects().is_empty());
+        // ...but the session itself, already durably recorded, must not disappear with it.
+        assert_eq!(
+            model.academic().state().sessions.len(),
+            1,
+            "a session, once created, is durable domain state - not tied to pending_effects' lifetime"
+        );
     }
 
     // --- Stage 15: real-persistence wiring (TimerController's own restore/recovery correctness
@@ -871,8 +977,13 @@ mod tests {
             initial: None,
             persisted: persisted.clone(),
         };
-        let (model, effects) =
-            AppModel::with_timer_persistence_and_clock(Box::new(port), Instant::now(), 1_000_000);
+        let (model, effects) = AppModel::with_timer_persistence_and_clock(
+            Box::new(port),
+            Box::new(NullAcademicPersistencePort),
+            Instant::now(),
+            1_000_000,
+            FixedOffset::east_opt(0).unwrap(),
+        );
         assert!(effects.is_empty());
         assert_eq!(model.timer().status(), TimerStatus::Ready);
         assert_eq!(
@@ -919,8 +1030,10 @@ mod tests {
 
         let (model, effects) = AppModel::with_timer_persistence_and_clock(
             Box::new(port),
+            Box::new(NullAcademicPersistencePort),
             Instant::now(),
             now_wall * 1000,
+            FixedOffset::east_opt(0).unwrap(),
         );
 
         assert!(
@@ -967,8 +1080,10 @@ mod tests {
 
         let (model, effects) = AppModel::with_timer_persistence_and_clock(
             Box::new(port),
+            Box::new(NullAcademicPersistencePort),
             Instant::now(),
             now_wall * 1000,
+            FixedOffset::east_opt(0).unwrap(),
         );
 
         assert_eq!(
@@ -998,6 +1113,16 @@ mod tests {
             persisted.borrow()[0].phase,
             TimerPhase::Idle,
             "what gets saved back is the reset idle state, not the stale expired one"
+        );
+        assert_eq!(
+            model.academic().state().sessions.len(),
+            1,
+            "the recovered session range must have become a real, persisted StudySession"
+        );
+        assert_eq!(
+            model.session_notes().len(),
+            1,
+            "and the UI's session list reflects it"
         );
     }
 

@@ -141,7 +141,11 @@ mod tests {
         let mut other = Map::new();
         other.insert("sessions".to_string(), Value::Array(vec![Value::from(1)]));
         port.store
-            .save(&StoreEnvelope { timer: None, other })
+            .save(&StoreEnvelope {
+                timer: None,
+                academic: None,
+                other,
+            })
             .unwrap();
 
         port.persist(sample());

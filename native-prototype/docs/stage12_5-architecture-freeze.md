@@ -427,8 +427,8 @@ States: `NOT STARTED`, `DOMAIN COMPLETE`, `NATIVE UI COMPLETE`, `PERSISTENCE COM
 | Feature (from §19) | Status |
 |---|---|
 | Timer | `DOMAIN COMPLETE` (core + Stage 12 UI fix); native UI/persistence/platform work is Stage 14 |
-| Semesters/Courses/Tasks/Exams/Calendar | `NOT STARTED` |
-| Study sessions log / lifetime totals | `NOT STARTED` |
+| Semesters/Courses/Tasks/Exams/Calendar | `PERSISTENCE COMPLETE` (Stage 16: native domain, cascade-delete, persistence, import; no interactive Planner UI yet) |
+| Study sessions log / lifetime totals | `PERSISTENCE COMPLETE` (Stage 16: real Timer->StudySession bridge verified on real hardware, retention/dedup, session-notes UI card now real data) |
 | Dashboard/statistics | `NATIVE UI COMPLETE` with demo data (Stage 10); real-data wiring is Stage 17 |
 | Settings | `NOT STARTED` |
 | Vault/Obsidian integration | `NOT STARTED` |

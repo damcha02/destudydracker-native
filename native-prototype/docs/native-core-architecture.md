@@ -133,10 +133,10 @@ Future domains should follow the same pattern: plain Rust state, explicit comman
 
 Future native migration should extract renderer-independent behavior before UI parity work:
 
-1. Timer domain and persistence snapshot compatibility.
-2. Course/task/semester/exam domain model.
-3. Statistics computation.
-4. API/social client state model.
-5. Slint screens bound through thin adapters.
+1. Timer domain and persistence snapshot compatibility. — done (Stage 7/14/15).
+2. Course/task/semester/exam domain model. — done (Stage 16: `crates/study-tracker-core/src/academic/`, see `docs/stage16-academic-domain.md`). Also includes the StudySession domain and its Timer-completion bridge, and the Planner value objects (TimetableEvent/Holiday/DailyTodo/CalendarEntry) production keeps alongside this domain — not explicitly named in this list when it was written, migrated as part of the same stage since they share the same persistence section and import pipeline.
+3. Statistics computation. — Stage 17.
+4. API/social client state model. — Stage 22.
+5. Slint screens bound through thin adapters. — partial: the Timer screen and its session-notes card are real (Stage 14/16); a dedicated interactive Planner screen is not yet built (Stage 16's own doc, section 22).
 
 Do not mechanically translate React components one by one. Keep production source as behavioral reference until native parity is proven.

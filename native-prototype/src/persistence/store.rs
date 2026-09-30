@@ -19,20 +19,26 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use study_tracker_core::academic::AcademicState;
 use study_tracker_core::timer::TimerSnapshot;
 
 /// The current native storage schema version. Bump this, and add an explicit upgrade step, only
 /// when an *existing* section's shape changes incompatibly - adding a brand-new top-level section
 /// for a future domain does not require a bump, since `other` already preserves and round-trips
-/// anything this build doesn't model.
+/// anything this build doesn't model. Stage 16 added the `academic` section this way: additively,
+/// with no version bump (see `docs/stage16-academic-domain.md` section 14 for the full decision) -
+/// a Stage 15 (Timer-only) store has no `academic` key and loads with `academic: None`, exactly as
+/// a fresh profile would; a Stage 16 store loaded by hypothetical unmodified Stage 15 code would
+/// see `academic` land in that code's own `other` map and round-trip it untouched on the next save.
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 
-/// The whole native store, deserialized. `timer` is the only section this build actually reads
-/// and writes; `other` is every other top-level key found in the file, verbatim, as unparsed
-/// `serde_json::Value`s.
+/// The whole native store, deserialized. `timer` and `academic` are the only sections this build
+/// actually reads and writes; `other` is every other top-level key found in the file, verbatim, as
+/// unparsed `serde_json::Value`s.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct StoreEnvelope {
     pub timer: Option<TimerSnapshot>,
+    pub academic: Option<AcademicState>,
     pub other: Map<String, Value>,
 }
 
@@ -141,6 +147,9 @@ fn serialize_envelope(envelope: &StoreEnvelope) -> serde_json::Result<String> {
     if let Some(timer) = &envelope.timer {
         root.insert("timer".to_string(), serde_json::to_value(timer)?);
     }
+    if let Some(academic) = &envelope.academic {
+        root.insert("academic".to_string(), serde_json::to_value(academic)?);
+    }
     for (key, value) in &envelope.other {
         root.insert(key.clone(), value.clone());
     }
@@ -179,8 +188,27 @@ fn parse_envelope(text: &str) -> Result<(StoreEnvelope, LoadWarnings), StoreErro
             }
         },
     };
+    let academic = match obj.remove("academic") {
+        None | Some(Value::Null) => None,
+        Some(raw) => match serde_json::from_value::<AcademicState>(raw) {
+            Ok(state) => Some(state),
+            Err(err) => {
+                warnings.push(format!(
+                    "academic section could not be read, starting fresh: {err}"
+                ));
+                None
+            }
+        },
+    };
 
-    Ok((StoreEnvelope { timer, other: obj }, warnings))
+    Ok((
+        StoreEnvelope {
+            timer,
+            academic,
+            other: obj,
+        },
+        warnings,
+    ))
 }
 
 #[cfg(test)]
@@ -246,6 +274,7 @@ mod tests {
         let (_dir, store) = temp_store();
         let envelope = StoreEnvelope {
             timer: Some(sample_snapshot()),
+            academic: None,
             other: Map::new(),
         };
         store.save(&envelope).expect("save succeeds");
@@ -276,6 +305,7 @@ mod tests {
         );
         let envelope = StoreEnvelope {
             timer: Some(sample_snapshot()),
+            academic: None,
             other,
         };
         store.save(&envelope).unwrap();
@@ -375,6 +405,7 @@ mod tests {
         let (_dir, store) = temp_store();
         let good = StoreEnvelope {
             timer: Some(sample_snapshot()),
+            academic: None,
             other: Map::new(),
         };
         store.save(&good).unwrap();
@@ -395,6 +426,7 @@ mod tests {
         store
             .save(&StoreEnvelope {
                 timer: Some(sample_snapshot()),
+                academic: None,
                 other: first_other,
             })
             .unwrap();

@@ -4,9 +4,12 @@
 //! any of this (the frozen dependency-direction rule - see
 //! `docs/stage12_5-architecture-freeze.md` section 5, section 13).
 
+pub mod academic_port;
 pub mod migration;
+pub mod migration_academic;
 pub mod store;
 pub mod timer_port;
 
+pub use academic_port::FileAcademicPersistencePort;
 pub use store::NativeStore;
 pub use timer_port::FileTimerPersistencePort;
