@@ -10,8 +10,9 @@
 | --- | --- | --- | --- | --- |
 | (original copy, undated) | `3906b937f0e7219fbae6dcf8a0caba65eb7ff49e` | 2026-08-10T18:58:32+02:00 | "Merge pull request #6 from damcha02/performance-optimization" | Reconstructed retroactively (Stage 14 prep): the original copy's `package.json` read `"0.1.58"`, but that version string had not yet been bumped at the exact commit copied. Found by diffing the working `desktop/` tree against several nearby upstream commits (`git archive <sha> desktop \| diff -rq`) until an exact content match (zero differing files besides local build artifacts and one missing `.env.example`) was found at `3906b93`'s content. |
 | 2026-09-28 | `b095706994b6caaf18432d0d41b4534f4b85be98` | 2026-09-27T13:07:10+02:00 | "stuff" | `git fetch` of upstream `main`, `git checkout <ref> -- desktop` (see Stage 14's production-sync report for the full method and the reasoning behind using git checkout rather than a raw file copy). |
+| 2026-09-30 | `fe2f7a60704aa77b3d72a1c86912e2d2a60274b9` | 2026-09-30T19:58:48+02:00 | "exam in wabi sabi" (4 commits after v0.1.66's b095706: `6945ca1` Pinwall, merge `e04f4fc`, `101c2bd` Release v0.1.67, `fe2f7a6`) | `git remote add prod-upstream` / `git fetch` / `git rm -r desktop` / `git checkout prod-upstream/main -- desktop` / `git remote remove`, exactly as "How to resync" below. Audited before replacing - see `docs/production-sync-0.1.67.md`. 17 files changed, all under `desktop/`. |
 
-**Current reference: `b095706994b6caaf18432d0d41b4534f4b85be98` (upstream `main`, 2026-09-27), production version `0.1.66`.**
+**Current reference: `fe2f7a60704aa77b3d72a1c86912e2d2a60274b9` (upstream `main`, 2026-09-30), production version `0.1.67`.** Previous reference: `b095706994b6caaf18432d0d41b4534f4b85be98` (v0.1.66), which Stages 14-17 were built and verified against.
 
 ## How to resync
 

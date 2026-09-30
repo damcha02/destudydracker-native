@@ -13,6 +13,15 @@ export type ReleaseNoteEntry = ReleaseNote & { version: string };
 // Order items by what a user most wants to hear: new features first, then improvements, then fixes
 // and polish. The list is read top-down and the first line is the one everyone reads.
 export const RELEASE_NOTES: Record<string, ReleaseNote> = {
+  "0.1.67": {
+    title: "Nothing slips through",
+    items: [
+      { icon: "📌", heading: "The Pinwall catches what you skipped", body: "A new button on the Planner shows every lecture, exercise sheet, study block and to-do whose day has passed without being ticked off. Pick this week, the past month or the whole semester, group it by subject or by type, and tick things off right there - the counts, the calendar and your Dashboard all update with it. The Planner button carries this week's number, or a tick when the wall is clear." },
+      { icon: "👋", heading: "A guided tour on your first run", body: "Opening Study Tracker for the first time now walks you through what each page is for, instead of dropping you into an empty Dashboard." },
+      { icon: "❓", heading: "Every page explains itself", body: "The question mark next to the tab bar opens a guide for the page you are on: what it is for, the order to do things in, and a few things worth knowing. On the Dashboard it brings back the introduction." },
+      { icon: "📓", heading: "The Vault starts quieter", body: "Before you have linked a folder, the Vault no longer shows drawers and setup controls you cannot use yet - just a line telling you what unlocks them. It also stops calling itself an Obsidian vault: the notes are plain markdown files in a folder you own, and any editor can read them." },
+    ],
+  },
   "0.1.66": {
     title: "Roomier arena, smoother pages",
     items: [

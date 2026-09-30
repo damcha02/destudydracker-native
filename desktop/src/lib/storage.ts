@@ -913,6 +913,7 @@ function normalizeExams(exams: unknown): Exam[] {
       weight: typeof record.weight === "number" ? record.weight : 0,
       preparedness: typeof record.preparedness === "number" ? record.preparedness : 0,
       location: typeof record.location === "string" ? record.location : "",
+      ...(record.kind === "midterm" || record.kind === "endterm" || record.kind === "semester-end" || record.kind === "project" || record.kind === "session" ? { kind: record.kind } : {}),
     }];
   });
 }

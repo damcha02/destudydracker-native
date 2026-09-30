@@ -22249,6 +22249,851 @@ input[type="color"] {
   margin-bottom: 10px;
 }
 
+/* ------------------------------------------------------------
+   Field Notebook: "Pinwall of the past" - the rail's slip tab and
+   the modal that pins up every unchecked item up to today.
+   ------------------------------------------------------------ */
+
+.fn-pinwall-trigger {
+  position: relative;
+  width: calc(100% - 20px);
+  margin: 0 0 22px 10px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  border: var(--fn-edge);
+  border-left: 3px solid var(--fn-stamp);
+  border-radius: 0;
+  padding: 10px 12px 10px 12px;
+  background: var(--fn-slip);
+  color: var(--ink);
+  text-align: left;
+  box-shadow: 2px 3px 0 rgb(35 33 29 / 0.08);
+  transform: rotate(-0.6deg);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.fn-pinwall-trigger:hover,
+.fn-pinwall-trigger:focus-visible {
+  transform: rotate(0deg) translateY(-1px);
+  box-shadow: 3px 5px 0 rgb(35 33 29 / 0.12);
+}
+
+.fn-pinwall-trigger-pin,
+.fn-pinwall-pin {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.55) 0 22%, transparent 24%), var(--pin-color, var(--fn-stamp));
+  box-shadow: 1px 2px 0 rgb(0 0 0 / 0.22);
+}
+
+.fn-pinwall-trigger-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.fn-pinwall-trigger-text strong {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.fn-pinwall-trigger-text span {
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.fn-pinwall-trigger em {
+  min-width: 26px;
+  border: 1.5px solid var(--fn-stamp);
+  padding: 2px 6px;
+  color: var(--fn-stamp);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  text-align: center;
+  transform: rotate(4deg);
+}
+
+.fn-pinwall-trigger em.is-clear {
+  border-color: var(--ink-4);
+  color: var(--ink-4);
+  font-weight: 400;
+}
+
+.fn-pinwall {
+  width: min(1040px, 100%);
+  max-height: calc(100vh - 112px);
+  display: flex;
+  flex-direction: column;
+  border: var(--fn-edge);
+  background: var(--surface);
+  box-shadow: 0 22px 60px rgb(0 0 0 / 0.28);
+}
+
+.fn-pinwall-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: start;
+  margin: 0 24px;
+  padding: 22px 0 14px;
+  border-bottom: 2px solid var(--ink);
+}
+
+.fn-pinwall-head .fn-stamp-line {
+  font-family: var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.fn-pinwall-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 30px;
+  font-weight: 500;
+}
+
+.fn-pinwall-summary {
+  margin: 4px 0 0;
+  color: var(--ink-3);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+}
+
+.fn-pinwall-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 14px 24px;
+  border-bottom: var(--fn-rule-soft);
+}
+
+.fn-pinwall-segment {
+  display: inline-flex;
+  border: var(--fn-rule-hard);
+}
+
+.fn-pinwall-segment button {
+  border: 0;
+  border-radius: 0;
+  padding: 7px 14px;
+  background: transparent;
+  color: var(--ink-2, var(--ink));
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  box-shadow: none;
+}
+
+.fn-pinwall-segment button + button {
+  border-left: var(--fn-rule-hard);
+}
+
+.fn-pinwall-segment button.active {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.fn-pinwall-segment--quiet {
+  border: var(--fn-edge);
+}
+
+.fn-pinwall-segment--quiet button + button {
+  border-left: var(--fn-edge);
+}
+
+.fn-pinwall-segment--quiet button.active {
+  background: var(--fn-paper-2);
+  color: var(--ink);
+}
+
+.fn-pinwall-board {
+  flex: 1;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  align-items: start;
+  gap: 26px 22px;
+  padding: 28px 24px 30px;
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--ink) 9%, transparent) 1px, transparent 1.5px) 0 0 / 14px 14px,
+    var(--fn-desk);
+}
+
+.fn-pinwall-card {
+  position: relative;
+  border: var(--fn-edge);
+  border-top: 4px solid var(--pin-color);
+  padding: 16px 14px 8px;
+  background: var(--fn-paper);
+  box-shadow: 2px 4px 0 rgb(35 33 29 / 0.1);
+  transform: rotate(var(--pin-tilt, 0deg));
+}
+
+.fn-pinwall-card .fn-pinwall-pin {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  translate: -50% 0;
+}
+
+.fn-pinwall-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: var(--fn-rule-hard);
+}
+
+.fn-pinwall-card-head strong {
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.fn-pinwall-card-head em {
+  color: var(--fn-stamp);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.fn-pinwall-card ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fn-pinwall-item {
+  display: grid;
+  grid-template-rows: 1fr;
+  border-bottom: var(--fn-rule-dot);
+  transition: grid-template-rows 320ms ease 280ms, opacity 280ms ease 280ms, border-color 280ms ease 280ms;
+}
+
+.fn-pinwall-item:last-child {
+  border-bottom: 0;
+}
+
+.fn-pinwall-item > label {
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 9px 0;
+  cursor: pointer;
+}
+
+.fn-pinwall-item input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  margin: 2px 0 0;
+  border-radius: 0;
+  accent-color: var(--fn-stamp);
+  cursor: pointer;
+}
+
+.fn-pinwall-item-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.fn-pinwall-item-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.fn-pinwall-item-title b {
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  background: linear-gradient(currentColor, currentColor) 0 55% / 0 1px no-repeat;
+  transition: background-size 260ms ease, color 260ms ease;
+}
+
+.fn-pinwall-badge {
+  border: 1px solid currentColor;
+  padding: 0 5px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  line-height: 15px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.fn-pinwall-badge--sheet-due {
+  color: var(--fn-stamp);
+}
+
+.fn-pinwall-badge--lecture,
+.fn-pinwall-badge--session {
+  color: var(--fn-link);
+}
+
+.fn-pinwall-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.fn-pinwall-subject {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-3);
+}
+
+.fn-pinwall-subject::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: var(--pin-color);
+}
+
+.fn-pinwall-ago {
+  color: var(--fn-stamp);
+}
+
+.fn-pinwall-item.is-done {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  border-color: transparent;
+}
+
+.fn-pinwall-item.is-done .fn-pinwall-item-title b {
+  background-size: 100% 1px;
+  color: var(--ink-4);
+}
+
+.fn-pinwall-empty {
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  padding: 56px 24px 64px;
+  background: var(--fn-desk);
+  text-align: center;
+}
+
+.fn-pinwall-empty strong {
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.fn-pinwall-empty p {
+  margin: 0;
+  color: var(--ink-3);
+  font-family: var(--font-serif);
+  font-style: italic;
+}
+
+@media (max-width: 640px) {
+  .fn-pinwall-head,
+  .fn-pinwall-controls,
+  .fn-pinwall-board {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .fn-pinwall-head {
+    margin: 0 16px;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .fn-pinwall-board {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ---------- Pinwall, Modern: rounded panel, accent segmented control, pill badges ---------- */
+
+.modern-pinwall-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.modern-pinwall-trigger .modern-pinwall-count {
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+.fn-pinwall.pinwall--modern {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.pinwall--modern .fn-pinwall-head {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.pinwall--modern .fn-stamp-line {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.pinwall--modern .fn-pinwall-head h2 {
+  font-size: 26px;
+}
+
+.pinwall--modern .fn-pinwall-summary {
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-size: 13px;
+}
+
+.pinwall--modern .fn-pinwall-controls {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.pinwall--modern .fn-pinwall-segment,
+.pinwall--modern .fn-pinwall-segment--quiet {
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  background: var(--surface-inset);
+}
+
+.pinwall--modern .fn-pinwall-segment button {
+  min-height: 30px;
+  border: 0;
+  border-radius: var(--r-sm);
+  padding: 6px 12px;
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pinwall--modern .fn-pinwall-segment button + button {
+  border-left: 0;
+}
+
+.pinwall--modern .fn-pinwall-segment button.active {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.pinwall--modern .fn-pinwall-segment--quiet button.active {
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+.pinwall--modern .fn-pinwall-board {
+  gap: 16px;
+  padding: 20px 24px 24px;
+  background: var(--surface-2);
+}
+
+.pinwall--modern .fn-pinwall-card {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  padding: 14px 16px 6px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-sm);
+  transform: none;
+}
+
+.pinwall--modern .fn-pinwall-card-head {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.pinwall--modern .fn-pinwall-card-head strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pinwall--modern .fn-pinwall-card-head strong::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--pin-color);
+}
+
+.pinwall--modern .fn-pinwall-card-head em {
+  min-width: 22px;
+  border-radius: var(--r-pill);
+  padding: 0 7px;
+  background: var(--surface-inset);
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+
+.pinwall--modern .fn-pinwall-item {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.pinwall--modern .fn-pinwall-item input[type="checkbox"] {
+  border-radius: var(--r-xs);
+  accent-color: var(--accent);
+}
+
+.pinwall--modern .fn-pinwall-item-title b {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pinwall--modern .fn-pinwall-badge {
+  border: 0;
+  border-radius: var(--r-pill);
+  padding: 0 8px;
+  background: var(--surface-inset);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 18px;
+  text-transform: none;
+}
+
+.pinwall--modern .fn-pinwall-badge--sheet-due {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.pinwall--modern .fn-pinwall-badge--lecture,
+.pinwall--modern .fn-pinwall-badge--session {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.pinwall--modern .fn-pinwall-badge--todo {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.pinwall--modern .fn-pinwall-item-meta {
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+.pinwall--modern .fn-pinwall-subject::before {
+  border-radius: 50%;
+}
+
+.pinwall--modern .fn-pinwall-ago {
+  color: var(--danger);
+}
+
+.pinwall--modern .fn-pinwall-empty {
+  background: var(--surface-2);
+}
+
+.pinwall--modern .fn-pinwall-empty strong {
+  font-family: var(--font-sans);
+  font-weight: 700;
+}
+
+.pinwall--modern .fn-pinwall-empty p {
+  font-family: var(--font-sans);
+  font-style: normal;
+}
+
+/* ---------- Pinwall, Wabi-Sabi: plain paper, ink rules, ensō checkboxes, no cards ---------- */
+
+.wabi-pinwall-trigger {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 10px;
+  border: 0;
+  border-radius: 0;
+  padding: 0 0 2px;
+  background: transparent;
+  color: var(--wabi-muted);
+  font: italic 400 15px var(--font-serif);
+  box-shadow: none;
+  transition: color 180ms ease;
+}
+
+.wabi-pinwall-trigger:hover,
+.wabi-pinwall-trigger:focus-visible {
+  color: var(--wabi-ink);
+}
+
+.wabi-pinwall-trigger span {
+  color: inherit;
+}
+
+.wabi-pinwall-trigger .wabi-pinwall-trigger-kanji {
+  color: var(--wabi-vermilion);
+  font-style: normal;
+  font-size: 16px;
+}
+
+.fn-pinwall.pinwall--wabi {
+  width: min(960px, 100%);
+  border: 1px solid var(--wabi-rule-soft, var(--line));
+  border-radius: 2px;
+  background: var(--wabi-paper);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.22);
+}
+
+.pinwall--wabi .fn-pinwall-head {
+  margin: 0 30px;
+  padding: 28px 0 12px;
+  border-bottom: 1px solid var(--wabi-ink);
+}
+
+.pinwall--wabi .fn-stamp-line {
+  margin: 0 0 4px;
+  color: var(--wabi-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.pinwall--wabi .fn-pinwall-head h2 {
+  color: var(--wabi-ink);
+  font-size: 26px;
+  font-weight: 400;
+}
+
+.pinwall--wabi .fn-pinwall-summary {
+  color: var(--wabi-muted);
+}
+
+.pinwall--wabi .fn-pinwall-controls {
+  padding: 14px 30px;
+  border-bottom: 0;
+}
+
+.pinwall--wabi .fn-pinwall-segment,
+.pinwall--wabi .fn-pinwall-segment--quiet {
+  gap: 18px;
+  border: 0;
+}
+
+.pinwall--wabi .fn-pinwall-segment button {
+  padding: 4px 0;
+  border-bottom: 1px solid transparent;
+  color: var(--wabi-muted);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+}
+
+.pinwall--wabi .fn-pinwall-segment button + button {
+  border-left: 0;
+}
+
+.pinwall--wabi .fn-pinwall-segment button.active,
+.pinwall--wabi .fn-pinwall-segment--quiet button.active {
+  border-bottom-color: var(--wabi-ink);
+  background: transparent;
+  color: var(--wabi-ink);
+}
+
+.pinwall--wabi .fn-pinwall-board {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 30px 36px;
+  padding: 8px 30px 34px;
+  background: var(--wabi-paper);
+}
+
+.pinwall--wabi .fn-pinwall-card {
+  border: 0;
+  border-top: var(--wabi-rule-hard);
+  padding: 12px 0 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.pinwall--wabi .fn-pinwall-card-head {
+  border-bottom: 0;
+  padding-bottom: 4px;
+}
+
+.pinwall--wabi .fn-pinwall-card-head strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--wabi-ink);
+  font-size: 19px;
+  font-weight: 400;
+}
+
+/* A short brushed stroke in the subject color instead of a pin. */
+.pinwall--wabi .fn-pinwall-card-head strong::before {
+  content: "";
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--pin-color);
+  opacity: 0.85;
+}
+
+.pinwall--wabi .fn-pinwall-card-head em {
+  color: var(--wabi-faint);
+}
+
+.pinwall--wabi .fn-pinwall-item {
+  border-bottom: var(--wabi-rule-dot);
+}
+
+.pinwall--wabi .fn-pinwall-item input[type="checkbox"] {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  border: 1px solid var(--wabi-ink);
+  border-radius: 50%;
+  background: transparent;
+  transition: background 200ms ease, border-color 200ms ease;
+}
+
+.pinwall--wabi .fn-pinwall-item input[type="checkbox"]:hover {
+  border-color: var(--wabi-sage);
+}
+
+.pinwall--wabi .fn-pinwall-item input[type="checkbox"]:checked {
+  border-color: var(--wabi-sage);
+  background: var(--wabi-sage);
+}
+
+.pinwall--wabi .fn-pinwall-item input[type="checkbox"]:focus-visible {
+  outline: 1px solid var(--wabi-sage);
+  outline-offset: 2px;
+}
+
+.pinwall--wabi .fn-pinwall-item-title b {
+  color: var(--wabi-ink);
+  font-weight: 400;
+}
+
+.pinwall--wabi .fn-pinwall-badge {
+  border: 0;
+  padding: 0;
+  color: var(--wabi-faint);
+  font-size: 9px;
+}
+
+.pinwall--wabi .fn-pinwall-badge--sheet-due {
+  color: var(--wabi-vermilion);
+}
+
+.pinwall--wabi .fn-pinwall-badge--lecture,
+.pinwall--wabi .fn-pinwall-badge--session {
+  color: var(--wabi-sage);
+}
+
+.pinwall--wabi .fn-pinwall-item-meta,
+.pinwall--wabi .fn-pinwall-subject {
+  color: var(--wabi-muted);
+}
+
+.pinwall--wabi .fn-pinwall-subject::before {
+  width: 10px;
+  height: 2px;
+}
+
+.pinwall--wabi .fn-pinwall-ago {
+  color: var(--wabi-vermilion);
+}
+
+.pinwall--wabi .fn-pinwall-item.is-done .fn-pinwall-item-title b {
+  color: var(--wabi-faint);
+}
+
+.pinwall--wabi .fn-pinwall-empty {
+  padding: 48px 30px 60px;
+  background: var(--wabi-paper);
+}
+
+.pinwall--wabi .fn-pinwall-empty strong {
+  color: var(--wabi-ink);
+  font-weight: 400;
+}
+
+.pinwall--wabi .fn-pinwall-empty p {
+  color: var(--wabi-muted);
+}
+
+@media (max-width: 640px) {
+  .pinwall--wabi .fn-pinwall-head {
+    margin: 0 16px;
+  }
+
+  .pinwall--wabi .fn-pinwall-controls,
+  .pinwall--wabi .fn-pinwall-board {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fn-pinwall-trigger,
+  .fn-pinwall-item,
+  .fn-pinwall-item-title b {
+    transition: none;
+  }
+
+  .fn-pinwall-trigger,
+  .fn-pinwall-card {
+    transform: none;
+  }
+}
+
 
 
 
@@ -25135,4 +25980,297 @@ input[type="color"] {
 .guide-done { margin: 0; }
 @media (max-width: 420px) {
   .guide-hero { flex-direction: column; gap: 10px; }
+}
+
+/* Wabi exam prep planning (Manage semesters) */
+.wabi-msm-scope .manage-semesters-exams {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.wabi-msm-scope .manage-semesters-exam-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.wabi-msm-scope .manage-semesters-prep {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px dashed color-mix(in oklch, var(--wabi-vermilion) 45%, transparent);
+}
+
+.wabi-msm-scope .manage-semesters-prep-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+}
+
+.wabi-msm-scope .manage-semesters-prep-pick.done {
+  opacity: 0.55;
+}
+
+.wabi-msm-scope .course-exam-pill {
+  margin-left: 8px;
+}
+
+/* Wabi exams, exam prep and the deadline runway */
+.wabi-exam-chip.active,
+.wabi-exam-kinds .active {
+  background: color-mix(in oklch, var(--wabi-vermilion) 12%, transparent);
+  border-color: var(--wabi-vermilion);
+  color: var(--wabi-vermilion);
+}
+
+.wabi-exam-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wabi-exam-kinds button {
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* Exams and deadlines: the one loud thing in the wabi calendar. */
+:root[data-app-style="wabi-sabi"] {
+  --wabi-exam-red: color-mix(in oklch, var(--wabi-vermilion) 62%, #ff2a1a);
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-planner .calendar-pill.wabi-exam-pill {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 3px 4px 3px 7px;
+  border: 0;
+  border-left: 3px solid var(--wabi-exam-red);
+  border-radius: 0;
+  background: color-mix(in oklch, var(--wabi-exam-red) 20%, transparent);
+  color: var(--wabi-ink);
+  font: 500 11px/1.3 var(--font-sans);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-planner .calendar-pill.wabi-exam-pill.project {
+  background: var(--wabi-exam-red);
+  color: var(--wabi-paper);
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-planner .calendar-pill.wabi-exam-pill .wabi-exam-pill-kind {
+  font: 700 9.5px/1.25 var(--font-sans);
+  letter-spacing: 0.08em;
+  color: var(--wabi-exam-red);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-planner .calendar-pill.wabi-exam-pill.project .wabi-exam-pill-kind {
+  color: inherit;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-planner .calendar-pill.wabi-exam-pill .wabi-exam-pill-title {
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:root[data-app-style="wabi-sabi"] .wabi-planner .calendar-pill.wabi-exam-pill.focused {
+  outline: 2px solid var(--wabi-exam-red);
+  outline-offset: 2px;
+}
+
+.wabi-runway-banner {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 18px;
+  margin-bottom: 12px;
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in oklch, var(--wabi-vermilion) 40%, transparent);
+  background: color-mix(in oklch, var(--wabi-vermilion) 7%, transparent);
+  animation: wabi-runway-in 280ms ease-out;
+}
+
+@keyframes wabi-runway-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.wabi-runway-count {
+  display: grid;
+  justify-items: center;
+  min-width: 64px;
+  line-height: 1;
+  color: var(--wabi-vermilion);
+}
+
+.wabi-runway-count strong {
+  font-size: 2.6rem;
+  font-weight: 500;
+  font-family: var(--font-display, inherit);
+}
+
+.wabi-runway-count span {
+  margin-top: 4px;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.wabi-runway-body {
+  flex: 1;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wabi-runway-title em {
+  margin-left: 8px;
+  font-style: normal;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.wabi-runway-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.wabi-runway-dots i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--wabi-vermilion);
+  opacity: 0.75;
+}
+
+.wabi-runway-dots i.rest {
+  opacity: 0.22;
+}
+
+.wabi-runway-dots i.due {
+  opacity: 1;
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+.calendar-day-card.runway-day {
+  background: color-mix(in oklch, var(--wabi-vermilion) calc(5% + var(--runway-t, 0) * 14%), transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--wabi-vermilion) 22%, transparent);
+  transition: background 240ms ease;
+}
+
+.calendar-day-card.runway-end {
+  box-shadow: inset 0 0 0 2px var(--wabi-vermilion);
+}
+
+.calendar-day-card.runway-day .calendar-day-top {
+  display: flex;
+  justify-content: space-between;
+}
+
+.calendar-day-card.runway-day .calendar-day-top .runway-count {
+  font-size: 0.72rem;
+  color: var(--wabi-vermilion);
+  letter-spacing: 0.04em;
+}
+
+.wabi-plan-stage {
+  display: block;
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--wabi-vermilion);
+}
+
+.wabi-plan-course.quiet {
+  opacity: 0.38;
+}
+
+.wabi-plan-course.quiet:hover {
+  opacity: 0.8;
+}
+
+.wabi-plan-course-days {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--wabi-vermilion);
+}
+
+.wabi-task-modal .wabi-exam-form .wabi-exam-kinds {
+  margin-top: 4px;
+}
+
+.wabi-msm-scope .manage-semesters-exam-item .manage-semesters-unit-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 0;
+}
+
+.wabi-msm-scope .manage-semesters-exam-date {
+  flex-basis: 100%;
+}
+
+.wabi-msm-scope .exam-kind-pill {
+  color: var(--wabi-vermilion);
+  border-color: color-mix(in oklch, var(--wabi-vermilion) 45%, transparent);
+}
+
+.wabi-day-exams {
+  display: grid;
+  gap: 6px;
+  padding: 0 0 12px;
+}
+
+.wabi-day-exam {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-left: 4px solid var(--wabi-exam-red);
+  border-radius: 0;
+  background: color-mix(in oklch, var(--wabi-exam-red) 18%, transparent);
+  color: var(--wabi-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wabi-day-exam strong {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  color: var(--wabi-exam-red);
+}
+
+.wabi-day-exam span em {
+  margin-left: 8px;
+  font-style: normal;
+  font-size: 0.82rem;
+  opacity: 0.7;
+}
+
+.wabi-day-exam small {
+  font-size: 0.78rem;
+  opacity: 0.8;
 }

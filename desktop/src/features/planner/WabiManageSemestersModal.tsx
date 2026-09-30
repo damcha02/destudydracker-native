@@ -6,7 +6,8 @@ import { durationBetween, endTimeFor, isValidIsoDate, getSemesterWeekNumber, mak
 import { TimeSpanFields } from "./TimeSpanFields";
 import { displayTime } from "../../lib/timeInput";
 import { makeId } from "../../lib/storage";
-import type { AppState, Course, Holiday, Semester, Task, TimetableEvent } from "../../types";
+import { EXAM_KINDS, examKindLabel, examKindOf, getNextExam, getRunway, getSemesterStage, isCourseActiveInPrep, makePrepCopy } from "../../lib/examPhase";
+import type { AppState, Course, Exam, ExamKind, Holiday, Semester, Task, TimetableEvent } from "../../types";
 
 const timetableEventKindLabel: Record<TimetableEvent["kind"], string> = {
   occurrence: "Occurrence",
@@ -84,6 +85,10 @@ export function WabiManageSemestersModal({
   const [courseDraft, setCourseDraft] = useState({ name: "", color: "#8fb4ff", externalUrl: "" });
   const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
   const [courseEditDraft, setCourseEditDraft] = useState({ name: "", color: "#8fb4ff", externalUrl: "", targetGrade: "4" });
+  const [editingExamId, setEditingExamId] = useState<string | null>(null);
+  const [examEditDraft, setExamEditDraft] = useState<{ title: string; examDate: string; kind: ExamKind }>({ title: "", examDate: "", kind: "midterm" });
+  const [examRemoveConfirm, setExamRemoveConfirm] = useState<string | null>(null);
+  const [repeatSelection, setRepeatSelection] = useState<string[]>([]);
   const [courseRemoveConfirm, setCourseRemoveConfirm] = useState<string | null>(null);
   const [taskRemoveConfirm, setTaskRemoveConfirm] = useState<string | null>(null);
   const [schedulingTaskId, setSchedulingTaskId] = useState<string | null>(null);
@@ -138,8 +143,44 @@ export function WabiManageSemestersModal({
   }
 
   const courses = semester ? getSemesterCourses(state, semester.id) : [];
+  const exams = semester ? state.exams.filter((exam) => exam.semesterId === semester.id) : [];
+  const stage = semester ? getSemesterStage(semester, exams, today) : "lectures";
+  const semesterPillText = stage === "prep" ? "Exam Prep" : stage === "done" ? "Finished" : "Active";
   const weekNumber = semester ? getSemesterWeekNumber(semester, today) : null;
   const semesterHolidays = semester ? state.holidays.filter((holiday) => holiday.semesterId === semester.id) : [];
+
+  function startEditExam(exam: Exam) {
+    setEditingExamId(exam.id);
+    setExamEditDraft({ title: exam.title, examDate: exam.examDate, kind: examKindOf(exam) });
+  }
+
+  function saveExamEdit() {
+    if (!examEditDraft.title.trim() || !isValidIsoDate(examEditDraft.examDate)) {
+      setMessage("An exam needs a title and a date.");
+      return;
+    }
+    setState((current) => ({
+      ...current,
+      exams: current.exams.map((exam) => (exam.id === editingExamId ? { ...exam, title: examEditDraft.title.trim(), examDate: examEditDraft.examDate, kind: examEditDraft.kind } : exam)),
+    }));
+    setEditingExamId(null);
+    setMessage("Exam updated.");
+  }
+
+  function removeExam(examId: string) {
+    const exam = state.exams.find((item) => item.id === examId);
+    onDeleteWithUndo(`"${exam?.title ?? "Exam"}" removed`, (current) => ({ ...current, exams: current.exams.filter((item) => item.id !== examId) }));
+  }
+
+  /** Exam prep: repeats the picked semester tasks as revision tasks - same total, nothing done yet - ready to be scheduled. */
+  function repeatTasksForPrep(course: Course) {
+    const picked = state.tasks.filter((task) => task.courseId === course.id && repeatSelection.includes(task.id));
+    if (!picked.length) return;
+    const createdAt = new Date().toISOString();
+    setState((current) => ({ ...current, tasks: [...picked.map((task) => makePrepCopy(task, makeId(), createdAt)), ...current.tasks] }));
+    setRepeatSelection((current) => current.filter((id) => !picked.some((task) => task.id === id)));
+    setMessage(`${picked.length} task${picked.length === 1 ? "" : "s"} repeated for exam prep. Schedule them when you like.`);
+  }
 
   function startEditCourse(course: Course) {
     setEditingCourseId(course.id);
@@ -463,15 +504,15 @@ export function WabiManageSemestersModal({
               <>
                 {mode !== "courses" ? (<>
                 <div className="manage-semesters-summary">
-                  <span className="semester-phase-pill">{semester.phase === "exam-prep" ? "Exam Prep" : "Active"}</span>
+                  <span className="semester-phase-pill">{semesterPillText}</span>
                   <span>{weekNumber ? `Week ${weekNumber}` : semester.startDate ? "Not started yet" : "No start date"}</span>
                   {!renaming ? (
                     <>
-                      {semester.phase === "semester" ? (
-                        <button type="button" className="ghost-button small-button" onClick={() => setPhase("exam-prep")}>End</button>
-                      ) : (
+                      {semester.phase === "exam-prep" ? (
                         <button type="button" className="ghost-button small-button" onClick={() => setPhase("semester")}>Resume</button>
-                      )}
+                      ) : stage === "lectures" ? (
+                        <button type="button" className="ghost-button small-button" title="Exam prep starts by itself the day after the end date" onClick={() => setPhase("exam-prep")}>End early</button>
+                      ) : null}
                       <button type="button" className="ghost-button small-button" onClick={startRename}>Edit</button>
                       {archiveConfirm ? (
                         <span className="semester-menu-confirm inline">
@@ -553,6 +594,10 @@ export function WabiManageSemestersModal({
                   <div className="stack-list compact">
                     {courses.map((course) => {
                       const tasks = getCourseTasks(state, course.id);
+                      const courseExams = exams.filter((exam) => exam.courseId === course.id).sort((a, b) => a.examDate.localeCompare(b.examDate));
+                      const nextCourseExam = stage === "prep" && isCourseActiveInPrep(course.id, exams, today) ? getNextExam(exams, course.id, today) : null;
+                      const courseDaysLeft = nextCourseExam ? getRunway(today, nextCourseExam.examDate)?.daysLeft : null;
+                      const courseStatus = nextCourseExam && courseDaysLeft !== null && courseDaysLeft !== undefined ? (courseDaysLeft === 0 ? "exam today" : `exam in ${courseDaysLeft}d`) : null;
                       const expanded = !collapsibleCourses || openCourseIds.includes(course.id);
                       const courseActions = collapsibleCourses ? (
                         <RowMenu label={`${course.name} actions`}>
@@ -582,7 +627,7 @@ export function WabiManageSemestersModal({
                                 aria-expanded={expanded}
                                 onClick={() => setOpenCourseIds((current) => (current.includes(course.id) ? current.filter((id) => id !== course.id) : [...current, course.id]))}
                               >
-                                <span><span className="course-chip" style={{ background: course.color }} /> {course.name}</span>
+                                <span><span className="course-chip" style={{ background: course.color }} /> {course.name}{courseStatus ? <span className="semester-phase-pill course-exam-pill">{courseStatus}</span> : null}</span>
                                 <span className="section-note">{tasks.length} task{tasks.length === 1 ? "" : "s"} {expanded ? "▾" : "▸"}</span>
                               </button>
                               {expanded ? courseActions : null}
@@ -630,16 +675,74 @@ export function WabiManageSemestersModal({
                             </div>
                           ) : !collapsibleCourses ? (
                             <div className="overview-row">
-                              <span><span className="course-chip" style={{ background: course.color }} /> {course.name}</span>
+                              <span><span className="course-chip" style={{ background: course.color }} /> {course.name}{courseStatus ? <span className="semester-phase-pill course-exam-pill">{courseStatus}</span> : null}</span>
                               {courseActions}
                             </div>
                           ) : null}
 
                           {expanded && !(collapsibleCourses && editingCourseId === course.id) ? (
                           <div className="manage-semesters-units">
+                            <div className="manage-semesters-exams">
+                              {courseExams.map((exam) => (
+                                editingExamId === exam.id ? (
+                                  <div key={exam.id} className="manage-semesters-exam-row">
+                                    <input value={examEditDraft.title} onChange={(event) => setExamEditDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Title" />
+                                    <input type="date" value={examEditDraft.examDate} onChange={(event) => setExamEditDraft((current) => ({ ...current, examDate: event.target.value }))} />
+                                    <select aria-label="Exam kind" value={examEditDraft.kind} onChange={(event) => setExamEditDraft((current) => ({ ...current, kind: event.target.value as ExamKind }))}>
+                                      {EXAM_KINDS.map((kind) => <option key={kind.id} value={kind.id}>{kind.label}</option>)}
+                                    </select>
+                                    <button type="button" onClick={saveExamEdit}>Save</button>
+                                    <button type="button" className="ghost-button small-button" onClick={() => setEditingExamId(null)}>Cancel</button>
+                                  </div>
+                                ) : (
+                                  <div key={exam.id} className="manage-semesters-unit-row manage-semesters-exam-item">
+                                    <span className="manage-semesters-unit-label">
+                                      {exam.title}<span className="semester-phase-pill course-exam-pill exam-kind-pill">{examKindLabel(examKindOf(exam))}</span>
+                                      <span className="section-note manage-semesters-exam-date">{formatDate(exam.examDate)}</span>
+                                    </span>
+                                    {examRemoveConfirm === exam.id ? (
+                                      <>
+                                        <button type="button" className="mini-danger" onClick={() => { removeExam(exam.id); setExamRemoveConfirm(null); }}>Delete</button>
+                                        <button type="button" className="ghost-button small-button" onClick={() => setExamRemoveConfirm(null)}>Cancel</button>
+                                      </>
+                                    ) : (
+                                      <RowMenu label={`${exam.title} actions`}>
+                                        <button type="button" role="menuitem" onClick={() => startEditExam(exam)}>Edit exam</button>
+                                        <button type="button" role="menuitem" className="danger" onClick={() => setExamRemoveConfirm(exam.id)}>Delete exam</button>
+                                      </RowMenu>
+                                    )}
+                                  </div>
+                                )
+                              ))}
+                            </div>
+                            {stage === "prep" ? (
+                              <div className="manage-semesters-prep">
+                                <span className="section-note">Plan your revision: repeat what you did this semester, or add something new.</span>
+                                {tasks.filter((task) => !task.prep).map((task) => {
+                                  const repeated = tasks.some((item) => item.prepOf === task.id);
+                                  return (
+                                    <label key={task.id} className={`manage-semesters-prep-pick ${repeated ? "done" : ""}`}>
+                                      <input
+                                        type="checkbox"
+                                        disabled={repeated}
+                                        checked={repeatSelection.includes(task.id)}
+                                        onChange={() => setRepeatSelection((current) => (current.includes(task.id) ? current.filter((id) => id !== task.id) : [...current, task.id]))}
+                                      />
+                                      <span>{task.title}</span>
+                                      <span className="section-note">{repeated ? "already in your plan" : `${task.totalUnits} ${task.unitLabel}`}</span>
+                                    </label>
+                                  );
+                                })}
+                                {tasks.some((task) => !task.prep && repeatSelection.includes(task.id)) ? (
+                                  <button type="button" className="small-button" onClick={() => repeatTasksForPrep(course)}>
+                                    Repeat {tasks.filter((task) => repeatSelection.includes(task.id)).length} for exam prep
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : null}
                             {tasks.map((task) => (
                               <div key={task.id} className="manage-semesters-unit-row">
-                                <span className="manage-semesters-unit-label">{task.title}</span>
+                                <span className="manage-semesters-unit-label">{task.title}{task.prep ? <span className="semester-phase-pill course-exam-pill">Prep</span> : null}</span>
                                 <span className="section-note">{task.completedUnits}/{task.totalUnits} {task.unitLabel}</span>
                                 {collapsibleCourses ? (
                                   taskRemoveConfirm === task.id ? (

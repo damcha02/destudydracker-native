@@ -54,7 +54,14 @@ export interface Task {
   priority: Priority;
   notes: string;
   createdAt: string;
+  /** Wabi-sabi exam prep: a revision task planned after the semester ended. Its totalUnits is set by hand, not derived from the schedule. */
+  prep?: boolean;
+  /** The semester task this prep task was repeated from. */
+  prepOf?: string;
 }
+
+/** Everything except "session" happens inside the semester (a one-off dated item); "session" exams fall in the exam session after it. */
+export type ExamKind = "midterm" | "endterm" | "semester-end" | "project" | "session";
 
 export interface Exam {
   id: string;
@@ -65,6 +72,8 @@ export interface Exam {
   weight: number;
   preparedness: number;
   location: string;
+  /** Absent means "session" (the behaviour before exam kinds existed). */
+  kind?: ExamKind;
 }
 
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;

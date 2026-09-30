@@ -101,10 +101,6 @@ function daysBetween(startIso: string, endIso: string): number {
   return Math.round((parseIsoDate(endIso).getTime() - parseIsoDate(startIso).getTime()) / 86400000);
 }
 
-function isSemesterScheduleActive(semester: Semester): boolean {
-  return !semester.archived && semester.phase === "semester";
-}
-
 export function isHoliday(holidays: Holiday[], semesterId: string, dateIso: string): boolean {
   return holidays.some((holiday) => holiday.semesterId === semesterId && dateIso >= holiday.startDate && dateIso <= holiday.endDate);
 }
@@ -128,29 +124,43 @@ export interface TimetableEventOccurrence {
   date: string;
 }
 
+export interface ExpandOptions {
+  /** Tasks planned after the semester ended (wabi exam prep): their events run past the semester's end date and ignore its phase. */
+  prepTaskIds?: Set<string>;
+  /** Last day prep events may occur (the semester's last exam); null/absent means the requested range. */
+  prepEndDate?: string | null;
+}
+
 export function expandTimetableEvents(
   events: TimetableEvent[],
   holidays: Holiday[],
   semester: Semester,
   rangeStartIso: string,
   rangeEndIso: string,
+  options?: ExpandOptions,
 ): TimetableEventOccurrence[] {
-  if (!isSemesterScheduleActive(semester)) return [];
+  if (semester.archived) return [];
+  const semesterActive = semester.phase === "semester";
   const effectiveEndBound = minIso(semester.endDate, rangeEndIso);
   const effectiveStart = maxIso(semester.startDate, rangeStartIso);
-  if (effectiveStart > effectiveEndBound) return [];
+  const prepEndBound = minIso(options?.prepEndDate ?? null, rangeEndIso);
 
   const occurrences: TimetableEventOccurrence[] = [];
   for (const event of events) {
     if (event.semesterId !== semester.id) continue;
-    const seriesEnd = minIso(event.recurrenceEndDate, effectiveEndBound);
+    const isPrep = Boolean(options?.prepTaskIds?.has(event.taskId));
+    if (!isPrep && !semesterActive) continue;
+    const boundStart = isPrep ? rangeStartIso : effectiveStart;
+    const boundEnd = isPrep ? prepEndBound : effectiveEndBound;
+    if (boundStart > boundEnd) continue;
+    const seriesEnd = minIso(event.recurrenceEndDate, boundEnd);
     if (event.repeatWeekly) {
-      if (effectiveStart <= seriesEnd) {
-        for (const date of expandWeekdayFrom(event.date, effectiveStart, seriesEnd)) {
+      if (boundStart <= seriesEnd) {
+        for (const date of expandWeekdayFrom(event.date, boundStart, seriesEnd)) {
           const override = event.occurrenceOverrides[date];
           if (override?.skipped) continue;
           if (override?.date) {
-            if (override.date >= effectiveStart && override.date <= effectiveEndBound && !isHoliday(holidays, semester.id, override.date)) {
+            if (override.date >= boundStart && override.date <= boundEnd && !isHoliday(holidays, semester.id, override.date)) {
               occurrences.push({ event: { ...event, date: override.date, time: override.time ?? event.time, endTime: override.endTime ?? event.endTime }, date: override.date });
             }
             continue;
@@ -159,7 +169,7 @@ export function expandTimetableEvents(
           occurrences.push({ event, date });
         }
       }
-    } else if (event.date >= effectiveStart && event.date <= effectiveEndBound) {
+    } else if (event.date >= boundStart && event.date <= boundEnd) {
       occurrences.push({ event, date: event.date });
     }
   }
