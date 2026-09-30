@@ -1,0 +1,238 @@
+import { FN } from "palette.slint";
+
+export component MonoText inherits Text {
+    horizontal-alignment: left;
+    font-family: FN.mono;
+    vertical-alignment: top;
+}
+
+export component SerifText inherits Text {
+    horizontal-alignment: left;
+    font-family: FN.serif;
+    vertical-alignment: top;
+}
+
+export component SansText inherits Text {
+    horizontal-alignment: left;
+    font-family: FN.sans;
+    vertical-alignment: top;
+}
+
+// `border-bottom: 1px solid <colour>`.
+export component HLine inherits Rectangle {
+    in property <color> tone: FN.line-soft;
+    height: 1px;
+    background: root.tone;
+}
+
+// `border-*: 1px dotted <colour>`: production's dotted rule (1px dot, 1px gap), drawn as a tiled
+// project-owned SVG tinted with the rule colour.
+export component DotLine inherits Image {
+    in property <color> tone: FN.rule-dot;
+    source: @image-url("../../assets/dashboard/dot-h.svg");
+    height: 1px;
+    horizontal-tiling: repeat;
+    image-fit: fill;
+    colorize: root.tone;
+}
+
+// Production's `.ghost-button` in the Field Notebook style: paper fill, hairline border, small
+// uppercase monospace label.
+export component GhostButton inherits Rectangle {
+    in property <string> text;
+    in property <length> text-size: 11px;
+    in property <length> pad-x: 24px;
+    in property <length> pad-y: 11px;
+    in property <length> min-h: 0px;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    background: FN.paper-1;
+    border-width: 1px;
+    border-color: FN.line;
+    border-radius: 2px;
+    horizontal-stretch: 0;
+    opacity: root.enabled ? 1 : 0.55;
+
+    label := MonoText {
+        x: (parent.width - self.preferred-width) / 2;
+        y: (parent.height - self.preferred-height) / 2;
+        text: root.text;
+        font-size: root.text-size;
+        letter-spacing: 0.66px;
+        color: FN.ink-3;
+    }
+
+    width: label.preferred-width + 2 * root.pad-x + 2px;
+    height: max(root.min-h, label.preferred-height + 2 * root.pad-y + 2px);
+
+    TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Production renders this one as an *unstyled* native `<button>` (the Field Notebook CSS only
+// styles `.ghost-button`, and "Start focus" carries no class): a grey control with white 16px
+// Arial text and an outset 2px border. Reproduced as-is (a production quirk, not a native choice).
+export component StartFocusButton inherits Rectangle {
+    in property <string> text: "Start focus";
+    in property <length> pad-x: 24px;
+    in property <length> pad-y: 11px;
+    in property <length> min-w: 0px;
+    in property <length> min-h: 0px;
+    callback clicked();
+
+    background: FN.dark ? #6b6b6b : #efefef;
+    border-width: 2px;
+    border-color: FN.dark ? #858585 : #767676;
+    horizontal-stretch: 0;
+
+    label := SansText {
+        x: (parent.width - self.preferred-width) / 2;
+        y: (parent.height - self.preferred-height) / 2;
+        text: root.text;
+        font-size: 16px;
+        color: FN.dark ? #ffffff : #000000;
+    }
+
+    width: max(root.min-w, label.preferred-width + 2 * root.pad-x + 4px);
+    height: max(root.min-h, label.preferred-height + 2 * root.pad-y + 4px);
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// `input.dashboard-task-check`: a square checkbox (18px, or 15px inside the Full layout's list).
+export component FnCheck inherits Rectangle {
+    in property <bool> checked;
+    in property <length> box-size: 18px;
+    callback toggled();
+
+    width: root.box-size;
+    height: root.box-size;
+    border-radius: 3px;
+    border-width: 1px;
+    border-color: root.checked ? FN.link : #8a8a8a;
+    background: root.checked ? FN.link : FN.surface;
+
+    if root.checked: Path {
+        x: root.box-size * 0.2;
+        y: root.box-size * 0.25;
+        width: root.box-size * 0.6;
+        height: root.box-size * 0.5;
+        viewbox-width: 10;
+        viewbox-height: 8;
+        stroke: FN.surface;
+        stroke-width: 1.6px;
+        fill: transparent;
+        MoveTo { x: 0.5; y: 4; }
+        LineTo { x: 3.8; y: 7; }
+        LineTo { x: 9.5; y: 0.8; }
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggled(); }
+    }
+}
+
+// `.fn-section-rule`: an ink-coloured hairline under a small spaced caption, optionally with a
+// right-aligned secondary caption.
+export component SectionRule inherits Rectangle {
+    in property <string> left;
+    in property <string> right;
+
+    height: 18px;
+
+    MonoText {
+        x: 0px;
+        y: 0px;
+        text: root.left;
+        font-size: 10px;
+        letter-spacing: 1.6px;
+        color: FN.ink;
+    }
+    MonoText {
+        x: parent.width - self.preferred-width;
+        y: 0px;
+        text: root.right;
+        font-size: 10px;
+        letter-spacing: 1.6px;
+        color: FN.ink-4;
+    }
+    HLine {
+        y: parent.height - 1px;
+        tone: FN.ink;
+    }
+}
+
+// Quiet/Full toggle (`.fn-view-switch`).
+export component ViewSwitch inherits Rectangle {
+    in property <bool> full;
+    callback picked(bool);
+
+    height: 28px;
+    width: 26px + 10px + 59px + 51px;
+
+    MonoText {
+        x: 0px;
+        y: 8px;
+        text: "VIEW";
+        font-size: 9.5px;
+        letter-spacing: 1.33px;
+        color: FN.ink-4;
+    }
+    Rectangle {
+        x: 36px;
+        width: 59px;
+        height: 28px;
+        background: root.full ? transparent : FN.surface;
+        border-width: 1px;
+        border-color: root.full ? FN.line : FN.ink;
+        MonoText {
+            x: 11px;
+            y: 8px;
+            text: "QUIET";
+            font-size: 11px;
+            letter-spacing: 0.88px;
+            color: root.full ? FN.ink-4 : FN.ink;
+        }
+        TouchArea { mouse-cursor: pointer; clicked => { root.picked(false); } }
+    }
+    Rectangle {
+        x: 95px;
+        width: 51px;
+        height: 28px;
+        background: root.full ? FN.surface : transparent;
+        border-width: 1px;
+        border-color: root.full ? FN.ink : FN.line;
+        MonoText {
+            x: 11px;
+            y: 8px;
+            text: "FULL";
+            font-size: 11px;
+            letter-spacing: 0.88px;
+            color: root.full ? FN.ink : FN.ink-4;
+        }
+        TouchArea { mouse-cursor: pointer; clicked => { root.picked(true); } }
+    }
+}
+
+// `.fn-ledger-track`: the goal progress bar.
+export component LedgerTrack inherits Rectangle {
+    in property <float> fill;
+    height: 5px;
+    background: FN.surface-2;
+    border-width: 1px;
+    border-color: FN.line-soft;
+    Rectangle {
+        x: 0px;
+        width: max(0px, min(1.0, root.fill) * (parent.width - 2px));
+        height: parent.height - 2px;
+        background: FN.green;
+    }
+}

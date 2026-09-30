@@ -1,0 +1,307 @@
+import { FN } from "palette.slint";
+import { FnDashboardData, FnFossilDay, FnLegendItem, FnFossilStat, FnDiscovered } from "types.slint";
+import { MonoText, SerifText, SansText, HLine, DotLine } from "parts.slint";
+
+// Milestone glyph, project-owned SVG copies of production's `FossilMilestoneIcon` paths.
+component MilestoneGlyph inherits Image {
+    in property <int> kind;
+    in property <color> tone: FN.user-accent;
+    source: root.kind == 0 ? @image-url("../../assets/dashboard/milestone-10.svg")
+        : root.kind == 1 ? @image-url("../../assets/dashboard/milestone-25.svg")
+        : root.kind == 2 ? @image-url("../../assets/dashboard/milestone-50.svg")
+        : root.kind == 3 ? @image-url("../../assets/dashboard/milestone-100.svg")
+        : @image-url("../../assets/dashboard/milestone-star.svg");
+    colorize: root.tone;
+}
+
+// One day column: stacked course layers, or the small "eroded" tick for a rest day.
+component FossilColumn inherits Rectangle {
+    in property <FnFossilDay> day;
+    in property <length> strata-h;
+    in property <bool> dimmed;
+    in property <bool> hovered;
+    opacity: root.dimmed ? 0.45 : 1.0;
+
+    if root.day.empty: Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: root.strata-h - 5px - 2px - 6px;
+        width: max(1px, min(12px, parent.width * 0.45));
+        height: 6px;
+        border-radius: 1px;
+        background: FN.line;
+        opacity: 0.35;
+    }
+    for layer in root.day.layers: Rectangle {
+        width: parent.width * layer.width-frac;
+        x: (parent.width - self.width) / 2;
+        height: layer.height;
+        y: root.strata-h - 5px - layer.bottom - layer.height;
+        border-top-left-radius: layer.radius-a;
+        border-top-right-radius: layer.radius-b;
+        border-bottom-right-radius: layer.radius-c;
+        border-bottom-left-radius: layer.radius-d;
+        background: @linear-gradient(175deg, layer.color.mix(#ffffff, 0.88), layer.color);
+        // `inset 0 1px 0 #ffffff3d`
+        Rectangle { y: 0px; height: 1px; background: #ffffff3d; }
+        if root.hovered: Rectangle { background: #ffffff26; border-top-left-radius: parent.border-top-left-radius; border-top-right-radius: parent.border-top-right-radius; border-bottom-right-radius: parent.border-bottom-right-radius; border-bottom-left-radius: parent.border-bottom-left-radius; }
+    }
+    if root.day.is-today: Image {
+        x: (parent.width - 16px) / 2;
+        y: root.strata-h - 5px - root.day.column-height - 22px + 8px;
+        width: 16px;
+        height: 22px;
+        source: @image-url("../../assets/dashboard/survey-flag.svg");
+        colorize: FN.ink-2;
+    }
+    if root.day.is-today: Rectangle {
+        width: min(42px, parent.width);
+        x: (parent.width - self.width) / 2;
+        y: root.strata-h - 5px;
+        height: 4px;
+        border-radius: 2px;
+        background: FN.user-accent;
+        opacity: 0.35;
+    }
+}
+
+// The focus-history card body (`renderWeeklyChart` in the Field Notebook "Full" layout): range
+// toggle column on the right; strata chart, legend, discovered milestones and stats on the left.
+export component FossilCard inherits Rectangle {
+    in property <FnDashboardData> d;
+    callback set-range(int);
+    callback hover-day(int, length, length);
+    callback leave-day();
+    callback toggle-milestone(int, length, length);
+    in property <int> hovered-day: -1;
+
+    private property <length> main-w: root.width - 2px - 28px - 174px;
+    private property <length> shell-w: root.main-w;
+    private property <length> inner-w: root.shell-w - 2px - 12px;
+    private property <int> n: root.d.days.length;
+    private property <length> col-w: (root.inner-w - (root.n - 1) * root.d.column-gap) / root.n;
+    private property <length> milestone-row-h: root.d.has-milestones ? 21px : 0px;
+    private property <bool> has-discovered: root.d.discovered.length > 0;
+    private property <length> stats-y: 12px + root.shell-h + 14px + 26px + (root.has-discovered ? 14px + 29px : 0px) + 14px + 10px;
+    out property <length> card-height: 15px + root.stats-y + 54px + 15px;
+    private property <length> shell-h: max(145px, 1px + 6px + root.d.chart-height + 1px + 3px + root.milestone-row-h + 3px + 12px + 5px + 1px);
+
+    background: FN.surface-2;
+    border-width: 1px;
+    border-color: FN.line;
+
+    // --- empty state --------------------------------------------------------------------------
+    if !root.d.has-history: Rectangle {
+        x: 15px;
+        y: 15px + 26px + 12px;
+        width: root.main-w;
+        height: 150px;
+        Image { x: (parent.width - 40px) / 2; y: 24px; width: 40px; height: 40px; source: @image-url("../../assets/dashboard/strata-large.svg"); colorize: FN.accent; opacity: 0.4; }
+        SerifText { x: 0px; y: 78px; width: parent.width; horizontal-alignment: center; text: "No focus history yet"; font-size: 17.6px; font-weight: 400; color: FN.ink; }
+        SansText { x: (parent.width - 340px) / 2; y: 106px; width: 340px; horizontal-alignment: center; wrap: word-wrap; text: "Complete your first study block to begin building your focus history."; font-size: 13.1px; color: FN.ink-4; }
+    }
+
+    // --- range toggle (right) -----------------------------------------------------------------
+    Rectangle {
+        x: root.width - 1px - 14px - 156px;
+        y: 27px;
+        width: 78.3px;
+        height: min(228px, root.height - 30px);
+        background: FN.surface;
+        border-width: 1px;
+        border-color: FN.line;
+        for label[i] in root.d.range-labels: Rectangle {
+            y: 1px + i * ((parent.height - 2px) / root.d.range-labels.length);
+            height: (parent.height - 2px) / root.d.range-labels.length;
+            x: 0px;
+            width: parent.width - 2px;
+            background: i == root.d.range-index ? FN.ink : transparent;
+            MonoText {
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                text: label;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 1.2px;
+                color: i == root.d.range-index ? FN.surface : FN.ink-4;
+            }
+            if i < root.d.range-labels.length - 1: DotLine { y: parent.height - 1px; width: parent.width; }
+            TouchArea { mouse-cursor: pointer; clicked => { root.set-range(i); } }
+        }
+    }
+
+    if root.d.has-history: Rectangle {
+        x: 15px;
+        y: 15px;
+        width: root.main-w;
+        height: root.height - 30px;
+
+        // strata shell
+        shell := Rectangle {
+            y: 12px;
+            width: root.shell-w;
+            height: root.shell-h;
+            border-width: 1px;
+            border-color: FN.line-soft;
+            border-radius: 10px;
+            background: @linear-gradient(180deg, FN.surface-inset.transparentize(0.08), FN.surface-inset.transparentize(0.28));
+            clip: false;
+
+            HLine { x: 11px; y: 37px; width: parent.width - 22px; tone: FN.line-soft; opacity: 0.8; }
+            HLine { x: 11px; y: 69px; width: parent.width - 22px; tone: FN.line-soft; opacity: 0.8; }
+            HLine { x: 11px; y: 101px; width: parent.width - 22px; tone: FN.line-soft; opacity: 0.8; }
+
+            Rectangle {
+                x: 7px;
+                y: 7px;
+                width: root.inner-w;
+                height: parent.height - 12px;
+
+                for day[i] in root.d.days: Rectangle {
+                    x: i * (root.col-w + root.d.column-gap);
+                    y: 0px;
+                    width: root.col-w;
+                    height: root.d.chart-height;
+                    FossilColumn {
+                        width: parent.width;
+                        height: parent.height;
+                        day: day;
+                        strata-h: root.d.chart-height;
+                        dimmed: root.hovered-day >= 0 && root.hovered-day != i;
+                        hovered: root.hovered-day == i;
+                    }
+                    ta := TouchArea {
+                        mouse-cursor: pointer;
+                        changed has-hover => {
+                            if self.has-hover {
+                                root.hover-day(i, self.absolute-position.x + self.width / 2, self.absolute-position.y);
+                            } else {
+                                root.leave-day();
+                            }
+                        }
+                    }
+                }
+
+                // bedrock
+                Rectangle {
+                    y: root.d.chart-height + 1px;
+                    width: parent.width;
+                    height: 3px;
+                    border-radius: 2px;
+                    opacity: 0.45;
+                    background: @linear-gradient(90deg, #00000000, FN.user-accent, FN.ink, FN.user-accent, #00000000);
+                }
+
+                // milestone row
+                if root.d.has-milestones: Rectangle {
+                    y: root.d.chart-height + 1px + 3px + 3px;
+                    width: parent.width;
+                    height: 18px;
+                    for day[i] in root.d.days: Rectangle {
+                        x: i * (root.col-w + root.d.column-gap);
+                        width: root.col-w;
+                        if day.milestone >= 0: Rectangle {
+                            MilestoneGlyph {
+                                x: (parent.width - 13px) / 2;
+                                y: 1px;
+                                width: 13px;
+                                height: 13px;
+                                kind: day.milestone-icon;
+                            }
+                            MonoText {
+                                x: (parent.width - self.preferred-width) / 2;
+                                y: 14px;
+                                text: day.milestone-hours;
+                                font-size: 7px;
+                                font-weight: 800;
+                                color: FN.ink-4;
+                            }
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.toggle-milestone(i, self.absolute-position.x + self.width / 2, self.absolute-position.y); }
+                            }
+                        }
+                    }
+                }
+
+                // date row
+                Rectangle {
+                    y: root.d.chart-height + 1px + 3px + (root.d.has-milestones ? 21px : 0px) + 3px;
+                    width: parent.width;
+                    height: 12px;
+                    for day[i] in root.d.days: Rectangle {
+                        x: i * (root.col-w + root.d.column-gap);
+                        width: root.col-w;
+                        MonoText {
+                            x: (parent.width - self.preferred-width) / 2;
+                            y: 2px;
+                            text: day.label;
+                            font-size: 7.68px;
+                            font-weight: day.is-today ? 800 : 600;
+                            color: day.is-today ? FN.user-accent : FN.ink-4;
+                        }
+                    }
+                }
+            }
+        }
+
+        // legend
+        Rectangle {
+            y: 12px + root.shell-h + 14px + 14px;
+            x: 2px;
+            MonoText { x: 0px; y: 0px; text: "COURSES"; font-size: 8.96px; font-weight: 800; letter-spacing: 0.896px; color: FN.ink-4; }
+            HorizontalLayout {
+                x: 54.8px;
+                y: -1px;
+                spacing: 14px;
+                alignment: start;
+                for item in root.d.legend: HorizontalLayout {
+                    spacing: 6px;
+                    alignment: start;
+                    Rectangle { width: 8px; height: 8px; y: 3px; border-radius: 2px; background: item.color; }
+                    SansText { text: item.name; font-size: 11.52px; color: FN.ink-3; }
+                }
+            }
+        }
+
+        // discovered
+        if root.d.discovered.length > 0: Rectangle {
+            y: 12px + root.shell-h + 14px + 26px + 14px + 10px;
+            x: 2px;
+            MonoText { x: 0px; y: 4.5px; text: "DISCOVERED"; font-size: 8.96px; font-weight: 800; letter-spacing: 0.896px; color: FN.ink-4; }
+            HorizontalLayout {
+                x: 72.2px;
+                spacing: 12px;
+                alignment: start;
+                for item in root.d.discovered: Rectangle {
+                    height: 19px;
+                    width: 8px + 11px + 4px + label.preferred-width + 8px + 2px;
+                    background: FN.accent-soft;
+                    border-width: 1px;
+                    border-color: FN.accent-line;
+                    border-radius: 6px;
+                    MilestoneGlyph { x: 9px; y: 4px; width: 11px; height: 11px; kind: item.icon; }
+                    label := MonoText { x: 24px; y: 3px; text: item.label; font-size: 9.92px; font-weight: 700; color: FN.ink-3; }
+                }
+            }
+        }
+
+        // stats
+        Rectangle {
+            x: -2px;
+            y: root.stats-y;
+            width: root.main-w + 4px;
+            height: 56px;
+            HLine { x: 0px; y: 0px; tone: FN.line-soft; }
+            for stat[i] in root.d.stats: Rectangle {
+                x: 2px + i * ((root.main-w + 4px - 4px - 30px) / 4 + 10px);
+                y: 11px;
+                width: (root.main-w + 4px - 4px - 30px) / 4;
+                MonoText { x: 0px; y: 0px; text: stat.label; font-size: 9.28px; font-weight: 800; letter-spacing: 0.928px; color: FN.ink-4; }
+                MonoText { x: 0px; y: 12px; text: stat.value; font-size: 15.68px; font-weight: 700; letter-spacing: -0.157px; color: FN.ink; }
+                SansText { x: 0px; y: 33.5px; text: stat.sub; font-size: 10.24px; color: FN.ink-4; }
+            }
+        }
+    }
+}

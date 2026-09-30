@@ -34,5 +34,8 @@ pub use planner::{
 };
 pub use semester::{Semester, SemesterPhase};
 pub use session::{SessionKind, StudySession};
-pub use state::{prune_session_history, AcademicState, SESSION_HISTORY_DAYS, SESSION_HISTORY_MAX};
+pub use state::{
+    completed_calendar_whole_units, prune_session_history, AcademicState, SESSION_HISTORY_DAYS,
+    SESSION_HISTORY_MAX,
+};
 pub use task::{Priority, Task, TaskSubtype};

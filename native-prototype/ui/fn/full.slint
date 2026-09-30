@@ -1,0 +1,537 @@
+import { FN } from "palette.slint";
+import { FnDashboardData, FnQueueRow, FnCourseRow, FnExamRow } from "types.slint";
+import { MonoText, SerifText, SansText, HLine, DotLine, GhostButton, StartFocusButton, FnCheck, ViewSwitch, LedgerTrack, SectionRule } from "parts.slint";
+import { FossilCard } from "fossil.slint";
+import { TiltedBox } from "tilted.slint";
+
+component PriorityChip inherits Rectangle {
+    in property <string> text;
+    in property <int> tone;   // 0 high, 1 medium, 2 low/done
+    height: 19px;
+    width: lbl.preferred-width + 14px;
+    border-radius: 2px;
+    background: root.tone == 2 ? FN.surface-2 : FN.danger-soft;
+    border-width: 1px;
+    border-color: transparent;
+    lbl := MonoText {
+        x: 7px;
+        y: 0px;
+        height: parent.height - 2px;
+        vertical-alignment: center;
+        text: root.text.to-uppercase();
+        font-size: 8.96px;
+        font-weight: 700;
+        color: root.tone == 2 ? FN.ink-3 : FN.stamp;
+    }
+}
+
+// One planned-today row of the Full queue (`.design-task-item`).
+component QueueItem inherits Rectangle {
+    in property <FnQueueRow> item;
+    callback select();
+    callback toggle();
+    callback focus-task();
+
+    height: 83px;
+    background: root.item.selected ? FN.user-accent.mix(FN.surface, 0.09) : transparent;
+
+    // borders: top/left/right soft, bottom dotted; selected: hard top & bottom
+    HLine { y: 0px; tone: root.item.selected ? FN.ink : FN.line-soft; }
+    Rectangle { x: 0px; width: 1px; background: FN.line-soft; }
+    Rectangle { x: parent.width - 1px; width: 1px; background: FN.line-soft; }
+    if root.item.selected: HLine { y: parent.height - 1px; tone: FN.ink; }
+    if !root.item.selected: DotLine { y: parent.height - 1px; width: parent.width; }
+
+    main := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.select(); }
+    }
+
+    Rectangle {
+        x: 13px;
+        y: 25px;
+        width: root.item.selected ? 5px : 4px;
+        height: 33px;
+        border-radius: 2px;
+        background: root.item.course-color;
+    }
+    ttl := SansText {
+        x: 26px + (root.item.selected ? 1px : 0px);
+        y: 25px;
+        height: 16px;
+        vertical-alignment: center;
+        text: root.item.title;
+        font-size: 14px;
+        font-weight: 700;
+        color: FN.ink;
+    }
+    chip := PriorityChip {
+        x: meta.x + max(meta.preferred-width, ttl.preferred-width + 8px + self.width) - self.width;
+        y: 25px - 1.5px;
+        text: root.item.chip;
+        tone: root.item.chip-tone;
+    }
+    meta := HorizontalLayout {
+        x: 26px + (root.item.selected ? 1px : 0px);
+        y: 47px;
+        height: 11px;
+        spacing: 6px;
+        alignment: start;
+        MonoText { text: root.item.unit-label; font-size: 9.28px; color: FN.ink-4; }
+        MonoText { text: root.item.course; font-size: 9.28px; color: FN.ink-4; }
+        MonoText { text: root.item.semester; font-size: 9.28px; color: FN.ink-4; }
+        MonoText { text: root.item.due-or-time; font-size: 9.28px; color: FN.ink-4; }
+    }
+    FnCheck {
+        x: parent.width - 13px - 15px - 3px;
+        y: 15px;
+        box-size: 15px;
+        checked: root.item.completed;
+        toggled => { root.toggle(); }
+    }
+    if root.item.has-task: GhostButton {
+        x: parent.width - 13px - self.width;
+        y: 41px;
+        text: "FOCUS";
+        pad-x: 12px;
+        pad-y: 6px;
+        min-h: 30px;
+        clicked => { root.focus-task(); }
+    }
+}
+
+component CourseItem inherits Rectangle {
+    in property <FnCourseRow> item;
+    in property <length> row-w;
+    detail := MonoText {
+        x: 27px;
+        y: 47px;
+        width: root.row-w - 27px - 10px;
+        wrap: word-wrap;
+        text: root.item.detail;
+        font-size: 9.28px;
+        color: FN.ink-4;
+    }
+    height: 11px + 15px + 6px + 7px + 5px + max(12.5px, detail.preferred-height) + 11px + 1px;
+
+    Rectangle { x: 10px; y: 15px; width: 8px; height: 8px; background: root.item.color; }
+    SansText { x: 27px; y: 6px + 5px - 1px + 0px; height: 15px; vertical-alignment: center; text: root.item.name; font-size: 13.12px; font-weight: 700; color: FN.ink; }
+    SansText { x: root.row-w - 10px - self.preferred-width; y: 12px; text: root.item.score; font-size: 11.52px; color: FN.ink-3; }
+    Rectangle {
+        x: 27px;
+        y: 32px;
+        width: root.row-w - 27px - 10px;
+        height: 7px;
+        border-radius: 4px;
+        background: FN.ring-track;
+        Rectangle { x: 0px; y: 0px; width: parent.width * root.item.fill; height: parent.height; border-radius: 4px; background: root.item.color; }
+    }
+    DotLine { y: parent.height - 1px; width: parent.width; }
+}
+
+component ExamItem inherits Rectangle {
+    in property <FnExamRow> item;
+    in property <length> row-w;
+    private property <length> copy-w: root.row-w - 20px - 46px - 12px - 12px - 58px;
+    meta := MonoText {
+        x: 10px + 46px + 12px;
+        y: 13px + 18px + 6px;
+        width: root.copy-w;
+        wrap: word-wrap;
+        text: root.item.meta;
+        font-size: 10.56px;
+        color: FN.ink-4;
+    }
+    height: 27px + max(42px, 18px + 6px + meta.preferred-height);
+
+    Rectangle {
+        x: 10px;
+        y: 13px;
+        width: 46px;
+        height: 42px;
+        MonoText { width: parent.width; y: 0px; horizontal-alignment: center; text: root.item.days; font-size: 24px; font-weight: 700; color: FN.stamp; }
+        MonoText { width: parent.width; y: 29px; horizontal-alignment: center; text: "DAYS"; font-size: 9.92px; letter-spacing: 0.992px; color: FN.ink-4; }
+    }
+    SansText { x: 10px + 46px + 12px; y: 13px; height: 18px; vertical-alignment: center; text: root.item.title; font-size: 14.08px; font-weight: 700; color: FN.ink; }
+    Rectangle {
+        x: root.row-w - 10px - 58px;
+        y: 14px;
+        width: 58px;
+        height: 40px;
+        MonoText { x: parent.width - self.preferred-width; y: 0px; text: root.item.prep-text; font-size: 9.92px; font-weight: 700; letter-spacing: 0.992px; color: FN.ink-4; }
+        Rectangle {
+            y: 21px;
+            height: 12px;
+            border-radius: 6px;
+            background: FN.ring-track;
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                height: parent.height;
+                width: parent.width * root.item.prep-fill;
+                border-radius: 6px;
+                background: root.item.prep-tone == 0 ? FN.green : root.item.prep-tone == 1 ? FN.stamp : FN.stamp;
+            }
+        }
+    }
+    DotLine { y: parent.height - 1px; width: parent.width; }
+}
+
+export component FullDashboard inherits Rectangle {
+    in property <FnDashboardData> d;
+    in property <length> inner-width;
+    in property <length> window-width;
+    in property <int> hovered-day: -1;
+    callback select-entry(string);
+    callback toggle-entry(string);
+    callback focus-task(string);
+    callback set-full(bool);
+    callback start-focus();
+    callback set-range(int);
+    callback hover-day(int, length, length);
+    callback leave-day();
+    callback toggle-milestone(int, length, length);
+
+    private property <bool> one-col: root.window-width <= 1180px;
+    private property <bool> narrow: root.window-width <= 780px;
+    private property <length> free: root.inner-width - 48px;
+    private property <length> fr0: root.free / 3.09;
+    private property <length> c3-a: max(260px, root.fr0 * 0.72);
+    private property <length> fr1: root.c3-a > root.fr0 * 0.72 ? (root.free - root.c3-a) / 2.37 : root.fr0;
+    private property <length> c2-a: max(280px, root.fr1 * 0.92);
+    private property <length> c3: root.one-col ? root.inner-width : root.c3-a;
+    private property <length> c2: root.one-col ? root.inner-width : root.c2-a;
+    private property <length> c1: root.one-col ? root.inner-width : root.free - root.c2-a - root.c3-a;
+    private property <length> c2-x: root.one-col ? 0px : root.c1 + 24px;
+    private property <length> c3-x: root.one-col ? 0px : root.c1 + 24px + root.c2 + 24px;
+
+    private property <length> title-size: min(45.6px, max(32px, root.window-width * 0.03));
+    private property <length> title-lh: root.title-size * 1.06;
+    private property <length> head-left-h: 12px + 6px + root.title-lh + 4px + 18.6px;
+    private property <length> head-h: root.narrow ? root.head-left-h + 88px + 17px + 2px : max(root.head-left-h, 68px) + 17px + 2px;
+    private property <length> grid-y: root.head-h + 20px;
+
+    // --- column 1: queue ------------------------------------------------------------------------
+    private property <length> next-h: root.narrow ? 140px : 101px;
+    private property <int> qn: root.d.queue-rows.length;
+    private property <length> queue-list-h: root.qn == 0 ? 0px : root.qn * 83px + (root.qn - 1) * 6px + 1px;
+    private property <length> queue-card-h: max(270px, root.qn == 0 ? 60px : root.queue-list-h + 2px);
+    private property <length> col1-h: 18px + 10px + root.next-h + 10px + root.queue-card-h;
+
+    // --- column 2: course ledger + pace -----------------------------------------------------------
+    private property <length> radar-list-h: rows-layout.preferred-height + 1px;
+    private property <length> radar-card-h: max(270px, min(356px + 2px, root.radar-list-h) + 2px);
+    private property <length> pace-y: 18px + 10px + root.radar-card-h + 20px;
+    private property <length> col2-h: root.pace-y + 198.5px;
+
+    // --- column 3: exam runway + margin note ----------------------------------------------------
+    private property <length> exam-list-h: exam-layout.preferred-height + 1px;
+    private property <length> exam-card-h: max(270px, min(444px, root.exam-list-h) + 2px);
+    private property <length> note-y: 18px + 10px + root.exam-card-h + 20px;
+    private property <length> col3-h: root.note-y + 115.4px + 10px;
+
+    private property <length> cols-h: root.one-col ? root.col1-h + 24px + root.col2-h + 24px + root.col3-h : max(root.col1-h, max(root.col2-h, root.col3-h));
+    private property <length> weekly-y: root.grid-y + root.cols-h + 24px;
+
+    out property <length> weekly-card-h: fossil.card-height;
+    out property <length> content-height: root.weekly-y + 18px + 10px + root.weekly-card-h + 30px + 26px;
+
+    // ===== head =====
+    MonoText { x: 0px; y: 0px; height: 12px; text: root.d.stamp-line; font-size: 10px; letter-spacing: 1.6px; color: FN.ink-4; }
+    SerifText {
+        x: 0px;
+        y: 18px;
+        height: root.title-lh;
+        vertical-alignment: center;
+        text: root.d.title-text;
+        font-size: root.title-size;
+        font-weight: 500;
+        letter-spacing: -0.01 * root.title-size;
+        color: FN.ink;
+    }
+    MonoText {
+        x: 0px;
+        y: 18px + root.title-lh + 4px;
+        width: root.inner-width - (root.narrow ? 0px : 146px + 260px + 60px);
+        height: 18.6px;
+        vertical-alignment: center;
+        overflow: elide;
+        text: root.d.subtitle-rest;
+        font-size: 12px;
+        color: FN.ink-3;
+    }
+    // focus ledger (centre)
+    Rectangle {
+        x: root.narrow ? 0px : root.inner-width - 146px - 30px - 260px;
+        y: root.narrow ? root.head-left-h + 10px : (max(root.head-left-h, 68px) - 68px) / 2;
+        width: 260px;
+        height: 68px;
+        MonoText { width: parent.width; horizontal-alignment: center; y: 0px; height: 11px; text: "FOCUSED TODAY"; font-size: 9.5px; letter-spacing: 1.52px; color: FN.ink-4; }
+        big := MonoText { y: 15px; height: 30px; vertical-alignment: center; x: (parent.width - (self.preferred-width + 16.5px + goal-t.preferred-width)) / 2; text: root.d.focused; font-size: 30px; color: FN.ink; }
+        goal-t := MonoText { x: big.x + big.preferred-width + 16.5px; y: 27px; height: 17px; vertical-alignment: center; text: "/ " + root.d.goal; font-size: 14px; color: FN.ink-4; }
+        LedgerTrack { y: 52px; width: parent.width; fill: root.d.goal-fill; }
+        MonoText { width: parent.width; horizontal-alignment: center; y: 57px; height: 11px; text: root.d.goal-caption; font-size: 9.5px; letter-spacing: 1.52px; color: FN.ink-4; }
+    }
+    ViewSwitch {
+        x: root.inner-width - self.width;
+        y: root.narrow ? root.head-left-h + 10px + 4px : (max(root.head-left-h, 68px) - 32px) / 2 + 4px;
+        full: true;
+        picked(full) => { root.set-full(full); }
+    }
+    Rectangle { y: root.head-h - 2px; height: 2px; background: FN.ink; }
+
+    // ===== grid =====
+    Rectangle {
+        y: root.grid-y;
+        width: root.inner-width;
+        height: root.cols-h;
+
+        // --- column 1 ---
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: root.c1;
+            height: root.col1-h;
+            SectionRule { width: parent.width; left: "STUDY QUEUE · ORDERED BY PRESSURE"; right: root.d.queue-caption; }
+            // next task sheet
+            Rectangle {
+                y: 28px;
+                height: root.next-h;
+                background: FN.surface-2;
+                border-width: 1px;
+                border-color: FN.line;
+                Rectangle { x: 0px; width: 3px; background: root.d.next-color; }
+                Rectangle {
+                    x: 15px;
+                    y: 14px;
+                    height: 17px;
+                    width: code.preferred-width + 10px + 2px;
+                    border-width: 1px;
+                    border-color: root.d.next-color;
+                    code := MonoText { x: 6px; y: 1px; height: 13px; vertical-alignment: center; text: root.d.next-code; font-size: 9.5px; font-weight: 700; letter-spacing: 1.52px; color: root.d.next-color; }
+                }
+                MonoText { x: 15px + 39px + 9px; y: 18px; height: 11px; text: "SELECTED BLOCK"; font-size: 9.5px; letter-spacing: 1.52px; color: FN.stamp; }
+                SerifText { x: 15px; y: 36px; width: parent.width - 30px - 140px; height: 22.8px; vertical-alignment: center; overflow: elide; text: root.d.next-title; font-size: 19px; font-weight: 500; color: FN.ink; }
+                MonoText { x: 15px; y: 65.8px; width: parent.width - 30px - 140px; height: 18px; vertical-alignment: center; overflow: elide; text: root.d.next-meta; font-size: 12px; color: FN.ink-3; }
+                if root.d.has-start: StartFocusButton {
+                    x: parent.width - 15px - self.width;
+                    y: 12px;
+                    pad-x: 16px;
+                    pad-y: 7px;
+                    min-w: 127.9px;
+                    min-h: 36px;
+                    clicked => { root.start-focus(); }
+                }
+                GhostButton {
+                    x: parent.width - 15px - self.width;
+                    y: root.d.has-start ? 12px + 36px + 7px : 12px;
+                    text: "SOMETHING ELSE";
+                    pad-x: 16px;
+                    pad-y: 7px;
+                    min-h: 32px;
+                    enabled: false;
+                }
+            }
+            // queue list
+            Rectangle {
+                y: 28px + root.next-h + 10px;
+                height: root.queue-card-h;
+                border-width: 1px;
+                border-color: FN.line;
+                background: FN.surface;
+                if root.qn == 0: MonoText {
+                    x: 14px;
+                    y: 14px;
+                    width: parent.width - 28px;
+                    wrap: word-wrap;
+                    text: "NOTHING PLANNED FOR TODAY. ADD TASKS FROM THE PLANNER CALENDAR.";
+                    font-size: 11px;
+                    letter-spacing: 1.98px;
+                    color: FN.ink-4;
+                }
+                if root.qn > 0: Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width - 2px;
+                    height: root.queue-list-h;
+                    border-width: 1px;
+                    border-color: FN.line;
+                    VerticalLayout {
+                        x: 0px;
+                        y: 0px;
+                        width: parent.width - 3px;
+                        spacing: 6px;
+                        alignment: start;
+                        for row in root.d.queue-rows: QueueItem {
+                            item: row;
+                            select => { root.select-entry(row.entry-id); }
+                            toggle => { root.toggle-entry(row.entry-id); }
+                            focus-task => { root.focus-task(row.entry-id); }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- column 2 ---
+        Rectangle {
+            x: root.c2-x;
+            y: root.one-col ? root.col1-h + 24px : 0px;
+            width: root.c2;
+            height: root.col2-h;
+            SectionRule { width: parent.width; left: "COURSE LEDGER"; right: ""; }
+            Rectangle {
+                y: 28px;
+                height: root.radar-card-h;
+                border-width: 1px;
+                border-color: FN.line;
+                background: FN.surface;
+                if root.d.courses.length == 0: MonoText {
+                    x: 14px;
+                    y: 14px;
+                    width: parent.width - 28px;
+                    wrap: word-wrap;
+                    text: "COURSES WILL APPEAR HERE ONCE YOU START FILLING A SEMESTER.";
+                    font-size: 11px;
+                    letter-spacing: 1.98px;
+                    color: FN.ink-4;
+                }
+                Flickable {
+                    x: 1px;
+                    y: 1px;
+                    width: parent.width - 2px;
+                    height: parent.height - 2px;
+                    viewport-height: rows-layout.preferred-height;
+                    rows-layout := VerticalLayout {
+                        width: parent.width - 3px;
+                        alignment: start;
+                        for row in root.d.courses: CourseItem { item: row; row-w: root.c2 - 2px - 3px; }
+                    }
+                }
+            }
+            // pace ledger
+            Rectangle {
+                y: root.pace-y;
+                height: 198.5px;
+                background: FN.surface-2;
+                border-width: 1px;
+                border-color: FN.line;
+                MonoText { x: 18px; y: 17px; height: 15px; vertical-alignment: center; text: "PACE LEDGER · TOTAL WORKLOAD"; font-size: 10px; letter-spacing: 1.8px; color: FN.ink-4; }
+                Rectangle {
+                    x: 18px;
+                    y: 54px;
+                    width: (parent.width - 36px - 12px) / 2;
+                    MonoText { x: 0px; y: 0px; text: root.d.pace-left; font-size: 22px; color: FN.ink; }
+                    MonoText { x: 0px; y: 30px; text: "LEFT"; font-size: 10px; letter-spacing: 0.8px; color: FN.ink-4; }
+                }
+                Rectangle {
+                    x: 18px + (parent.width - 36px - 12px) / 2 + 12px;
+                    y: 54px;
+                    width: (parent.width - 36px - 12px) / 2;
+                    MonoText { x: 0px; y: 0px; text: root.d.pace-open; font_size: 22px; color: FN.ink; }
+                    MonoText { x: 0px; y: 30px; text: "OPEN TASKS"; font-size: 10px; letter-spacing: 0.8px; color: FN.ink-4; }
+                }
+                Rectangle {
+                    x: 18px;
+                    y: 108px;
+                    width: (parent.width - 36px - 12px) / 2;
+                    MonoText { x: 0px; y: 0px; text: root.d.pace-rate; font-size: 22px; color: FN.ink; }
+                    MonoText { x: 0px; y: 30px; text: "UNITS/DAY"; font-size: 10px; letter-spacing: 0.8px; color: FN.ink-4; }
+                }
+                SansText { x: 18px; y: 162px; width: parent.width - 36px; height: 19.5px; vertical-alignment: center; text: root.d.pace-note; font-size: 13px; color: FN.ink-3; }
+            }
+        }
+
+        // --- column 3 ---
+        Rectangle {
+            x: root.c3-x;
+            y: root.one-col ? root.col1-h + 24px + root.col2-h + 24px : 0px;
+            width: root.c3;
+            height: root.col3-h;
+            if !root.one-col: Rectangle { x: -22px; width: 1px; height: root.col3-h; background: FN.line-soft; }
+            SectionRule { x: root.one-col ? 0px : 22px; width: parent.width - (root.one-col ? 0px : 22px); left: "EXAM RUNWAY"; right: ""; }
+            Rectangle {
+                x: root.one-col ? 0px : 22px;
+                width: parent.width - (root.one-col ? 0px : 22px);
+                y: 28px;
+                height: root.exam-card-h;
+                border-width: 1px;
+                border-color: FN.line;
+                background: FN.surface;
+                if root.d.exams.length == 0: MonoText {
+                    x: 14px;
+                    y: 14px;
+                    width: parent.width - 28px;
+                    wrap: word-wrap;
+                    text: "ADD EXAMS SO THE DASHBOARD CAN SEE GRADE PRESSURE EARLY.";
+                    font-size: 11px;
+                    letter-spacing: 1.98px;
+                    color: FN.ink-4;
+                }
+                Flickable {
+                    x: 1px;
+                    y: 1px;
+                    width: parent.width - 2px;
+                    height: parent.height - 2px;
+                    viewport-height: exam-layout.preferred-height;
+                    exam-layout := VerticalLayout {
+                        width: parent.width;
+                        spacing: 8px;
+                        alignment: start;
+                        for row in root.d.exams: ExamItem { item: row; row-w: root.c3 - (root.one-col ? 0px : 22px) - 2px; }
+                    }
+                }
+            }
+            // margin note: a tilted slip of paper
+            note := TiltedBox {
+                x: root.one-col ? 0px : 22px;
+                y: root.note-y;
+                width: parent.width - (root.one-col ? 0px : 22px);
+                height: 115.4px;
+                angle: -1.25deg;
+                fill: FN.slip;
+                stroke: FN.line;
+                stroke-width: 1px;
+                shadow: #00000038;
+                shadow-dy: 2px;
+                MonoText { x: 22px; y: 25px; text: "MARGIN NOTE"; font-size: 9px; letter-spacing: 1.44px; color: FN.stamp; }
+                SerifText {
+                    width: note.width - 44px;
+                    height: 47.4px;
+                    x: 22px;
+                    y: 46.5px;
+                    wrap: word-wrap;
+                    text: root.d.margin-note;
+                    font-size: 14px;
+                    font-italic: true;
+                    color: FN.ink-3;
+                }
+            }
+        }
+    }
+
+    // ===== weekly sheet =====
+    Rectangle {
+        y: root.weekly-y;
+        width: root.inner-width;
+        SectionRule { width: parent.width; left: "WEEKLY RHYTHM · HOURS FOCUSED"; right: root.d.week-caption; }
+        fossil := FossilCard {
+            y: 28px;
+            width: parent.width;
+            height: self.card-height;
+            d: root.d;
+            hovered-day: root.hovered-day;
+            set-range(i) => { root.set-range(i); }
+            hover-day(i, x, y) => { root.hover-day(i, x, y); }
+            leave-day => { root.leave-day(); }
+            toggle-milestone(i, x, y) => { root.toggle-milestone(i, x, y); }
+        }
+        // `.fn-footer-note`
+        Rectangle {
+            y: 28px + fossil.card-height + 30px;
+            height: 26px;
+            HLine { y: 0px; tone: FN.line-soft; }
+            MonoText { x: 0px; y: 12px; text: root.d.footer; font-size: 10.5px; letter-spacing: 1.68px; color: FN.ink-4; }
+        }
+    }
+}

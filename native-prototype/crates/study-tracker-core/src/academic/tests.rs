@@ -431,3 +431,78 @@ fn unit_amount_normalizes_exactly_like_production() {
     );
     assert_eq!(UnitAmount::from_f64(-1.0), UnitAmount::Whole);
 }
+
+fn entry(id: &str, task_id: &str, amount: UnitAmount) -> CalendarEntry {
+    CalendarEntry {
+        id: CalendarEntryId::from(id),
+        task_id: TaskId::from(task_id),
+        date: LocalDate::parse("2026-09-30").unwrap(),
+        unit_amount: amount,
+        unit_start: None,
+        completed: false,
+        completed_at: None,
+        created_at: wall(0),
+        start_time: None,
+        end_time: None,
+        ad_hoc_title: None,
+        ad_hoc_semester_id: None,
+        ad_hoc_course_id: None,
+    }
+}
+
+#[test]
+fn toggling_a_whole_unit_entry_moves_the_task_by_one_and_back() {
+    let mut state = AcademicState::new();
+    let mut t = task("t", "s", "c");
+    t.total_units = 5;
+    t.completed_units = 2;
+    state.add_task(t);
+    state.add_calendar_entry(entry("e", "t", UnitAmount::Whole));
+    assert!(state.toggle_calendar_entry(&CalendarEntryId::from("e"), wall(100)));
+    assert_eq!(state.tasks[0].completed_units, 3);
+    assert!(state.calendar_entries[0].completed);
+    assert_eq!(state.calendar_entries[0].completed_at, Some(wall(100)));
+    assert!(state.toggle_calendar_entry(&CalendarEntryId::from("e"), wall(200)));
+    assert_eq!(
+        state.tasks[0].completed_units, 2,
+        "un-ticking takes the unit back"
+    );
+    assert_eq!(state.calendar_entries[0].completed_at, None);
+}
+
+#[test]
+fn two_half_unit_entries_advance_the_task_by_one_whole_unit_only_together() {
+    let mut state = AcademicState::new();
+    let mut t = task("t", "s", "c");
+    t.total_units = 5;
+    state.add_task(t);
+    state.add_calendar_entry(entry("a", "t", UnitAmount::Half));
+    state.add_calendar_entry(entry("b", "t", UnitAmount::Half));
+    state.toggle_calendar_entry(&CalendarEntryId::from("a"), wall(1));
+    assert_eq!(
+        state.tasks[0].completed_units, 0,
+        "half a unit is not a whole unit yet"
+    );
+    state.toggle_calendar_entry(&CalendarEntryId::from("b"), wall(2));
+    assert_eq!(state.tasks[0].completed_units, 1);
+    state.toggle_calendar_entry(&CalendarEntryId::from("a"), wall(3));
+    assert_eq!(state.tasks[0].completed_units, 0);
+}
+
+#[test]
+fn toggling_clamps_to_the_task_total_and_ignores_unknown_ids_and_missing_tasks() {
+    let mut state = AcademicState::new();
+    let mut t = task("t", "s", "c");
+    t.total_units = 1;
+    t.completed_units = 1;
+    state.add_task(t);
+    state.add_calendar_entry(entry("e", "t", UnitAmount::Whole));
+    state.toggle_calendar_entry(&CalendarEntryId::from("e"), wall(1));
+    assert_eq!(state.tasks[0].completed_units, 1, "never above totalUnits");
+    assert!(!state.toggle_calendar_entry(&CalendarEntryId::from("nope"), wall(1)));
+    state.add_calendar_entry(entry("orphan", "missing-task", UnitAmount::Whole));
+    assert!(
+        state.toggle_calendar_entry(&CalendarEntryId::from("orphan"), wall(1)),
+        "an entry whose task was deleted still toggles"
+    );
+}

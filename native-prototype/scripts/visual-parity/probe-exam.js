@@ -1,0 +1,1 @@
+(() => [...document.querySelectorAll('.design-exam-item, .design-exam-copy span, .design-exam-days, .design-exam-prep')].map(e => { const r = e.getBoundingClientRect(); return `${e.className} ${Math.round(r.x*10)/10},${Math.round(r.y*10)/10},${Math.round(r.width*10)/10},${Math.round(r.height*10)/10}`; }).join('\n'))()

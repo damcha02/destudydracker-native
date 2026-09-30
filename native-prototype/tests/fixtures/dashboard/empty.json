@@ -1,0 +1,31 @@
+{
+  "app": "study-tracker",
+  "backupVersion": 2,
+  "exportedAt": "2026-09-30T10:00:00.000Z",
+  "state": {
+    "semesters": [],
+    "courses": [],
+    "tasks": [],
+    "exams": [],
+    "sessions": [],
+    "timetableEvents": [],
+    "holidays": [],
+    "dailyTodos": [],
+    "calendarEntries": [],
+    "lifetimeStudyMinutes": 0,
+    "lifetimeStudySessions": 0,
+    "activeTab": "dashboard",
+    "settings": {
+      "accent": "#8fb4ff",
+      "userName": "",
+      "dailyGoalMinutes": 120,
+      "telemetryEnabled": false
+    },
+    "social": {
+      "userId": "fixture-user-id-not-real",
+      "deviceSecret": "fixture-device-secret-not-real",
+      "friendCode": "FIX-0000"
+    }
+  },
+  "preferences": {}
+}

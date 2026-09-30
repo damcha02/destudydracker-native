@@ -10,7 +10,7 @@
 
 mod academic_controller;
 mod app_model;
-mod dashboard;
+mod dashboard_view;
 mod map;
 mod map_adapter;
 mod persistence;
@@ -20,7 +20,7 @@ mod synthetic_dataset;
 mod timer_controller;
 
 use app_model::{format_clock, AppCommand, AppModel, TimerStatus};
-use dashboard::{format_minutes, AxisMark, DashboardScenario};
+use dashboard_view::{ChronoLocalClock, DashboardController, DashboardUiState};
 use platform::error::StartupError;
 use platform::{config, identity, logging, paths::AppPaths};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
@@ -28,6 +28,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
+use study_tracker_core::academic::CalendarEntryId;
+use study_tracker_core::dashboard::FocusRange;
+use study_tracker_core::timer::WallTimestamp;
 
 const RUNNING_UPDATE_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -129,14 +132,31 @@ fn run() -> Result<(), StartupError> {
         );
     }
     apply_model_to_window(&window, &model.borrow(), Instant::now());
-    apply_dashboard(&window, &model.borrow());
+    if std::env::var("STUDY_NATIVE_DASHBOARD_DARK").is_ok_and(|v| v == "0") {
+        use slint::Global;
+        FN::get(&window).set_dark(false);
+    }
+    let dashboard = Rc::new(RefCell::new(DashboardController::new(
+        dashboard_ui_from_env(),
+    )));
+    refresh_dashboard(&window, &model.borrow(), &mut dashboard.borrow_mut());
+    dashboard_report_if_requested(&dashboard.borrow());
     let map = map_adapter::new_controller(map_level_from_env());
     map_adapter::apply_all(&window, &mut map.borrow_mut());
     map_adapter::bind(&window, &map);
     let _bench_timer = std::env::var("STUDY_NATIVE_MAP_BENCH")
         .ok()
         .map(|spec| map_adapter::start_bench(&window, &map, &spec));
-    bind_model_callbacks(&window, Rc::clone(&model), Rc::clone(&refresh_timer));
+    bind_model_callbacks(
+        &window,
+        Rc::clone(&model),
+        Rc::clone(&refresh_timer),
+        Rc::clone(&dashboard),
+    );
+    bind_dashboard_callbacks(&window, Rc::clone(&model), Rc::clone(&dashboard));
+    let _rollover_timer =
+        start_date_rollover_check(&window, Rc::clone(&model), Rc::clone(&dashboard));
+    let _nav_stress = start_nav_stress(&window, Rc::clone(&model), Rc::clone(&dashboard));
     let _diagnostics = install_diagnostics(&window);
 
     log::info!("first window created; entering the event loop");
@@ -213,27 +233,13 @@ fn install_diagnostics(window: &MainWindow) -> Option<Timer> {
 
 /// Optional environment overrides so benchmarks and screenshots can start in a known state
 /// without synthetic input: `STUDY_NATIVE_VIEW=timer|text|dashboard`,
-/// `STUDY_NATIVE_POINTS=30|365|1000` (any count), `STUDY_NATIVE_SCENARIO=0..5`,
-/// `STUDY_NATIVE_SIZE=WIDTHxHEIGHT` (logical pixels).
+/// `STUDY_NATIVE_SIZE=WIDTHxHEIGHT` (logical pixels). Dashboard-specific ones (Stage 17):
+/// `STUDY_NATIVE_DASHBOARD_LAYOUT=quiet|full`, `STUDY_NATIVE_DASHBOARD_RANGE=week|7|14|30|60|365`.
 fn apply_startup_options(window: &MainWindow, model: &mut AppModel) {
     if let Ok(view) = std::env::var("STUDY_NATIVE_VIEW") {
         window.set_show_dashboard(view == "dashboard");
         window.set_show_text_spike(view == "text");
         window.set_show_map(view == "map");
-    }
-    if let Some(points) = std::env::var("STUDY_NATIVE_POINTS")
-        .ok()
-        .and_then(|v| v.parse().ok())
-    {
-        model.apply(AppCommand::SetDashboardPoints(points));
-    }
-    if let Some(index) = std::env::var("STUDY_NATIVE_SCENARIO")
-        .ok()
-        .and_then(|v| v.parse().ok())
-    {
-        model.apply(AppCommand::SetDashboardScenario(
-            DashboardScenario::from_index(index),
-        ));
     }
     if let Some((w, h)) = std::env::var("STUDY_NATIVE_SIZE").ok().and_then(|v| {
         let (w, h) = v.split_once('x')?;
@@ -431,20 +437,28 @@ fn bind_model_callbacks(
     window: &MainWindow,
     model: Rc<RefCell<AppModel>>,
     refresh_timer: Rc<Timer>,
+    dashboard: Rc<RefCell<DashboardController>>,
 ) {
     let weak_window = window.as_weak();
     let window_handle = window.as_weak();
     let dispatch_model = Rc::clone(&model);
+    let dispatch_dashboard = Rc::clone(&dashboard);
     let dispatch_refresh_timer = Rc::clone(&refresh_timer);
     let dispatch = move |command: AppCommand| {
         dispatch_model.borrow_mut().apply(command);
         let now = Instant::now();
         if let Some(window) = weak_window.upgrade() {
             apply_model_to_window(&window, &dispatch_model.borrow(), now);
+            refresh_dashboard_if_changed(
+                &window,
+                &dispatch_model.borrow(),
+                &mut dispatch_dashboard.borrow_mut(),
+            );
             sync_refresh_timer(
                 &window,
                 Rc::clone(&dispatch_model),
                 Rc::clone(&dispatch_refresh_timer),
+                Rc::clone(&dispatch_dashboard),
             );
         }
     };
@@ -477,13 +491,17 @@ fn bind_model_callbacks(
             }
         });
     }
-    bind_dashboard_callbacks(window, Rc::clone(&model));
     if let Some(window) = window_handle.upgrade() {
-        sync_refresh_timer(&window, model, refresh_timer);
+        sync_refresh_timer(&window, model, refresh_timer, dashboard);
     }
 }
 
-fn sync_refresh_timer(window: &MainWindow, model: Rc<RefCell<AppModel>>, refresh_timer: Rc<Timer>) {
+fn sync_refresh_timer(
+    window: &MainWindow,
+    model: Rc<RefCell<AppModel>>,
+    refresh_timer: Rc<Timer>,
+    dashboard: Rc<RefCell<DashboardController>>,
+) {
     if !model.borrow().timer().is_running() {
         refresh_timer.stop();
         return;
@@ -512,6 +530,11 @@ fn sync_refresh_timer(window: &MainWindow, model: Rc<RefCell<AppModel>>, refresh
             if !window.window().is_minimized() {
                 apply_model_to_window(&window, &model.borrow(), now);
             }
+            // A Timer completion inside this tick adds a StudySession (academic revision bump);
+            // the Dashboard must reflect it without a restart - even while minimized, since the
+            // first frame after restore must already be correct. One integer comparison per tick;
+            // nothing is recomputed unless the revision really changed.
+            refresh_dashboard_if_changed(&window, &model.borrow(), &mut dashboard.borrow_mut());
             if !model.borrow().timer().is_running() {
                 timer_for_callback.stop();
             }
@@ -588,266 +611,272 @@ fn model_matches<T: Clone + PartialEq + 'static>(current: &ModelRc<T>, rows: &[T
             .all(|(i, row)| current.row_data(i).as_ref() == Some(row))
 }
 
-const HISTORY_RANGES: [usize; 3] = [30, 365, 1_000];
-
-/// Dashboard callbacks bypass the timer refresh path: they only touch dashboard properties,
-/// and pure selection changes (hover / arrow keys) push a handful of scalars, never the models.
-fn bind_dashboard_callbacks(window: &MainWindow, model: Rc<RefCell<AppModel>>) {
-    fn selection(window: &MainWindow, model: &Rc<RefCell<AppModel>>, command: AppCommand) {
-        model.borrow_mut().apply(command);
-        apply_dashboard_selection(window, &model.borrow());
+/// Initial Dashboard UI state, with diagnostic overrides so screenshots/benchmarks can start in a
+/// known layout without synthetic input (Stage 17).
+fn dashboard_ui_from_env() -> DashboardUiState {
+    let mut ui = DashboardUiState::default();
+    if let Ok(layout) = std::env::var("STUDY_NATIVE_DASHBOARD_LAYOUT") {
+        ui.full = layout.eq_ignore_ascii_case("full");
     }
-    fn rebuild(window: &MainWindow, model: &Rc<RefCell<AppModel>>, command: AppCommand) {
-        model.borrow_mut().apply(command);
-        apply_dashboard(window, &model.borrow());
+    if let Ok(range) = std::env::var("STUDY_NATIVE_DASHBOARD_RANGE") {
+        ui.range = match range.as_str() {
+            "7" => FocusRange::Days(7),
+            "14" => FocusRange::Days(14),
+            "30" => FocusRange::Days(30),
+            "60" => FocusRange::Days(60),
+            "365" => FocusRange::Days(365),
+            _ => FocusRange::Week,
+        };
     }
+    ui
+}
 
-    macro_rules! bind {
-        ($setter:ident, $handler:expr) => {{
-            let weak = window.as_weak();
-            let model = Rc::clone(&model);
-            window.$setter(move |arg| {
-                if let Some(window) = weak.upgrade() {
-                    #[allow(clippy::redundant_closure_call)]
-                    ($handler)(&window, &model, arg);
-                }
-            });
-        }};
+/// The wall clock the Dashboard derives "today" from. `STUDY_NATIVE_NOW=<RFC 3339 instant>` (a
+/// diagnostic/screenshot hook, off by default) pins it so a synthetic fixture dated relative to a
+/// fixed day renders identically no matter when the comparison is run.
+fn wall_now() -> WallTimestamp {
+    static PINNED: std::sync::OnceLock<Option<i64>> = std::sync::OnceLock::new();
+    let pinned = PINNED.get_or_init(|| {
+        std::env::var("STUDY_NATIVE_NOW")
+            .ok()
+            .and_then(|v| chrono::DateTime::parse_from_rfc3339(&v).ok())
+            .map(|dt| dt.timestamp_millis())
+    });
+    if let Some(millis) = pinned {
+        return WallTimestamp::from_unix_millis(*millis);
     }
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as i64);
+    WallTimestamp::from_unix_millis(millis)
+}
 
-    bind!(on_weekly_select, |w: &MainWindow,
-                             m: &Rc<RefCell<AppModel>>,
-                             i: i32| {
-        selection(w, m, AppCommand::SelectWeekday(i.max(0) as usize))
-    });
-    bind!(on_weekly_step, |w: &MainWindow,
-                           m: &Rc<RefCell<AppModel>>,
-                           d: i32| {
-        selection(w, m, AppCommand::StepWeekday(d))
-    });
-    bind!(on_history_hover, |w: &MainWindow,
-                             m: &Rc<RefCell<AppModel>>,
-                             f: f32| {
-        selection(w, m, AppCommand::SelectHistoryFraction(f))
-    });
-    bind!(on_history_step, |w: &MainWindow,
-                            m: &Rc<RefCell<AppModel>>,
-                            d: i32| {
-        selection(w, m, AppCommand::StepHistory(d))
-    });
+/// Recomputes (if the academic revision/date/range changed) and pushes the Dashboard data. The
+/// only place that writes the Dashboard properties, so a view that is merely *shown* never
+/// writes anything.
+fn refresh_dashboard(window: &MainWindow, model: &AppModel, dashboard: &mut DashboardController) {
+    let clock = ChronoLocalClock;
+    let started = Instant::now();
+    let metrics_before = dashboard.stats().metrics;
+    dashboard.sync(
+        model.academic().state(),
+        model.academic().revision(),
+        wall_now(),
+        &clock,
+    );
+    push_dashboard(window, dashboard, &clock);
+    if dashboard.stats().metrics != metrics_before {
+        // One line per real metrics recomputation (never per Timer tick): the evidence the Stage 17 runtime
+        // checks use for "no continuous recomputation" and "Timer completion refreshes the Dashboard".
+        if let Some(m) = dashboard.metrics() {
+            log::info!(
+                "dashboard: recomputed (academic revision {}, today_minutes={}, streak={}, sessions_minutes_lifetime={}) in {:?}; totals so far {:?}",
+                model.academic().revision(),
+                m.today_minutes,
+                m.streak_days,
+                m.lifetime_minutes,
+                started.elapsed(),
+                dashboard.stats(),
+            );
+        }
+    }
+}
+
+fn push_dashboard(window: &MainWindow, dashboard: &DashboardController, clock: &ChronoLocalClock) {
+    window.set_fn_data(dashboard.data(clock));
+    let (value, detail) = dashboard.sidebar_text();
+    window.set_sidebar_today_value(value.into());
+    window.set_sidebar_today_detail(detail.into());
+}
+
+/// Called after every Timer command/tick: a single integer comparison unless a session was just
+/// added (or another academic mutation happened), in which case the Dashboard refreshes - the
+/// "Timer -> StudySession -> AcademicState -> Dashboard" path, with no widget notified directly.
+fn refresh_dashboard_if_changed(
+    window: &MainWindow,
+    model: &AppModel,
+    dashboard: &mut DashboardController,
+) {
+    if !dashboard.is_stale(model.academic().revision()) {
+        return;
+    }
+    refresh_dashboard(window, model, dashboard);
+}
+
+/// Dashboard callbacks. None of them touch the Timer; the only academic mutation is ticking a
+/// planned unit (`toggle_calendar_entry`), which goes through `AcademicController` like every
+/// other change and therefore bumps the revision the cache is keyed on.
+fn bind_dashboard_callbacks(
+    window: &MainWindow,
+    model: Rc<RefCell<AppModel>>,
+    dashboard: Rc<RefCell<DashboardController>>,
+) {
     {
-        let weak = window.as_weak();
-        let model = Rc::clone(&model);
-        window.on_history_plot_resized(move |width, height| {
+        let (weak, model, dashboard) = (window.as_weak(), Rc::clone(&model), Rc::clone(&dashboard));
+        window.on_fn_select_entry(move |id| {
+            dashboard.borrow_mut().ui_mut().selected_entry = Some(id.to_string());
             if let Some(window) = weak.upgrade() {
-                model
-                    .borrow_mut()
-                    .apply(AppCommand::ResizeHistoryPlot(width, height));
-                let model = model.borrow();
-                let history = &model.dashboard().history;
-                window.set_history_line(history.line_commands.as_str().into());
-                window.set_history_area(history.area_commands.as_str().into());
+                refresh_dashboard_view(&window, &model.borrow(), &mut dashboard.borrow_mut());
             }
         });
     }
-    bind!(
-        on_set_history_range,
-        |w: &MainWindow, m: &Rc<RefCell<AppModel>>, i: i32| {
-            let points = HISTORY_RANGES[(i.max(0) as usize).min(HISTORY_RANGES.len() - 1)];
-            rebuild(w, m, AppCommand::SetDashboardPoints(points))
-        }
-    );
-    bind!(on_set_scenario, |w: &MainWindow,
-                            m: &Rc<RefCell<AppModel>>,
-                            i: i32| {
-        rebuild(
-            w,
-            m,
-            AppCommand::SetDashboardScenario(DashboardScenario::from_index(i.max(0) as usize)),
+    {
+        let (weak, model, dashboard) = (window.as_weak(), Rc::clone(&model), Rc::clone(&dashboard));
+        window.on_fn_toggle_entry(move |id| {
+            model
+                .borrow_mut()
+                .academic_mut()
+                .toggle_calendar_entry(&CalendarEntryId::new(id.to_string()), wall_now());
+            if let Some(window) = weak.upgrade() {
+                refresh_dashboard(&window, &model.borrow(), &mut dashboard.borrow_mut());
+            }
+        });
+    }
+    {
+        let (weak, model, dashboard) = (window.as_weak(), Rc::clone(&model), Rc::clone(&dashboard));
+        window.on_fn_set_full(move |full| {
+            dashboard.borrow_mut().ui_mut().full = full;
+            if let Some(window) = weak.upgrade() {
+                refresh_dashboard_view(&window, &model.borrow(), &mut dashboard.borrow_mut());
+            }
+        });
+    }
+    {
+        let (weak, model, dashboard) = (window.as_weak(), Rc::clone(&model), Rc::clone(&dashboard));
+        window.on_fn_set_range(move |index| {
+            if let Some(range) = FocusRange::ALL.get(index.max(0) as usize) {
+                dashboard.borrow_mut().ui_mut().range = *range;
+            }
+            if let Some(window) = weak.upgrade() {
+                refresh_dashboard_view(&window, &model.borrow(), &mut dashboard.borrow_mut());
+            }
+        });
+    }
+    {
+        let weak = window.as_weak();
+        window.on_fn_toggle_theme(move || {
+            if let Some(window) = weak.upgrade() {
+                use slint::Global;
+                let palette = FN::get(&window);
+                palette.set_dark(!palette.get_dark());
+            }
+        });
+    }
+    // "Focus" on a row/"Start focus": navigation to the Timer surface happens in Slint; linking
+    // the task/course to the Timer session needs the Timer surface's context UI (Stage 18+), so
+    // the native callback only records the intent for diagnostics.
+    window.on_fn_focus_task(|id| {
+        log::info!(
+            "dashboard: focus requested for entry {id} (Timer context linking is not migrated yet)"
         )
+    });
+    window.on_fn_start_focus(|| {
+        log::info!("dashboard: start focus requested (Timer context linking is not migrated yet)")
     });
 }
 
-fn model_rc<T: Clone + 'static>(items: Vec<T>) -> ModelRc<T> {
-    ModelRc::new(Rc::new(VecModel::from(items)))
+/// UI-only change (layout, range, selection): the cached metrics stay valid, only the view data
+/// (and, for a new range, the chart timeline) is rebuilt.
+fn refresh_dashboard_view(
+    window: &MainWindow,
+    model: &AppModel,
+    dashboard: &mut DashboardController,
+) {
+    refresh_dashboard(window, model, dashboard);
 }
 
-fn axis_marks(marks: &[AxisMark]) -> ModelRc<AxisMarkData> {
-    model_rc(
-        marks
-            .iter()
-            .map(|mark| AxisMarkData {
-                position: mark.position,
-                label: SharedString::from(mark.label.as_str()),
-            })
-            .collect(),
-    )
-}
-
-/// Pushes the whole prepared dashboard snapshot. Called at startup and when the data set changes.
-fn apply_dashboard(window: &MainWindow, model: &AppModel) {
-    let dashboard = model.dashboard();
-
-    window.set_dashboard_cards(model_rc(
-        dashboard
-            .summary_cards
-            .iter()
-            .map(|card| SummaryCardData {
-                label: card.label.as_str().into(),
-                value: card.value.as_str().into(),
-                detail: card.detail.as_str().into(),
-                tone: card.tone,
-            })
-            .collect(),
-    ));
-
-    let weekly = &dashboard.weekly;
-    window.set_weekly_bars(model_rc(
-        weekly
-            .bars
-            .iter()
-            .map(|bar| WeeklyBarData {
-                day: bar.day.as_str().into(),
-                detail: bar.detail.as_str().into(),
-                value: bar.value.as_str().into(),
-                fraction: bar.fraction,
-                tone: bar.tone,
-                is_today: bar.is_today,
-            })
-            .collect(),
-    ));
-    window.set_weekly_ticks(axis_marks(&weekly.y_ticks));
-    window.set_weekly_subtitle(
-        format!(
-            "Last 7 days · {} total",
-            format_minutes(weekly.total_minutes)
-        )
-        .into(),
-    );
-    window.set_weekly_summary(
-        format!(
-            "Seven days, {} in total. Use left and right arrow keys to inspect a day.",
-            format_minutes(weekly.total_minutes)
-        )
-        .into(),
-    );
-
-    let history = &dashboard.history;
-    window.set_history_line(history.line_commands.as_str().into());
-    window.set_history_area(history.area_commands.as_str().into());
-    window.set_history_y_ticks(axis_marks(&history.y_ticks));
-    window.set_history_x_marks(axis_marks(&history.x_marks));
-    window.set_history_count(history.points.len() as i32);
-    window.set_history_subtitle(
-        format!(
-            "{} days · {} total · peak {}",
-            history.points.len(),
-            format_minutes(history.total_minutes),
-            format_minutes(history.peak_minutes)
-        )
-        .into(),
-    );
-    window.set_history_summary(
-        format!(
-            "{} points, {} active days, average {} per active day",
-            history.points.len(),
-            history.active_days,
-            format_minutes(
-                history
-                    .total_minutes
-                    .checked_div(history.active_days)
-                    .unwrap_or(0)
-            ),
-        )
-        .into(),
-    );
-    window.set_history_range_index(
-        HISTORY_RANGES
-            .iter()
-            .position(|n| *n == model.dashboard_points())
-            .unwrap_or(0) as i32,
-    );
-    window.set_scenario_index(dashboard.scenario.index() as i32);
-
-    let courses = &dashboard.courses;
-    window.set_dashboard_courses(model_rc(
-        courses
-            .courses
-            .iter()
-            .map(|course| CourseRowData {
-                name: course.name.as_str().into(),
-                detail: course.detail.as_str().into(),
-                minutes_label: format_minutes(course.minutes).into(),
-                percent: course.percent as i32,
-                fraction: course.fraction,
-                start: course.start,
-                health: course.health as i32,
-                tone: course.tone,
-            })
-            .collect(),
-    ));
-    window.set_courses_subtitle(
-        format!(
-            "{} courses · {} tracked",
-            courses.courses.len(),
-            format_minutes(courses.total_minutes)
-        )
-        .into(),
-    );
-    window.set_courses_total_label(format_minutes(courses.total_minutes).into());
-
-    window.set_dashboard_sessions(model_rc(
-        dashboard
-            .sessions
-            .iter()
-            .map(|session| SessionRowData {
-                course: session.course.as_str().into(),
-                kind: session.kind.as_str().into(),
-                when: session.when.as_str().into(),
-                duration: format_minutes(session.minutes).into(),
-                tone: session.tone,
-            })
-            .collect(),
-    ));
-    window.set_sessions_subtitle(
-        format!("{} sessions · scroll for more", dashboard.sessions.len()).into(),
-    );
-
-    apply_dashboard_selection(window, model);
-}
-
-/// Cheap update for hover / keyboard selection: a few scalar properties, no model rebuilds.
-fn apply_dashboard_selection(window: &MainWindow, model: &AppModel) {
-    let dashboard = model.dashboard();
-
-    let weekly = &dashboard.weekly;
-    window.set_weekly_selected(weekly.selected as i32);
-    window.set_weekly_selected_text(
-        weekly
-            .bars
-            .get(weekly.selected)
-            .map(|bar| format!("Selected: {}", bar.detail))
-            .unwrap_or_default()
-            .into(),
-    );
-
-    let history = &dashboard.history;
-    match history
-        .selected
-        .and_then(|i| Some((history.points.get(i)?, history.positions.get(i)?)))
-    {
-        Some((point, (x, y))) => {
-            window.set_history_has_selection(true);
-            window.set_history_selected_x(*x);
-            window.set_history_selected_y(*y);
-            window.set_history_selected_title(point.label.as_str().into());
-            window.set_history_selected_value(format_minutes(point.minutes).into());
+/// A 60-second check that notices the local date rolling over (Dashboard numbers are day-relative
+/// but no academic change happens at midnight). It compares one date; it writes properties only
+/// when the day actually changed. The returned timer must stay alive with the event loop.
+fn start_date_rollover_check(
+    window: &MainWindow,
+    model: Rc<RefCell<AppModel>>,
+    dashboard: Rc<RefCell<DashboardController>>,
+) -> Timer {
+    let timer = Timer::default();
+    let weak = window.as_weak();
+    timer.start(TimerMode::Repeated, Duration::from_secs(60), move || {
+        let clock = ChronoLocalClock;
+        let academic = model.borrow();
+        let stale =
+            dashboard
+                .borrow()
+                .is_stale_for(academic.academic().revision(), wall_now(), &clock);
+        if stale {
+            if let Some(window) = weak.upgrade() {
+                refresh_dashboard(&window, &academic, &mut dashboard.borrow_mut());
+            }
         }
-        None => {
-            window.set_history_has_selection(false);
-            window.set_history_selected_title("".into());
-            window.set_history_selected_value("".into());
+    });
+    timer
+}
+
+/// `STUDY_NATIVE_NAV_STRESS=<cycles>` (diagnostic, off by default): flips Dashboard <-> Timer and
+/// Quiet <-> Full through the same window properties/callback paths user clicks use, every 40 ms,
+/// for memory-stability measurements (Stage 17, D17-P6). Logs `NAV_STRESS done` when finished.
+fn start_nav_stress(
+    window: &MainWindow,
+    model: Rc<RefCell<AppModel>>,
+    dashboard: Rc<RefCell<DashboardController>>,
+) -> Option<Timer> {
+    let cycles: u32 = std::env::var("STUDY_NATIVE_NAV_STRESS")
+        .ok()?
+        .parse()
+        .ok()?;
+    let timer = Timer::default();
+    let weak = window.as_weak();
+    let mut step = 0u32;
+    timer.start(TimerMode::Repeated, Duration::from_millis(40), move || {
+        let Some(window) = weak.upgrade() else { return };
+        if step >= cycles * 4 {
+            if step == cycles * 4 {
+                log::info!("NAV_STRESS done after {cycles} cycles");
+                println!("NAV_STRESS done");
+                step += 1;
+            }
+            return;
         }
+        match step % 4 {
+            0 => window.set_show_dashboard(true),
+            1 => {
+                dashboard.borrow_mut().ui_mut().full = (step / 4) % 2 == 0;
+                dashboard.borrow_mut().ui_mut().range =
+                    FocusRange::ALL[((step / 4) as usize) % FocusRange::ALL.len()];
+                refresh_dashboard(&window, &model.borrow(), &mut dashboard.borrow_mut());
+            }
+            2 => window.set_show_dashboard(false),
+            _ => {}
+        }
+        step += 1;
+    });
+    Some(timer)
+}
+
+/// `STUDY_NATIVE_DASHBOARD_REPORT=1`: prints the Dashboard's headline numbers once, so a scripted
+/// run can compare them with production's own rendering of the same fixture.
+fn dashboard_report_if_requested(dashboard: &DashboardController) {
+    if std::env::var_os("STUDY_NATIVE_DASHBOARD_REPORT").is_none() {
+        return;
+    }
+    if let Some(m) = dashboard.metrics() {
+        println!(
+            "DASHBOARD today={} today_min={} goal={} streak={} week_min={} lifetime_min={} open_tasks={} units_left={} units_per_day={:.4} queue={} exams={} courses={} score={} {} computations={:?}",
+            m.today.to_iso(),
+            m.today_minutes,
+            m.daily_goal_minutes,
+            m.streak_days,
+            m.weekly_total_minutes,
+            m.lifetime_minutes,
+            m.open_task_count,
+            m.total_units_left,
+            m.units_per_day,
+            m.queue.len(),
+            m.exams.len(),
+            m.courses.len(),
+            m.overall_score,
+            m.overall_label,
+            dashboard.stats(),
+        );
     }
 }
 

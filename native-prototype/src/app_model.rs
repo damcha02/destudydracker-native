@@ -1,7 +1,6 @@
 use crate::academic_controller::{
     AcademicController, AcademicPersistencePort, NullAcademicPersistencePort,
 };
-use crate::dashboard::{DashboardScenario, DashboardSnapshot};
 use crate::timer_controller::{
     NullPersistencePort, TimerApplicationEffect, TimerController, TimerPersistencePort,
 };
@@ -14,7 +13,6 @@ use study_tracker_core::timer::{
     ClockObservation, RestoreInput, TimerCommand, TimerConfig, TimerMode, TimerPhase, TimerSnapshot,
 };
 
-const DEFAULT_HISTORY_POINTS: usize = 30;
 /// How many recent sessions the session-notes card surfaces - `AcademicState::sessions` is
 /// already newest-first (see `study-tracker-core`'s own doc comments), so this is simply "the
 /// first N"; production's own equivalent panel shows a scrollable full list ("scroll for more" -
@@ -32,10 +30,6 @@ pub struct AppModel {
     /// `session_service`'s module docs for why this is a deliberate simplification rather than a
     /// per-instant timezone lookup.
     local_offset: FixedOffset,
-    dashboard: DashboardSnapshot,
-    dashboard_scenario: DashboardScenario,
-    dashboard_points: usize,
-    plot_size: (f32, f32),
     modes: Vec<TimerModeConfig>,
     clock_origin: Instant,
     wall_origin_unix_millis: i64,
@@ -97,13 +91,6 @@ pub enum AppCommand {
     Reset,
     SetMode(usize),
     Refresh(Instant),
-    SetDashboardPoints(usize),
-    SetDashboardScenario(DashboardScenario),
-    SelectWeekday(usize),
-    StepWeekday(i32),
-    SelectHistoryFraction(f32),
-    StepHistory(i32),
-    ResizeHistoryPlot(f32, f32),
     /// Stage 16's minimal real CRUD surface (see `docs/stage16-academic-domain.md` section 22,
     /// "UI integration", for why this is intentionally not yet a full interactive Planner form).
     AddSemester {
@@ -199,10 +186,6 @@ impl AppModel {
             // `local_offset` field's own doc comment. Real runtime uses the actual OS offset
             // (`with_timer_persistence_and_clock`, below).
             local_offset: FixedOffset::east_opt(0).expect("UTC is always a valid fixed offset"),
-            dashboard: DashboardSnapshot::build(DashboardScenario::Typical, DEFAULT_HISTORY_POINTS),
-            dashboard_scenario: DashboardScenario::Typical,
-            dashboard_points: DEFAULT_HISTORY_POINTS,
-            plot_size: (600.0, 300.0),
             modes,
             clock_origin,
             wall_origin_unix_millis,
@@ -285,13 +268,6 @@ impl AppModel {
                 timer,
                 academic,
                 local_offset,
-                dashboard: DashboardSnapshot::build(
-                    DashboardScenario::Typical,
-                    DEFAULT_HISTORY_POINTS,
-                ),
-                dashboard_scenario: DashboardScenario::Typical,
-                dashboard_points: DEFAULT_HISTORY_POINTS,
-                plot_size: (600.0, 300.0),
                 modes,
                 clock_origin,
                 wall_origin_unix_millis,
@@ -331,24 +307,6 @@ impl AppModel {
                 }
             }
             AppCommand::Refresh(now) => self.apply_timer_command(TimerCommand::ObserveTime, now),
-            AppCommand::SetDashboardPoints(count) => {
-                self.dashboard_points = count;
-                self.rebuild_dashboard();
-            }
-            AppCommand::SetDashboardScenario(scenario) => {
-                self.dashboard_scenario = scenario;
-                self.rebuild_dashboard();
-            }
-            AppCommand::SelectWeekday(index) => self.dashboard.weekly.select(index),
-            AppCommand::StepWeekday(delta) => self.dashboard.weekly.step(delta),
-            AppCommand::SelectHistoryFraction(fraction) => {
-                self.dashboard.history.select_fraction(fraction)
-            }
-            AppCommand::StepHistory(delta) => self.dashboard.history.step(delta),
-            AppCommand::ResizeHistoryPlot(width, height) => {
-                self.plot_size = (width, height);
-                self.dashboard.history.set_plot_size(width, height);
-            }
             AppCommand::AddSemester {
                 id,
                 name,
@@ -414,22 +372,6 @@ impl AppModel {
     /// through `AppCommand`, not this direct handle.
     pub fn academic_mut(&mut self) -> &mut AcademicController {
         &mut self.academic
-    }
-
-    pub fn dashboard(&self) -> &DashboardSnapshot {
-        &self.dashboard
-    }
-
-    pub fn dashboard_points(&self) -> usize {
-        self.dashboard_points
-    }
-
-    fn rebuild_dashboard(&mut self) {
-        self.dashboard = DashboardSnapshot::build(self.dashboard_scenario, self.dashboard_points);
-        // Rebuilt charts must keep the plot size Slint last reported.
-        self.dashboard
-            .history
-            .set_plot_size(self.plot_size.0, self.plot_size.1);
     }
 
     pub fn clock(&self, now: Instant) -> ClockObservation {
@@ -720,7 +662,6 @@ fn system_unix_millis() -> i64 {
 mod tests {
     use super::{format_clock, AppCommand, AppModel, TimerStatus};
     use crate::academic_controller::NullAcademicPersistencePort;
-    use crate::dashboard::DashboardScenario;
     use crate::timer_controller::TimerPersistencePort;
     use chrono::FixedOffset;
     use std::cell::RefCell;
@@ -1130,32 +1071,5 @@ mod tests {
     fn clock_format_is_zero_padded() {
         assert_eq!(format_clock(Duration::from_secs(9)), "00:09");
         assert_eq!(format_clock(Duration::from_secs(125)), "02:05");
-    }
-
-    #[test]
-    fn dashboard_commands_rebuild_and_select_without_touching_the_timer() {
-        let mut model = AppModel::stage_four_timer_preview();
-        let timer_before = model.timer().clone();
-
-        model.apply(AppCommand::SetDashboardPoints(1_000));
-        assert_eq!(model.dashboard().history.points.len(), 1_000);
-        assert_eq!(model.dashboard_points(), 1_000);
-
-        model.apply(AppCommand::SelectHistoryFraction(0.0));
-        assert_eq!(model.dashboard().history.selected, Some(0));
-        model.apply(AppCommand::StepHistory(2));
-        assert_eq!(model.dashboard().history.selected, Some(2));
-
-        model.apply(AppCommand::SelectWeekday(1));
-        model.apply(AppCommand::StepWeekday(-5));
-        assert_eq!(model.dashboard().weekly.selected, 0);
-
-        model.apply(AppCommand::SetDashboardScenario(DashboardScenario::Empty));
-        assert!(model.dashboard().history.points.is_empty());
-        model.apply(AppCommand::SelectHistoryFraction(0.5));
-        model.apply(AppCommand::StepHistory(1));
-        assert_eq!(model.dashboard().history.selected, None);
-
-        assert_eq!(model.timer(), &timer_before);
     }
 }

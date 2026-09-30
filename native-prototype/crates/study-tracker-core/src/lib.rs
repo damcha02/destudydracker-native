@@ -4,4 +4,5 @@
 //! persistence I/O, and platform API dependencies.
 
 pub mod academic;
+pub mod dashboard;
 pub mod timer;

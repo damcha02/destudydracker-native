@@ -45,6 +45,11 @@ impl AcademicPersistencePort for NullAcademicPersistencePort {
 pub struct AcademicController {
     state: AcademicState,
     persistence: Box<dyn AcademicPersistencePort>,
+    /// Bumped by every mutation (`persist` is the single choke point all of them pass through). The
+    /// Dashboard's derived metrics are cached against this counter: they are recomputed when it
+    /// changes (a session was added, a task ticked off, ...) and never merely because a Timer
+    /// display tick happened. Not part of equality and never persisted.
+    revision: u64,
 }
 
 impl std::fmt::Debug for AcademicController {
@@ -68,6 +73,7 @@ impl Clone for AcademicController {
         Self {
             state: self.state.clone(),
             persistence: Box::new(NullAcademicPersistencePort),
+            revision: self.revision,
         }
     }
 }
@@ -77,6 +83,7 @@ impl AcademicController {
         Self {
             state: AcademicState::new(),
             persistence,
+            revision: 0,
         }
     }
 
@@ -84,11 +91,20 @@ impl AcademicController {
     /// nothing, exactly like `TimerController`'s own restore path treats a missing snapshot).
     pub fn load_or_new(persistence: Box<dyn AcademicPersistencePort>) -> Self {
         let state = persistence.load().unwrap_or_default();
-        Self { state, persistence }
+        Self {
+            state,
+            persistence,
+            revision: 0,
+        }
     }
 
     pub fn state(&self) -> &AcademicState {
         &self.state
+    }
+
+    /// Monotonic change counter; see the field's doc comment.
+    pub fn revision(&self) -> u64 {
+        self.revision
     }
 
     /// Bulk-replaces the whole academic domain and persists it - used by the
@@ -102,6 +118,7 @@ impl AcademicController {
     }
 
     fn persist(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
         self.persistence.persist(&self.state);
     }
 
@@ -212,6 +229,19 @@ impl AcademicController {
     pub fn remove_daily_todo(&mut self, id: &DailyTodoId) {
         self.state.remove_daily_todo(id);
         self.persist();
+    }
+    /// The Dashboard checkbox (production's `toggleCalendarEntry`): flips a planned unit and moves
+    /// its task's completed units. Persists (and bumps the revision) only if the entry exists.
+    pub fn toggle_calendar_entry(
+        &mut self,
+        id: &study_tracker_core::academic::CalendarEntryId,
+        now: study_tracker_core::timer::WallTimestamp,
+    ) -> bool {
+        let changed = self.state.toggle_calendar_entry(id, now);
+        if changed {
+            self.persist();
+        }
+        changed
     }
     #[allow(dead_code)]
     pub fn add_calendar_entry(&mut self, entry: CalendarEntry) {

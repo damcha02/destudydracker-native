@@ -1,0 +1,210 @@
+import { FN } from "palette.slint";
+import { MonoText, SerifText, HLine } from "parts.slint";
+import { TiltedBox } from "tilted.slint";
+
+component SansText_ inherits Text {
+    font-family: FN.sans;
+    font-size: 12.5px;
+    font-weight: 700;
+}
+
+// Production top bar (`.topbar`, Field Notebook): the "STUDY TRACKER" caption, the tilted
+// "overall score" stamp, the light/dark toggle and the menu button. 82px tall.
+export component FnTopbar inherits Rectangle {
+    in property <int> pill-tone;
+    in property <string> pill-label;
+    in property <string> pill-score;
+    callback toggle-theme();
+    callback open-menu();
+
+    height: 82px;
+
+    private property <color> tone-color: root.pill-tone == 0 ? FN.green : root.pill-tone == 1 ? FN.blue : FN.stamp;
+
+    MonoText {
+        x: 22px;
+        y: 30px;
+        text: "STUDY TRACKER";
+        font-size: 10px;
+        letter-spacing: 1.8px;
+        color: FN.ink-4;
+    }
+
+    // `.health-pill`: a 2px stamp-coloured frame, rotated -3deg (see tilted.slint).
+    pill := TiltedBox {
+        x: parent.width - 22px - 42px - 8px - 64px - 8px - 163.4px;
+        y: 10px;
+        width: 163.4px;
+        height: 60px;
+        angle: -3deg;
+        stroke: FN.stamp;
+        stroke-width: 2px;
+        MonoText {
+            width: self.preferred-width;
+            x: pill.mx(11.8px + self.preferred-width / 2, 22.5px) - self.preferred-width / 2;
+            y: pill.my(11.8px + self.preferred-width / 2, 22.5px) - self.preferred-height / 2;
+            text: "OVERALL SCORE";
+            font-size: 9px;
+            letter-spacing: 1.62px;
+            color: FN.stamp;
+            transform-rotation: -3deg;
+        }
+        Rectangle { x: pill.mx(15.5px, 35.5px) - 3.7px; y: pill.my(15.5px, 35.5px) - 3.7px; width: 7.4px; height: 7.4px; border-radius: 4px; background: root.tone-color; }
+        SansText_ {
+            width: self.preferred-width;
+            x: pill.mx(25.65px + self.preferred-width / 2, 35.5px) - self.preferred-width / 2;
+            y: pill.my(25.65px + self.preferred-width / 2, 35.5px) - self.preferred-height / 2;
+            text: root.pill-label;
+            color: root.tone-color;
+            transform-rotation: -3deg;
+        }
+        MonoText {
+            width: self.preferred-width;
+            x: pill.mx(122.2px + self.preferred-width / 2, 30px) - self.preferred-width / 2;
+            y: pill.my(122.2px + self.preferred-width / 2, 30px) - self.preferred-height / 2;
+            text: root.pill-score;
+            font-size: 14px;
+            font-weight: 700;
+            color: FN.ink;
+            transform-rotation: -3deg;
+        }
+    }
+
+    // `.theme-toggle` (64x38) and `.hamburger-button` (42x38).
+    Rectangle {
+        x: parent.width - 22px - 42px - 8px - 64px;
+        y: 21px;
+        width: 64px;
+        height: 38px;
+        background: FN.paper-1;
+        border-width: 1px;
+        border-color: FN.line;
+        border-radius: 2px;
+        Image {
+            x: 23px;
+            y: 9px;
+            width: 18px;
+            height: 18px;
+            source: FN.dark ? @image-url("../../assets/dashboard/theme-sun.svg") : @image-url("../../assets/dashboard/theme-moon.svg");
+            colorize: FN.ink-3;
+        }
+        TouchArea { mouse-cursor: pointer; clicked => { root.toggle-theme(); } }
+    }
+    Rectangle {
+        x: parent.width - 22px - 42px;
+        y: 21px;
+        width: 42px;
+        height: 38px;
+        background: FN.paper-1;
+        border-width: 1px;
+        border-color: FN.line;
+        border-radius: 2px;
+        for i in 3: Rectangle {
+            x: 11px;
+            y: 11px + i * 6px;
+            width: 18px;
+            height: 2px;
+            border-radius: 2px;
+            background: FN.ink-3;
+        }
+        TouchArea { mouse-cursor: pointer; clicked => { root.open-menu(); } }
+    }
+}
+
+component FnTab inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> active;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    private property <color> fg: root.active ? FN.ink : FN.ink-4;
+
+    height: 36px;
+    width: 1px + 18px + 17px + 8px + text.preferred-width + 18px + 1px;
+    background: root.active ? FN.surface : FN.paper-2;
+    border-width: 1px;
+    border-color: root.active ? FN.ink : FN.line;
+    border-radius: 3px;
+
+    Image {
+        x: 18px;
+        y: 10px;
+        width: 17px;
+        height: 17px;
+        source: root.icon;
+        colorize: root.fg;
+    }
+    text := Text {
+        x: 18px + 17px + 8px;
+        y: 8px;
+        height: 20px;
+        vertical-alignment: center;
+        text: root.label;
+        font-family: FN.serif;
+        font-size: 13px;
+        font-weight: root.active ? 500 : 400;
+        color: root.fg;
+    }
+    // Inactive tabs have no bottom border (the tab row's own rule shows through); square the
+    // bottom corners of every tab like `border-radius: 3px 3px 0 0`.
+    Rectangle { y: parent.height - 4px; height: 4px; x: 0px; width: parent.width; background: root.active ? FN.surface : FN.paper-2; }
+    if !root.active: HLine { y: parent.height - 1px; tone: FN.line; }
+    if !root.active: Rectangle { y: parent.height - 4px; height: 3px; x: 0px; width: 1px; background: FN.line; }
+    if !root.active: Rectangle { y: parent.height - 4px; height: 3px; x: parent.width - 1px; width: 1px; background: FN.line; }
+    TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}
+
+// `.tab-row`: full-bleed paper strip with the six primary tabs and the `?` page-help button.
+// Only Dashboard and Timer are migrated; the other four are drawn (production has them) but
+// inert, with a "not migrated yet" tooltip string exposed to the host.
+export component FnTabRow inherits Rectangle {
+    in property <length> content-x;
+    in property <int> active-tab;   // 0 dashboard, 2 timer
+    callback picked(int);
+
+    height: 37px;
+    background: FN.paper-3;
+
+    HLine { y: parent.height - 1px; tone: FN.line; }
+
+    HorizontalLayout {
+        x: root.content-x;
+        y: 1px;
+        height: 36px;
+        spacing: 2px;
+        alignment: start;
+        FnTab { label: "Dashboard"; icon: @image-url("../../assets/dashboard/tab-dashboard.svg"); active: root.active-tab == 0; clicked => { root.picked(0); } }
+        FnTab { label: "Planner"; icon: @image-url("../../assets/dashboard/tab-planner.svg"); active: root.active-tab == 1; enabled: false; }
+        FnTab { label: "Timer"; icon: @image-url("../../assets/dashboard/tab-timer.svg"); active: root.active-tab == 2; clicked => { root.picked(2); } }
+        FnTab { label: "Vault"; icon: @image-url("../../assets/dashboard/tab-vault.svg"); active: root.active-tab == 3; enabled: false; }
+        FnTab { label: "Break Room"; icon: @image-url("../../assets/dashboard/tab-break.svg"); active: root.active-tab == 4; enabled: false; }
+        FnTab { label: "Social"; icon: @image-url("../../assets/dashboard/tab-social.svg"); active: root.active-tab == 5; enabled: false; }
+    }
+
+    // `.page-help-button.tab-help-button` (36x36 "?")
+    Rectangle {
+        x: parent.width - root.content-x - 36px;
+        y: 0px;
+        width: 36px;
+        height: 36px;
+        background: FN.paper-1;
+        border-width: 1px;
+        border-color: FN.line;
+        border-radius: 2px;
+        MonoText {
+            width: parent.width;
+            height: parent.height;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            text: "?";
+            font-size: 11px;
+            letter-spacing: 0.66px;
+            color: FN.ink-3;
+        }
+    }
+}

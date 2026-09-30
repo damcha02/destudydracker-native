@@ -1,0 +1,135 @@
+{
+  "app": "study-tracker",
+  "backupVersion": 2,
+  "exportedAt": "2026-09-30T10:00:00.000Z",
+  "state": {
+    "semesters": [
+      {
+        "id": "sem-active",
+        "name": "Autumn Semester",
+        "createdAt": "2026-06-02T07:00:00.000Z",
+        "startDate": "2026-08-21",
+        "endDate": "2026-12-19",
+        "phase": "semester",
+        "archived": false,
+        "archivedAt": null
+      }
+    ],
+    "courses": [
+      {
+        "id": "course-0",
+        "semesterId": "sem-active",
+        "name": "Analysis II",
+        "color": "#8fb4ff",
+        "targetGrade": 5.5,
+        "createdAt": "2026-06-02T07:00:00.000Z",
+        "externalUrl": null
+      }
+    ],
+    "tasks": [
+      {
+        "id": "task-0-0",
+        "semesterId": "sem-active",
+        "courseId": "course-0",
+        "title": "Exercise Sheet 1",
+        "subtype": "Sheet",
+        "unitLabel": "Sheet",
+        "totalUnits": 6,
+        "completedUnits": 2,
+        "dueDate": "2026-10-03",
+        "priority": "high",
+        "notes": "",
+        "createdAt": "2026-06-02T07:00:00.000Z"
+      },
+      {
+        "id": "task-0-1",
+        "semesterId": "sem-active",
+        "courseId": "course-0",
+        "title": "Lecture Notes 2",
+        "subtype": "Lecture",
+        "unitLabel": "Lecture",
+        "totalUnits": 9,
+        "completedUnits": 4,
+        "dueDate": "2026-10-08",
+        "priority": "medium",
+        "notes": "",
+        "createdAt": "2026-06-02T07:00:00.000Z"
+      },
+      {
+        "id": "task-0-2",
+        "semesterId": "sem-active",
+        "courseId": "course-0",
+        "title": "Reading 3",
+        "subtype": "Other",
+        "unitLabel": "Chapter",
+        "totalUnits": 12,
+        "completedUnits": 6,
+        "dueDate": "2026-10-13",
+        "priority": "low",
+        "notes": "",
+        "createdAt": "2026-06-02T07:00:00.000Z"
+      }
+    ],
+    "exams": [
+      {
+        "id": "exam-0",
+        "semesterId": "sem-active",
+        "courseId": "course-0",
+        "title": "Midterm",
+        "examDate": "2026-10-18",
+        "weight": 40,
+        "preparedness": 35,
+        "location": "Room 101"
+      }
+    ],
+    "sessions": [
+      {
+        "id": "session-0",
+        "semesterId": "sem-active",
+        "courseId": "course-0",
+        "taskId": null,
+        "kind": "study",
+        "goal": "Synthetic focus block",
+        "learned": "",
+        "blocker": "",
+        "nextStep": "",
+        "confidence": 3,
+        "startedAt": "2026-09-30T08:00:00.000Z",
+        "endedAt": "2026-09-30T08:45:00.000Z",
+        "minutes": 45,
+        "presetLabel": "Deep Work"
+      }
+    ],
+    "timetableEvents": [],
+    "holidays": [],
+    "dailyTodos": [],
+    "calendarEntries": [
+      {
+        "id": "cal-0",
+        "taskId": "task-0-0",
+        "date": "2026-09-30",
+        "unitAmount": 1,
+        "completed": false,
+        "completedAt": null,
+        "createdAt": "2026-06-02T07:00:00.000Z",
+        "startTime": "09:00",
+        "endTime": "10:00"
+      }
+    ],
+    "lifetimeStudyMinutes": 45,
+    "lifetimeStudySessions": 1,
+    "activeTab": "dashboard",
+    "settings": {
+      "accent": "#8fb4ff",
+      "userName": "",
+      "dailyGoalMinutes": 120,
+      "telemetryEnabled": false
+    },
+    "social": {
+      "userId": "fixture-user-id-not-real",
+      "deviceSecret": "fixture-device-secret-not-real",
+      "friendCode": "FIX-0000"
+    }
+  },
+  "preferences": {}
+}

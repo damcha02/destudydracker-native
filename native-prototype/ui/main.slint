@@ -7,14 +7,16 @@ import { AppSidebar } from "components/sidebar.slint";
 import { PresetCard } from "components/preset-card.slint";
 import { SessionRow } from "components/session-row.slint";
 import { TimerDisplay } from "components/timer-display.slint";
-import { DashboardView } from "dashboard.slint";
+import { FnDashboardPage } from "fn/page.slint";
+import { FN } from "fn/palette.slint";
+import { FnDashboardData, FnQueueRow, FnCourseRow, FnExamRow, FnAheadRow, FnFossilLayer, FnTooltipLayer, FnFossilDay, FnLegendItem, FnFossilStat, FnDiscovered } from "fn/types.slint";
+
+export { FN } from "fn/palette.slint";
+export { FnDashboardData, FnQueueRow, FnCourseRow, FnExamRow, FnAheadRow, FnFossilLayer, FnTooltipLayer, FnFossilDay, FnLegendItem, FnFossilStat, FnDiscovered } from "fn/types.slint";
 import { MapLabView } from "map-lab.slint";
 import { MapRegionData, MapLabelData, MapMarkerData } from "map-types.slint";
 
 export { MapRegionData, MapLabelData, MapMarkerData } from "map-types.slint";
-import { SummaryCardData, WeeklyBarData, AxisMarkData, CourseRowData, SessionRowData } from "dashboard-types.slint";
-
-export { SummaryCardData, WeeklyBarData, AxisMarkData, CourseRowData, SessionRowData } from "dashboard-types.slint";
 
 export struct TimerModeData {
     label: string,
@@ -95,32 +97,12 @@ export component MainWindow inherits Window {
     in property <string> total-label;
     in property <[TimerModeData]> modes;
     in property <[SessionNoteData]> session-notes;
-    in property <[SummaryCardData]> dashboard-cards;
-    in property <[WeeklyBarData]> weekly-bars;
-    in property <[AxisMarkData]> weekly-ticks;
-    in property <int> weekly-selected;
-    in property <string> weekly-subtitle;
-    in property <string> weekly-summary;
-    in property <string> weekly-selected-text;
-    in property <string> history-line;
-    in property <string> history-area;
-    in property <[AxisMarkData]> history-y-ticks;
-    in property <[AxisMarkData]> history-x-marks;
-    in property <int> history-count;
-    in property <bool> history-has-selection;
-    in property <float> history-selected-x;
-    in property <float> history-selected-y;
-    in property <string> history-selected-title;
-    in property <string> history-selected-value;
-    in property <string> history-subtitle;
-    in property <string> history-summary;
-    in property <int> history-range-index;
-    in property <[CourseRowData]> dashboard-courses;
-    in property <string> courses-subtitle;
-    in property <string> courses-total-label;
-    in property <[SessionRowData]> dashboard-sessions;
-    in property <string> sessions-subtitle;
-    in property <int> scenario-index;
+    // Stage 17: the production Dashboard's data (src/dashboard_view.rs) and the tiny bit of it the
+    // sidebar of the not-yet-migrated Timer surface still shows.
+    in property <FnDashboardData> fn-data;
+    in property <string> sidebar-today-value;
+    in property <string> sidebar-today-detail;
+    in-out property <bool> fn-dark: true;
 
     callback toggle-timer();
     callback reset-timer();
@@ -155,16 +137,16 @@ export component MainWindow inherits Window {
     callback map-set-level(int);
     callback map-cycle-level(int);
 
-    callback weekly-select(int);
-    callback weekly-step(int);
-    callback history-hover(float);
-    callback history-step(int);
-    callback history-plot-resized(float, float);
-    callback set-history-range(int);
-    callback set-scenario(int);
+    callback fn-select-entry(string);
+    callback fn-toggle-entry(string);
+    callback fn-focus-task(string);
+    callback fn-set-full(bool);
+    callback fn-set-range(int);
+    callback fn-toggle-theme();
+    callback fn-start-focus();
 
-    in-out property <bool> show-text-spike: true;
-    in-out property <bool> show-dashboard: false;
+    in-out property <bool> show-text-spike: false;
+    in-out property <bool> show-dashboard: true;
     in-out property <bool> show-map: false;
     private property <bool> text-input-focused: false;
     private property <string> single-line-sample: "Study Tracker - 日本語 note - cafe - sigma σ²";
@@ -219,8 +201,8 @@ export component MainWindow inherits Window {
         Rectangle { x: 180px; y: parent.height - 170px; width: 360px; height: 260px; border-radius: 180px; background: #23452f; opacity: 0.18; }
 
         if root.sidebar-width > 0px: AppSidebar {
-            today-value: root.dashboard-cards[0].value;
-            today-detail: "Streak " + root.dashboard-cards[2].value;
+            today-value: root.sidebar-today-value;
+            today-detail: root.sidebar-today-detail;
             x: root.shell-padding;
             y: root.shell-padding;
             width: root.sidebar-width;
@@ -451,65 +433,6 @@ export component MainWindow inherits Window {
             }
         }
 
-        if root.show-dashboard: Rectangle {
-            x: root.content-x;
-            y: root.shell-padding;
-            width: root.width - root.content-x - root.shell-padding;
-            height: parent.height - 2 * root.shell-padding;
-            background: transparent;
-
-            Text { x: 0px; y: 4px; text: "Dashboard and statistics"; font-size: 30px; font-weight: 700; color: Theme.text-primary; }
-            Text { x: 1px; y: 44px; width: parent.width - 2px; text: "Native charts, data-dense cards and scrolling lists drawn from Rust-prepared data."; font-size: Theme.text-md; color: Theme.text-secondary; overflow: elide; }
-            ViewSwitcher {
-                x: 0px;
-                y: 82px;
-                width: min(640px, parent.width);
-                height: 42px;
-                current: 2;
-                picked(view) => { root.show-text-spike = view == 1; root.show-dashboard = view == 2; root.show-map = view == 3; }
-            }
-
-            DashboardView {
-                x: 0px;
-                y: 142px;
-                width: parent.width;
-                height: parent.height - 142px;
-                cards: root.dashboard-cards;
-                weekly-bars: root.weekly-bars;
-                weekly-ticks: root.weekly-ticks;
-                weekly-selected: root.weekly-selected;
-                weekly-subtitle: root.weekly-subtitle;
-                weekly-summary: root.weekly-summary;
-                weekly-selected-text: root.weekly-selected-text;
-                history-line: root.history-line;
-                history-area: root.history-area;
-                history-y-ticks: root.history-y-ticks;
-                history-x-marks: root.history-x-marks;
-                history-count: root.history-count;
-                history-has-selection: root.history-has-selection;
-                history-selected-x: root.history-selected-x;
-                history-selected-y: root.history-selected-y;
-                history-selected-title: root.history-selected-title;
-                history-selected-value: root.history-selected-value;
-                history-subtitle: root.history-subtitle;
-                history-summary: root.history-summary;
-                range-index: root.history-range-index;
-                courses: root.dashboard-courses;
-                courses-subtitle: root.courses-subtitle;
-                courses-total-label: root.courses-total-label;
-                sessions: root.dashboard-sessions;
-                sessions-subtitle: root.sessions-subtitle;
-                scenario-index: root.scenario-index;
-                weekly-select(index) => { root.weekly-select(index); }
-                weekly-step(delta) => { root.weekly-step(delta); }
-                history-hover(fraction) => { root.history-hover(fraction); }
-                history-step(delta) => { root.history-step(delta); }
-                plot-resized(w, h) => { root.history-plot-resized(w, h); }
-                set-range(index) => { root.set-history-range(index); }
-                set-scenario(index) => { root.set-scenario(index); }
-            }
-        }
-
         if root.show-map: Rectangle {
             x: root.content-x;
             y: root.shell-padding;
@@ -622,6 +545,25 @@ export component MainWindow inherits Window {
                 }
                 Text { x: Theme.spacing-md; y: parent.height - 24px; text: "Daily goal progress"; font-size: 11px; color: Theme.text-muted; }
             }
+        }
+        // Stage 17: the production Dashboard (Field Notebook style) covers the whole window. The
+        // other surfaces below (Timer, Text spike, Map lab) are the not-yet-migrated Stage 4-14
+        // screens and debug labs; the page's tab row switches between Dashboard and Timer.
+        if root.show-dashboard: FnDashboardPage {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            d: root.fn-data;
+            dark: root.fn-dark;
+            select-entry(id) => { root.fn-select-entry(id); }
+            toggle-entry(id) => { root.fn-toggle-entry(id); }
+            focus-task(id) => { root.fn-focus-task(id); }
+            set-full(f) => { root.fn-set-full(f); }
+            set-range(i) => { root.fn-set-range(i); }
+            toggle-theme => { root.fn-toggle-theme(); }
+            open-timer => { root.show-dashboard = false; root.show-text-spike = false; root.show-map = false; }
+            start-focus => { root.show-dashboard = false; root.show-text-spike = false; root.show-map = false; root.fn-start-focus(); }
         }
     }
     }

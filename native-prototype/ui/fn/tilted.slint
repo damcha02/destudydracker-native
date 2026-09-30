@@ -1,0 +1,50 @@
+import { FN } from "palette.slint";
+
+// A slightly rotated paper-like box. Slint can rotate only `Image` and `Text` (not `Rectangle`),
+// so the box is drawn as a computed quadrilateral `Path`, and the host places child text with
+// `mx`/`my` (local -> rotated coordinates about the box centre) and rotates each `Text` itself.
+export component TiltedBox inherits Rectangle {
+    in property <angle> angle;
+    in property <color> fill: transparent;
+    in property <color> stroke: transparent;
+    in property <length> stroke-width: 1px;
+    in property <color> shadow: transparent;
+    in property <length> shadow-dy: 0px;
+
+    // Local point (relative to the un-rotated box's top-left) -> rotated point in this element's
+    // own coordinate space.
+    pure public function mx(lx: length, ly: length) -> length {
+        return root.width / 2 + (lx - root.width / 2) * Math.cos(root.angle) - (ly - root.height / 2) * Math.sin(root.angle);
+    }
+    pure public function my(lx: length, ly: length) -> length {
+        return root.height / 2 + (lx - root.width / 2) * Math.sin(root.angle) + (ly - root.height / 2) * Math.cos(root.angle);
+    }
+    private property <length> i: root.stroke-width / 2;
+
+    // drop shadow: the same quad, pushed down
+    Path {
+        width: root.width;
+        height: root.height;
+        viewbox-width: root.width / 1px;
+        viewbox-height: root.height / 1px;
+        commands: "M " + (root.mx(0px, 0px) / 1px) + " " + ((root.my(0px, 0px) + root.shadow-dy) / 1px)
+            + " L " + (root.mx(root.width, 0px) / 1px) + " " + ((root.my(root.width, 0px) + root.shadow-dy) / 1px)
+            + " L " + (root.mx(root.width, root.height) / 1px) + " " + ((root.my(root.width, root.height) + root.shadow-dy) / 1px)
+            + " L " + (root.mx(0px, root.height) / 1px) + " " + ((root.my(0px, root.height) + root.shadow-dy) / 1px) + " Z";
+        fill: root.shadow;
+    }
+    Path {
+        width: root.width;
+        height: root.height;
+        viewbox-width: root.width / 1px;
+        viewbox-height: root.height / 1px;
+        commands: "M " + (root.mx(root.i, root.i) / 1px) + " " + (root.my(root.i, root.i) / 1px)
+            + " L " + (root.mx(root.width - root.i, root.i) / 1px) + " " + (root.my(root.width - root.i, root.i) / 1px)
+            + " L " + (root.mx(root.width - root.i, root.height - root.i) / 1px) + " " + (root.my(root.width - root.i, root.height - root.i) / 1px)
+            + " L " + (root.mx(root.i, root.height - root.i) / 1px) + " " + (root.my(root.i, root.height - root.i) / 1px) + " Z";
+        fill: root.fill;
+        stroke: root.stroke;
+        stroke-width: root.stroke-width;
+    }
+    @children
+}

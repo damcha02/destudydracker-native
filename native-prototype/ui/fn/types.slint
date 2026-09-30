@@ -1,0 +1,145 @@
+// Data handed from Rust (`src/dashboard_view.rs`) to the production Dashboard. Everything here is
+// already aggregated/formatted by Rust; Slint only lays it out and draws it.
+
+export struct FnQueueRow {
+    entry-id: string,
+    title: string,
+    course: string,         // course name, or "General"
+    course-color: color,
+    semester: string,       // semester name, or "No semester"
+    unit-label: string,     // "Sheet 3 of 6"
+    due-or-time: string,    // "due Oct 3" / "09:00 - 10:00" / "Unscheduled"
+    caption-upper: string,  // the same, upper-cased (quiet list right-hand caption)
+    chip: string,           // "selected" | "done" | "1/2 unit" ...
+    chip-tone: int,         // 0 high, 1 medium, 2 low/done
+    completed: bool,
+    has-task: bool,
+    selected: bool,
+}
+
+export struct FnCourseRow {
+    name: string,
+    color: color,
+    score: string,
+    fill: float,            // 0..1
+    detail: string,         // "Autumn Semester • 3 tasks • 12h 35m • Target 5.5 • 1 overdue"
+}
+
+export struct FnExamRow {
+    days: string,
+    title: string,
+    meta: string,           // "Analysis II • 40% weight"
+    prep-text: string,      // "35%"
+    prep-fill: float,
+    prep-tone: int,         // 0 ok, 1 warn, 2 danger
+}
+
+export struct FnAheadRow {
+    label: string,
+    value: string,
+}
+
+export struct FnFossilLayer {
+    color: color,
+    bottom: length,         // distance from the bottom of the column
+    height: length,
+    width-frac: float,      // 0.82 .. 1.0 of the column
+    radius-a: length,       // top-left
+    radius-b: length,       // top-right
+    radius-c: length,       // bottom-right
+    radius-d: length,       // bottom-left
+}
+
+export struct FnTooltipLayer {
+    color: color,
+    name: string,
+    minutes: string,
+}
+
+export struct FnFossilDay {
+    layers: [FnFossilLayer],
+    column-height: length,
+    empty: bool,
+    is-today: bool,
+    label: string,
+    milestone: int,         // -1 none, else index into the milestone list
+    milestone-hours: string,
+    milestone-icon: int,    // 0..4 (ring, shell, spiral, diamond, star)
+    milestone-title: string,
+    milestone-desc: string,
+    tip-title: string,
+    tip-layers: [FnTooltipLayer],
+    tip-total: string,
+}
+
+export struct FnLegendItem {
+    color: color,
+    name: string,
+}
+
+export struct FnFossilStat {
+    label: string,
+    value: string,
+    sub: string,
+}
+
+export struct FnDiscovered {
+    icon: int,
+    label: string,
+}
+
+export struct FnDashboardData {
+    // header strip
+    stamp-line: string,
+    // pill
+    pill-tone: int,         // 0 strong(ok) 1 steady 2 watch 3 critical
+    pill-label: string,
+    pill-score: string,
+    // mode + selection
+    full: bool,
+    title-text: string,
+    subtitle-strong: string,   // quiet: bold part
+    subtitle-rest: string,
+    has-start: bool,
+    // focus ledger
+    focused: string,
+    goal: string,
+    goal-fill: float,
+    goal-caption: string,      // "44% · streak 9 d" (quiet) / "44% of daily goal · streak 9 d" (full)
+    today-line: string,        // "53m of 2h done today."
+    // quiet
+    quiet-rows: [FnQueueRow],
+    quiet-hidden: int,
+    quiet-list-height: length,
+    // pace
+    pace-lines: [string],
+    planned-today: string,
+    ahead: [FnAheadRow],
+    // full
+    queue-caption: string,
+    next-code: string,
+    next-color: color,
+    next-title: string,
+    next-meta: string,
+    queue-rows: [FnQueueRow],
+    courses: [FnCourseRow],
+    exams: [FnExamRow],
+    pace-left: string,
+    pace-open: string,
+    pace-rate: string,
+    pace-note: string,
+    margin-note: string,
+    // weekly chart
+    week-caption: string,
+    range-labels: [string],
+    range-index: int,
+    has-history: bool,
+    days: [FnFossilDay],
+    column-gap: length,
+    chart-height: length,
+    has-milestones: bool,
+    legend: [FnLegendItem],
+    discovered: [FnDiscovered],
+    stats: [FnFossilStat],
+    footer: string,
+}

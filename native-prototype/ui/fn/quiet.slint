@@ -1,0 +1,318 @@
+import { FN } from "palette.slint";
+import { FnDashboardData, FnQueueRow } from "types.slint";
+import { MonoText, SerifText, SansText, HLine, DotLine, GhostButton, StartFocusButton, FnCheck, ViewSwitch, LedgerTrack } from "parts.slint";
+
+// One row of the Quiet list (`.fn-quiet-row`): check, course dot, serif title + course, and a
+// small spaced-out caption on the right.
+component QuietRow inherits Rectangle {
+    in property <FnQueueRow> item;
+    in property <bool> last;
+    callback select();
+    callback toggle();
+
+    private property <bool> hovered: ta.has-hover && !root.item.selected;
+    private property <length> pad: root.item.selected ? 12px : (root.hovered ? 10px : 0px);
+    private property <length> mid: root.item.selected ? 28px : 27.5px;
+
+    // Selected: 56px + 2px block margin; last plain row has no bottom rule (54px).
+    height: root.item.selected ? 58px : (root.last ? 54px : 55px);
+
+    // The tinted fill covers the 56px border box only (the 2px margin below stays clear).
+    Rectangle {
+        height: root.item.selected ? 56px : parent.height;
+        background: root.item.selected ? root.item.course-color.mix(FN.surface, 0.10) : (root.hovered ? root.item.course-color.mix(FN.surface, 0.07) : transparent);
+    }
+    if root.item.selected: HLine { y: 0px; tone: FN.ink; }
+    if root.item.selected: HLine { y: 55px; tone: FN.ink; }
+    if !root.item.selected && !root.last: DotLine { y: parent.height - 1px; width: parent.width; }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.select(); }
+    }
+
+    FnCheck {
+        x: root.pad + 4px;
+        y: root.mid - 9px;
+        checked: root.item.completed;
+        toggled => { root.toggle(); }
+    }
+    Rectangle {
+        x: root.pad + 4px + 18px + 3px + 14px;
+        y: root.mid - self.height / 2;
+        width: root.item.selected ? 10px : 8px;
+        height: root.item.selected ? 10px : 8px;
+        background: root.item.course-color;
+    }
+    title := SerifText {
+        x: root.pad + 4px + 18px + 3px + 14px + 10px + 16px;
+        y: root.mid - 10px;
+        height: 20px;
+        vertical-alignment: center;
+        text: root.item.title;
+        font-size: 16px;
+        color: FN.ink;
+    }
+    SerifText {
+        x: title.x + title.preferred-width + 4px;
+        y: root.mid - 7.5px;
+        height: 16px;
+        vertical-alignment: center;
+        text: root.item.course;
+        font-size: 13px;
+        color: FN.ink-4;
+    }
+    MonoText {
+        x: parent.width - root.pad - self.preferred-width;
+        y: root.mid - 7px;
+        height: 14px;
+        vertical-alignment: center;
+        text: root.item.selected ? "SELECTED" : root.item.caption-upper;
+        font-size: 11.5px;
+        letter-spacing: 0.92px;
+        color: root.item.selected ? FN.ink : FN.ink-4;
+    }
+}
+
+// Quiet layout body. `inner-width` is the width of the padded Dashboard surface's content box.
+export component QuietDashboard inherits Rectangle {
+    in property <FnDashboardData> d;
+    in property <length> inner-width;
+    in property <length> window-width;
+    callback select-entry(string);
+    callback toggle-entry(string);
+    callback set-full(bool);
+    callback start-focus();
+    callback something-else();
+    callback open-full();
+
+    private property <bool> narrow: root.window-width <= 780px;
+    private property <length> left-w: root.narrow ? root.inner-width : min(760px, root.inner-width - 64px - 260px);
+    private property <length> right-x: root.narrow ? 0px : root.left-w + 64px;
+    private property <length> right-w: root.narrow ? root.inner-width : root.inner-width - root.right-x;
+    private property <length> title-size: min(53.6px, max(37.6px, root.window-width * 0.04));
+    private property <length> title-h: root.title-size * 1.08;
+
+    // --- top block ---------------------------------------------------------------------------
+    private property <length> sub-y: 32px + root.title-h + 14px;
+    private property <length> top-h: root.sub-y + 20.8px;
+
+    // --- left column -------------------------------------------------------------------------
+    private property <length> list-h: root.d.quiet-list-height;
+    private property <length> view-extra: root.narrow ? 28px + 32px : 0px;
+    private property <length> left-top: root.top-h + root.view-extra + 12px;
+    private property <length> rule-y: root.left-top + 44px + 44px;
+    private property <length> list-y: root.rule-y + 1px + 4px;
+    private property <length> note-y: root.list-y + root.list-h + 30px;
+    private property <length> left-bottom: root.note-y + 43.4px;
+
+    // --- right column ------------------------------------------------------------------------
+    private property <length> pace-y: root.narrow ? root.left-bottom + 28px : root.left-top;
+    private property <length> ahead-y: root.pace-y + 18px + 7px + 86.4px + 22px;
+    private property <length> ahead-h: root.d.ahead.length == 0 ? 18px + 7px + 21.6px : 18px + root.d.ahead.length * 29px;
+    private property <length> ledger-y: root.ahead-y + root.ahead-h + 22px;
+    private property <length> right-bottom: root.ledger-y + 68px;
+
+    out property <length> content-height: max(root.left-bottom, root.right-bottom);
+
+    // ===== top block =====
+    MonoText {
+        x: 0px;
+        y: 0px;
+        height: 12px;
+        text: root.d.stamp-line;
+        font-size: 10px;
+        letter-spacing: 1.6px;
+        color: FN.ink-4;
+    }
+    SerifText {
+        x: 0px;
+        y: 32px;
+        height: root.title-h;
+        vertical-alignment: center;
+        text: root.d.title-text;
+        font-size: root.title-size;
+        letter-spacing: -0.015 * root.title-size;
+        color: FN.ink;
+    }
+    strong-sub := MonoText {
+        x: 0px;
+        y: root.sub-y;
+        height: 20.8px;
+        vertical-alignment: center;
+        text: root.d.subtitle-strong;
+        font-size: 13px;
+        font-weight: 700;
+        color: FN.ink-3;
+    }
+    MonoText {
+        x: strong-sub.preferred-width;
+        y: root.sub-y;
+        width: max(0px, root.inner-width - strong-sub.preferred-width - (root.narrow ? 0px : 160px));
+        height: 20.8px;
+        vertical-alignment: center;
+        overflow: elide;
+        text: root.d.subtitle-rest;
+        font-size: 13px;
+        color: FN.ink-3;
+    }
+    ViewSwitch {
+        x: root.inner-width - self.width;
+        y: root.narrow ? root.top-h + 28px + 4px : 4px;
+        full: false;
+        picked(full) => { root.set-full(full); }
+    }
+
+    // ===== left column =====
+    if root.d.has-start: StartFocusButton {
+        x: 0px;
+        y: root.left-top;
+        clicked => { root.start-focus(); }
+    }
+    ghost := GhostButton {
+        x: root.d.has-start ? 128.5px + 14px : 0px;
+        y: root.left-top + (44px - self.height) / 2;
+        text: "SOMETHING ELSE";
+        min-h: 42px;
+        enabled: false;
+        clicked => { root.something-else(); }
+    }
+    SerifText {
+        x: ghost.x + ghost.width + 14px;
+        y: root.left-top + 14px;
+        height: 16px;
+        vertical-alignment: center;
+        text: root.d.today-line;
+        font-size: 13.5px;
+        font-italic: true;
+        color: FN.ink-4;
+    }
+    HLine { x: 0px; y: root.rule-y; width: root.left-w; tone: FN.line-soft; }
+
+    // list
+    Rectangle {
+        x: 0px;
+        y: root.list-y;
+        width: root.left-w;
+        height: root.list-h;
+        if root.d.quiet-rows.length == 0: MonoText {
+            x: 0px;
+            y: 7px;
+            width: parent.width;
+            height: 21.6px;
+            vertical-alignment: center;
+            text: "No scheduled units today. Place one task in the planner calendar.";
+            font-size: 12px;
+            color: FN.ink-3;
+        }
+        VerticalLayout {
+            y: 0px;
+            width: parent.width;
+            alignment: start;
+            for row[i] in root.d.quiet-rows: QuietRow {
+                item: row;
+                last: i == root.d.quiet-rows.length - 1 && root.d.quiet-hidden == 0;
+                select => { root.select-entry(row.entry-id); }
+                toggle => { root.toggle-entry(row.entry-id); }
+            }
+        }
+        if root.d.quiet-hidden > 0: Rectangle {
+            y: parent.height - 34px;
+            height: 33px;
+            DotLine { y: 0px; width: parent.width; }
+            MonoText {
+                x: 0px;
+                y: 12px;
+                text: "+" + root.d.quiet-hidden + " more planned · open Full";
+                font-size: 11px;
+                color: FN.link;
+            }
+            TouchArea { mouse-cursor: pointer; clicked => { root.open-full(); } }
+        }
+        HLine { y: parent.height - 1px; tone: FN.line-soft; }
+    }
+
+    // note
+    Rectangle {
+        x: 0px;
+        y: root.note-y;
+        width: min(560px, root.left-w);
+        height: 43.4px;
+        Rectangle { x: 0px; width: 2px; background: FN.line-soft; }
+        SerifText {
+            x: 17px;
+            width: parent.width - 17px;
+            height: parent.height;
+            wrap: word-wrap;
+            text: "Course ledger, weekly rhythm, vault links, social, and squads all still exist under Full or their tabs. Quiet shows one decision and nothing you can scroll past.";
+            font-size: 14px;
+            font-italic: true;
+            color: FN.ink-4;
+        }
+    }
+
+    // ===== right column =====
+    Rectangle {
+        x: root.right-x;
+        y: root.pace-y;
+        width: root.right-w;
+        height: root.right-bottom - root.pace-y;
+
+        // PACE
+        MonoText { x: 0px; y: 0px; height: 12px; text: "PACE"; font-size: 10px; letter-spacing: 1.6px; color: FN.ink; }
+        HLine { y: 17px; tone: FN.ink; }
+        for line[i] in root.d.pace-lines: MonoText {
+            x: 0px;
+            y: 25px + i * 21.6px;
+            height: 21.6px;
+            vertical-alignment: center;
+            text: line;
+            font-size: 12px;
+            color: FN.ink-3;
+        }
+        MonoText {
+            x: 0px;
+            y: 25px + root.d.pace-lines.length * 21.6px;
+            height: 21.6px;
+            vertical-alignment: center;
+            text: root.d.planned-today;
+            font-size: 12px;
+            color: FN.stamp;
+        }
+
+        // AHEAD
+        Rectangle {
+            y: root.ahead-y - root.pace-y;
+            height: root.ahead-h;
+            MonoText { x: 0px; y: 0px; height: 12px; text: "AHEAD"; font-size: 10px; letter-spacing: 1.6px; color: FN.ink; }
+            HLine { y: 17px; tone: FN.ink; }
+            if root.d.ahead.length == 0: MonoText {
+                x: 0px;
+                y: 25px;
+                height: 21.6px;
+                vertical-alignment: center;
+                text: "No upcoming exams.";
+                font-size: 12px;
+                color: FN.ink-3;
+            }
+            for row[i] in root.d.ahead: Rectangle {
+                y: 18px + i * 29px;
+                height: 29px;
+                MonoText { x: 0px; y: 7px; height: 14px; vertical-alignment: center; text: row.label; font-size: 12px; color: FN.ink-3; }
+                MonoText { x: parent.width - self.preferred-width; y: 7px; height: 14px; vertical-alignment: center; text: row.value; font-size: 12px; color: FN.stamp; }
+                DotLine { y: 28px; width: parent.width; }
+            }
+        }
+
+        // FOCUSED TODAY
+        Rectangle {
+            y: root.ledger-y - root.pace-y;
+            height: 68px;
+            MonoText { x: 0px; y: 0px; height: 11px; text: "FOCUSED TODAY"; font-size: 9.5px; letter-spacing: 1.52px; color: FN.ink-4; }
+            big := MonoText { x: 0px; y: 15px; height: 30px; vertical-alignment: center; text: root.d.focused; font-size: 30px; color: FN.ink; }
+            MonoText { x: big.preferred-width + 16.5px; y: 27px; height: 17px; vertical-alignment: center; text: "/ " + root.d.goal; font-size: 14px; color: FN.ink-4; }
+            LedgerTrack { y: 52px; width: parent.width; fill: root.d.goal-fill; }
+            MonoText { x: 0px; y: 57px; height: 11px; text: root.d.goal-caption; font-size: 9.5px; letter-spacing: 1.52px; color: FN.ink-4; }
+        }
+    }
+}

@@ -254,6 +254,44 @@ impl AcademicState {
     pub fn remove_calendar_entry(&mut self, id: &super::ids::CalendarEntryId) {
         self.calendar_entries.retain(|e| &e.id != id);
     }
+
+    /// Production's `toggleCalendarEntry` (App.tsx): flips a planned unit's completion and moves
+    /// its task's `completedUnits` by the change in *whole* completed units (so two "1/2 unit"
+    /// entries together advance the task by one, and un-ticking one of them takes it back). The
+    /// Dashboard's checkbox uses this. Returns `false` when the entry does not exist.
+    pub fn toggle_calendar_entry(
+        &mut self,
+        id: &super::ids::CalendarEntryId,
+        now: WallTimestamp,
+    ) -> bool {
+        let Some(index) = self.calendar_entries.iter().position(|e| &e.id == id) else {
+            return false;
+        };
+        let task_id = self.calendar_entries[index].task_id.clone();
+        let before = completed_calendar_whole_units(&self.calendar_entries, &task_id);
+        let completing = !self.calendar_entries[index].completed;
+        {
+            let entry = &mut self.calendar_entries[index];
+            entry.completed = completing;
+            entry.completed_at = completing.then_some(now);
+        }
+        let after = completed_calendar_whole_units(&self.calendar_entries, &task_id);
+        if let Some(task) = self.tasks.iter_mut().find(|t| t.id == task_id) {
+            let next = i64::from(task.completed_units) + (after - before);
+            task.completed_units = next.clamp(0, i64::from(task.total_units)) as u32;
+        }
+        true
+    }
+}
+
+/// `getCompletedCalendarWholeUnits`: `floor(sum of completed amounts + 0.0001)` for one task.
+pub fn completed_calendar_whole_units(entries: &[CalendarEntry], task_id: &TaskId) -> i64 {
+    let amount: f64 = entries
+        .iter()
+        .filter(|e| e.completed && &e.task_id == task_id)
+        .map(|e| e.unit_amount.as_f64())
+        .sum();
+    (amount + 0.0001).floor() as i64
 }
 
 /// Standalone so `session_service.rs` and tests can call it directly without going through a full
