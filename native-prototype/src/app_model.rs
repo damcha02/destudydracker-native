@@ -1,6 +1,7 @@
 use crate::academic_controller::{
     AcademicController, AcademicPersistencePort, NullAcademicPersistencePort,
 };
+use crate::platform::notification::{notifications_for_effects, NotificationRequest};
 use crate::timer_controller::{
     NullPersistencePort, TimerApplicationEffect, TimerController, TimerPersistencePort,
 };
@@ -30,6 +31,9 @@ pub struct AppModel {
     /// `session_service`'s module docs for why this is a deliberate simplification rather than a
     /// per-instant timezone lookup.
     local_offset: FixedOffset,
+    /// Stage 18: notifications produced by live Timer completions, each stamped with its
+    /// completion instant, waiting for the platform layer to drain them (`take_notifications`).
+    notification_outbox: Vec<(NotificationRequest, i64)>,
     modes: Vec<TimerModeConfig>,
     clock_origin: Instant,
     wall_origin_unix_millis: i64,
@@ -186,6 +190,7 @@ impl AppModel {
             // `local_offset` field's own doc comment. Real runtime uses the actual OS offset
             // (`with_timer_persistence_and_clock`, below).
             local_offset: FixedOffset::east_opt(0).expect("UTC is always a valid fixed offset"),
+            notification_outbox: Vec::new(),
             modes,
             clock_origin,
             wall_origin_unix_millis,
@@ -268,6 +273,7 @@ impl AppModel {
                 timer,
                 academic,
                 local_offset,
+                notification_outbox: Vec::new(),
                 modes,
                 clock_origin,
                 wall_origin_unix_millis,
@@ -394,6 +400,37 @@ impl AppModel {
         // command rather than threading a "did this produce a session" check through here too.
         self.academic
             .route_timer_effects(&self.timer.pending_effects, self.local_offset, clock);
+        // Stage 18: the same effect list, read once, becomes notification requests. Recovery and
+        // manual saves produce none (see `platform::notification`), and the list is replaced on
+        // every command, so a completion can be translated at most once.
+        let phase_after = self.timer.controller.core().phase;
+        let wall = clock.wall.unix_millis;
+        self.notification_outbox.extend(
+            notifications_for_effects(&self.timer.pending_effects, phase_after)
+                .into_iter()
+                .map(|request| (request, wall)),
+        );
+    }
+
+    #[cfg(test)]
+    fn is_break_running_for_tests(&self) -> bool {
+        let core = self.timer.controller.core();
+        core.phase == TimerPhase::Break && core.running
+    }
+
+    /// Drains the notifications the platform layer still has to show (oldest first).
+    pub fn take_notifications(&mut self) -> Vec<(NotificationRequest, i64)> {
+        std::mem::take(&mut self.notification_outbox)
+    }
+
+    /// What the tray needs to know about the Timer right now (`platform::tray_model`).
+    pub fn tray_state(&self, now: Instant) -> crate::platform::tray_model::TrayTimerState {
+        let core = self.timer.controller.core();
+        crate::platform::tray_model::TrayTimerState {
+            phase: core.phase,
+            running: core.running,
+            display_seconds: core.display_seconds(self.clock(now)),
+        }
     }
 
     /// Application effects (session ranges, completions) produced by the most recent timer
@@ -887,6 +924,97 @@ mod tests {
             1,
             "a session, once created, is durable domain state - not tied to pending_effects' lifetime"
         );
+    }
+
+    // --- Stage 18: notification outbox (exactly-once at the application boundary) ---------------
+
+    #[test]
+    fn a_live_completion_produces_exactly_one_notification_even_if_observed_again() {
+        use crate::platform::notification::NotificationKind;
+        let now = Instant::now();
+        let mut model = model_at(now);
+        model.apply(AppCommand::SetMode(3)); // Demo: 10 s, no break
+        model.apply(AppCommand::Start(now));
+        assert!(
+            model.take_notifications().is_empty(),
+            "starting announces nothing"
+        );
+        for tick in 1..=9 {
+            model.apply(AppCommand::Refresh(now + Duration::from_secs(tick)));
+        }
+        assert!(
+            model.take_notifications().is_empty(),
+            "no notification while counting down"
+        );
+
+        model.apply(AppCommand::Refresh(now + Duration::from_secs(11)));
+        let sent = model.take_notifications();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].0.kind, NotificationKind::FocusFinished);
+
+        // Timer ticks after completion (what the 100 ms refresh would keep doing) and a drained
+        // outbox: nothing more.
+        for extra in 12..40 {
+            model.apply(AppCommand::Refresh(now + Duration::from_secs(extra)));
+        }
+        assert!(model.take_notifications().is_empty());
+        assert_eq!(
+            model.academic().state().sessions.len(),
+            1,
+            "one completion, one session"
+        );
+    }
+
+    #[test]
+    fn a_focus_block_followed_by_a_break_says_time_for_a_break_then_break_finished() {
+        use crate::platform::notification::NotificationKind;
+        let now = Instant::now();
+        let mut model = model_at(now); // default preset: Deep Work 52/17 with a break
+        model.apply(AppCommand::Start(now));
+        model.apply(AppCommand::Refresh(now + Duration::from_secs(52 * 60 + 1)));
+        let first = model.take_notifications();
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].0.kind, NotificationKind::FocusFinishedBreakNext);
+        assert!(
+            model.is_break_running_for_tests(),
+            "the break follows automatically"
+        );
+
+        model.apply(AppCommand::Refresh(
+            now + Duration::from_secs((52 + 18) * 60),
+        ));
+        let second = model.take_notifications();
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].0.kind, NotificationKind::BreakFinished);
+        assert_eq!(
+            model.academic().state().sessions.len(),
+            1,
+            "the break itself is never logged as a session"
+        );
+    }
+
+    #[test]
+    fn reset_and_manual_commands_never_notify() {
+        let now = Instant::now();
+        let mut model = model_at(now);
+        model.apply(AppCommand::Start(now));
+        model.apply(AppCommand::Pause(now + Duration::from_secs(30)));
+        model.apply(AppCommand::Reset);
+        assert!(model.take_notifications().is_empty());
+    }
+
+    #[test]
+    fn startup_recovery_of_an_abandoned_timer_is_silent_but_still_records_the_session() {
+        // Recovery effects (AbandonedRecovery) map to no notification (production never notifies
+        // on restore); the session itself is covered by the Stage 16 recovery tests.
+        use crate::platform::notification::notifications_for_effects;
+        use crate::timer_controller::TimerApplicationEffect;
+        use study_tracker_core::timer::CompletionReason;
+        let effects = [TimerApplicationEffect::Completed {
+            phase: TimerPhase::Study,
+            reason: CompletionReason::AbandonedRecovery,
+        }];
+        assert!(notifications_for_effects(&effects, TimerPhase::Idle).is_empty());
     }
 
     // --- Stage 15: real-persistence wiring (TimerController's own restore/recovery correctness

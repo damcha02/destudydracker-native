@@ -13,6 +13,32 @@ use serde::{Deserialize, Serialize};
 use super::date::LocalDate;
 use super::ids::{CourseId, ExamId, SemesterId};
 
+/// Production v0.1.67's `ExamKind`: everything except `Session` is a one-off dated item inside the
+/// semester; `Session` exams fall in the exam session after it. An exam with no kind is a
+/// `Session` exam (what every exam was before kinds existed).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExamKind {
+    Midterm,
+    Endterm,
+    SemesterEnd,
+    Project,
+    Session,
+}
+
+impl ExamKind {
+    /// Parses production's JSON spelling; anything else is "absent", like its normalizer.
+    pub fn from_production(value: &str) -> Option<Self> {
+        match value {
+            "midterm" => Some(Self::Midterm),
+            "endterm" => Some(Self::Endterm),
+            "semester-end" => Some(Self::SemesterEnd),
+            "project" => Some(Self::Project),
+            "session" => Some(Self::Session),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Exam {
     pub id: ExamId,
@@ -24,6 +50,10 @@ pub struct Exam {
     pub weight: f64,
     pub preparedness: f64,
     pub location: String,
+    /// Added in production v0.1.67 (wabi exam kinds). `None` = `Session`. Stores written before
+    /// Stage 18 have no such field and load as `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<ExamKind>,
 }
 
 impl Exam {
@@ -43,6 +73,7 @@ impl Exam {
             weight: 0.0,
             preparedness: 0.0,
             location: String::new(),
+            kind: None,
         }
     }
 }

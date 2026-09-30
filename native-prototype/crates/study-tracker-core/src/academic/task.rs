@@ -48,6 +48,17 @@ pub struct Task {
     pub priority: Priority,
     pub notes: String,
     pub created_at: WallTimestamp,
+    /// Production v0.1.67 (wabi exam prep): a revision task planned after the semester ended, whose
+    /// `total_units` is set by hand rather than derived from the schedule. Absent in older stores.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub prep: bool,
+    /// The semester task this prep task was repeated from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prep_of: Option<TaskId>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 impl Task {
@@ -73,6 +84,8 @@ impl Task {
             priority: Priority::Medium,
             notes: String::new(),
             created_at,
+            prep: false,
+            prep_of: None,
         }
     }
 }

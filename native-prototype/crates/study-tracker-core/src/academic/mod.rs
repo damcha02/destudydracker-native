@@ -23,7 +23,7 @@ pub use course::{
     clamp_target_grade, Course, DEFAULT_TARGET_GRADE, MAX_TARGET_GRADE, MIN_TARGET_GRADE,
 };
 pub use date::LocalDate;
-pub use exam::Exam;
+pub use exam::{Exam, ExamKind};
 pub use ids::{
     CalendarEntryId, CourseId, DailyTodoId, ExamId, HolidayId, SemesterId, SessionId, TaskId,
     TimetableEventId,

@@ -15,7 +15,18 @@ pub mod config;
 pub mod error;
 pub mod identity;
 pub mod logging;
+pub mod notification;
 pub mod paths;
+pub mod tray_model;
+pub mod updater;
 
 #[cfg(windows)]
+pub mod single_instance;
+#[cfg(windows)]
 pub mod startup_error;
+#[cfg(windows)]
+pub mod win_host;
+#[cfg(windows)]
+pub mod win_toast;
+#[cfg(windows)]
+pub mod win_util;

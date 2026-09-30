@@ -22,7 +22,7 @@ use serde_json::{Map, Value};
 
 use study_tracker_core::academic::{
     AcademicState, CalendarEntry, CalendarEntryId, Course, CourseId, DailyTodo, DailyTodoId, Exam,
-    ExamId, Holiday, HolidayId, LocalDate, Priority, Semester, SemesterId, SemesterPhase,
+    ExamId, ExamKind, Holiday, HolidayId, LocalDate, Priority, Semester, SemesterId, SemesterPhase,
     SessionId, SessionKind, StudySession, Task, TaskId, TaskSubtype, TimetableEvent,
     TimetableEventId, TimetableEventKind, UnitAmount,
 };
@@ -233,6 +233,9 @@ fn convert_task(obj: &Map<String, Value>, import_time: WallTimestamp) -> Result<
         priority: priority(get_str(obj, "priority")),
         notes: get_string_or(obj, "notes", ""),
         created_at: get_instant(obj, "createdAt", import_time),
+        // v0.1.67 wabi exam prep: `prep` must be literally `true`, `prepOf` a string id.
+        prep: obj.get("prep").and_then(Value::as_bool).unwrap_or(false),
+        prep_of: get_string(obj, "prepOf").map(TaskId::new),
     })
 }
 
@@ -251,6 +254,7 @@ fn convert_exam(obj: &Map<String, Value>) -> Result<Exam, String> {
         weight: get_f64_or(obj, "weight", 0.0),
         preparedness: get_f64_or(obj, "preparedness", 0.0),
         location: get_string_or(obj, "location", ""),
+        kind: get_str(obj, "kind").and_then(ExamKind::from_production),
     })
 }
 
@@ -479,6 +483,74 @@ mod tests {
         }));
         let (result, _warnings) = convert_academic(&state, WallTimestamp::from_unix_millis(0));
         assert_eq!(result.courses[0].id.as_str(), "the-exact-original-id");
+    }
+
+    // --- Stage 18 preflight: production v0.1.67 fields (docs/production-sync-0.1.67.md) ----------
+
+    #[test]
+    fn v0_1_67_exam_kinds_and_prep_tasks_survive_import() {
+        let state = obj(json!({
+            "tasks": [
+                {"id": "t1", "semesterId": "s", "courseId": "c", "title": "Sheet 3", "createdAt": "2026-01-01T00:00:00.000Z"},
+                {"id": "t2", "semesterId": "s", "courseId": "c", "title": "Sheet 3 (prep)", "totalUnits": 6, "prep": true, "prepOf": "t1", "createdAt": "2026-01-01T00:00:00.000Z"},
+                {"id": "t3", "semesterId": "s", "courseId": "c", "title": "Odd", "prep": "yes", "prepOf": 7, "createdAt": "2026-01-01T00:00:00.000Z"}
+            ],
+            "exams": [
+                {"id": "e1", "semesterId": "s", "courseId": "c", "title": "Midterm", "examDate": "2026-11-01", "kind": "midterm"},
+                {"id": "e2", "semesterId": "s", "courseId": "c", "title": "Project", "examDate": "2026-11-02", "kind": "project"},
+                {"id": "e3", "semesterId": "s", "courseId": "c", "title": "Session", "examDate": "2027-01-20", "kind": "session"},
+                {"id": "e4", "semesterId": "s", "courseId": "c", "title": "Old", "examDate": "2027-01-21"},
+                {"id": "e5", "semesterId": "s", "courseId": "c", "title": "Bogus", "examDate": "2027-01-22", "kind": "oral"}
+            ],
+        }));
+        let (result, warnings) = convert_academic(&state, WallTimestamp::from_unix_millis(0));
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let kinds: Vec<Option<ExamKind>> = result.exams.iter().map(|e| e.kind).collect();
+        assert_eq!(
+            kinds,
+            [Some(ExamKind::Midterm), Some(ExamKind::Project), Some(ExamKind::Session), None, None],
+            "absent or unrecognized kinds are None (= session), exactly like production's normalizer"
+        );
+        assert!(!result.tasks[0].prep && result.tasks[0].prep_of.is_none());
+        assert!(result.tasks[1].prep);
+        assert_eq!(
+            result.tasks[1].prep_of.as_ref().map(|t| t.as_str()),
+            Some("t1")
+        );
+        assert_eq!(
+            result.tasks[1].total_units, 6,
+            "a prep task keeps its hand-set total"
+        );
+        assert!(
+            !result.tasks[2].prep && result.tasks[2].prep_of.is_none(),
+            "non-boolean / non-string values are ignored"
+        );
+    }
+
+    #[test]
+    fn stores_written_before_the_new_fields_still_deserialize_and_omit_them_when_unset() {
+        // A Stage 16 store has neither `kind` nor `prep`/`prep_of`.
+        let old_exam = r#"{"id":"e","semester_id":"s","course_id":"c","title":"T","exam_date":"2026-11-01","weight":1.0,"preparedness":2.0,"location":""}"#;
+        let exam: Exam = serde_json::from_str(old_exam).unwrap();
+        assert_eq!(exam.kind, None);
+        assert!(
+            !serde_json::to_string(&exam).unwrap().contains("kind"),
+            "unset kind is not written, so old readers/stores are unchanged"
+        );
+        let mut with_kind = exam.clone();
+        with_kind.kind = Some(ExamKind::Endterm);
+        let round: Exam =
+            serde_json::from_str(&serde_json::to_string(&with_kind).unwrap()).unwrap();
+        assert_eq!(round.kind, Some(ExamKind::Endterm));
+
+        let old_task = r#"{"id":"t","semester_id":"s","course_id":"c","title":"T","subtype":"Sheet","unit_label":"Sheet","total_units":3,"completed_units":1,"due_date":null,"priority":"Medium","notes":"","created_at":{"unix_millis":0}}"#;
+        let task: Task = serde_json::from_str(old_task).unwrap();
+        assert!(!task.prep && task.prep_of.is_none());
+        let s = serde_json::to_string(&task).unwrap();
+        assert!(
+            !s.contains("prep"),
+            "unset prep fields are not written: {s}"
+        );
     }
 
     #[test]

@@ -33,12 +33,33 @@ serde_json = "1"
 # too); added here directly only to use its `Deserialize` derive on the production-backup import
 # shape (persistence/migration.rs), adding no new crate to the dependency tree.
 serde = { version = "1", features = ["derive"] }
+# Stage 18 updater: Ed25519/minisign signature verification, the format Tauri's updater uses
+# (production's `plugins.updater.pubkey`). Zero dependencies of its own, ~600 lines, written by the
+# minisign author; the one new crate of this stage.
+minisign-verify = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 # MessageBoxW fallback for fatal startup errors once the release build has no console (Stage 13,
 # see src/platform/startup_error.rs). windows-sys is a thin FFI-declarations crate (no codegen
 # beyond what's referenced) and is already resolved multiple times transitively by winit/glutin.
-windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
+windows-sys = { version = "0.59", features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Foundation",
+    # Stage 18 platform layer: tray (Shell_NotifyIcon), single-instance (named mutex), tray icon
+    # bitmaps (GDI), thread/module queries for window lookup.
+    "Win32_UI_Shell",
+    "Win32_System_Threading",
+    "Win32_System_LibraryLoader",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Registry",
+    "Win32_Security",
+    "Win32_Networking_WinHttp",
+] }
+
+# Toast notifications (Stage 18, src/platform/win_toast.rs): WinRT `ToastNotificationManager`. The
+# `windows` crate is ALREADY in the dependency tree (slint -> winit -> accesskit_windows); this adds
+# only three feature flags on the copy that is resolved anyway, no new crate.
+windows = { version = "0.62", features = ["UI_Notifications", "Data_Xml_Dom", "Foundation"] }
 
 [build-dependencies]
 slint-build = "1.17.1"

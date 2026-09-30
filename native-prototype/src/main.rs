@@ -10,6 +10,10 @@
 
 mod academic_controller;
 mod app_model;
+#[cfg(windows)]
+mod app_platform;
+#[cfg(windows)]
+mod app_updater;
 mod dashboard_view;
 mod map;
 mod map_adapter;
@@ -54,6 +58,23 @@ fn main() -> std::process::ExitCode {
 fn run() -> Result<(), StartupError> {
     let app_paths = AppPaths::resolve()?;
     app_paths.ensure_created()?;
+    // Stage 18: exactly one primary instance per profile (data directory), decided *before* the
+    // log file, the store or anything else that could be written is opened - a second launch must
+    // never become a second writer. A secondary asks the primary to show itself and exits.
+    #[cfg(windows)]
+    let instance_names =
+        platform::single_instance::names_for(identity::APP_ID, &app_paths.data_dir);
+    #[cfg(windows)]
+    let _instance_guard = match platform::single_instance::acquire(&instance_names) {
+        platform::single_instance::Acquisition::Primary(guard) => Some(guard),
+        platform::single_instance::Acquisition::Unguarded => None,
+        platform::single_instance::Acquisition::Secondary { activated } => {
+            if std::env::var_os("STUDY_NATIVE_INSTANCE_REPORT").is_some() {
+                println!("SECONDARY activated={activated}");
+            }
+            return Ok(());
+        }
+    };
     let log_path = logging::init(&app_paths)?;
     logging::install_panic_hook();
 
@@ -160,6 +181,29 @@ fn run() -> Result<(), StartupError> {
     let _diagnostics = install_diagnostics(&window);
 
     log::info!("first window created; entering the event loop");
+    #[cfg(windows)]
+    {
+        match app_platform::install(
+            &window,
+            Rc::clone(&model),
+            Rc::clone(&dashboard),
+            &instance_names,
+            &app_paths.data_dir,
+        ) {
+            Ok(()) => {}
+            Err(error) => {
+                log::warn!("platform integration unavailable (tray/notifications): {error}")
+            }
+        }
+        app_updater::install(&window, app_paths.data_dir.clone());
+        app_platform::after_timer_activity(); // tray starts in sync with a restored timer
+                                              // The tray keeps the process alive with the window hidden, so the loop must run until an
+                                              // explicit quit instead of until the last window closes (`window.run()`).
+        window.show()?;
+        slint::run_event_loop_until_quit()?;
+        app_platform::shutdown();
+    }
+    #[cfg(not(windows))]
     window.run()?;
     log::info!("event loop exited normally");
     Ok(())
@@ -527,7 +571,11 @@ fn sync_refresh_timer(
             // the very next tick after restore pushes fresh, correct values within one
             // `RUNNING_UPDATE_INTERVAL` (100 ms), matching Rule B in
             // docs/stage12_5-architecture-freeze.md, section 10.
-            if !window.window().is_minimized() {
+            #[cfg(windows)]
+            let hidden = app_platform::is_hidden_to_tray();
+            #[cfg(not(windows))]
+            let hidden = false;
+            if !window.window().is_minimized() && !hidden {
                 apply_model_to_window(&window, &model.borrow(), now);
             }
             // A Timer completion inside this tick adds a StudySession (academic revision bump);
@@ -535,6 +583,8 @@ fn sync_refresh_timer(
             // first frame after restore must already be correct. One integer comparison per tick;
             // nothing is recomputed unless the revision really changed.
             refresh_dashboard_if_changed(&window, &model.borrow(), &mut dashboard.borrow_mut());
+            #[cfg(windows)]
+            app_platform::after_timer_activity();
             if !model.borrow().timer().is_running() {
                 timer_for_callback.stop();
             }
