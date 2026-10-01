@@ -282,6 +282,232 @@ impl AcademicState {
         }
         true
     }
+
+    /// Production's `toggleTimetableOccurrence` (Stage 19; the Wabi-Sabi Dashboard's marks): flips
+    /// one occurrence date in `completedOccurrences`. A Sheet Release is informational and never
+    /// moves the task's unit count; anything else adds one completed unit, or takes one back unless
+    /// the occurrence was beyond the task's total and so never counted (`unitDecrementFor`).
+    /// Returns `false` when the event does not exist.
+    pub fn toggle_timetable_occurrence(
+        &mut self,
+        id: &super::ids::TimetableEventId,
+        occurrence_date: &str,
+    ) -> bool {
+        let Some(index) = self.timetable_events.iter().position(|e| &e.id == id) else {
+            return false;
+        };
+        let task_id = self.timetable_events[index].task_id.clone();
+        let completed_before = count_completed_unit_occurrences(&self.timetable_events, &task_id);
+        let event = &mut self.timetable_events[index];
+        let was_completed = event
+            .completed_occurrences
+            .iter()
+            .any(|d| d == occurrence_date);
+        if was_completed {
+            event.completed_occurrences.retain(|d| d != occurrence_date);
+        } else {
+            event
+                .completed_occurrences
+                .push(occurrence_date.to_string());
+        }
+        if event.kind == super::planner::TimetableEventKind::SheetRelease {
+            return true;
+        }
+        if let Some(task) = self.tasks.iter_mut().find(|t| t.id == task_id) {
+            let delta = if was_completed {
+                -unit_decrement_for(completed_before, i64::from(task.total_units), 1)
+            } else {
+                1
+            };
+            let next = i64::from(task.completed_units) + delta;
+            task.completed_units = next.clamp(0, i64::from(task.total_units)) as u32;
+        }
+        true
+    }
+
+    /// Production's `toggleDailyTodoOccurrence`: a repeating to-do tracks each date in
+    /// `completedOccurrences`; a one-off flips `completed`/`completedAt`.
+    pub fn toggle_daily_todo_occurrence(
+        &mut self,
+        id: &super::ids::DailyTodoId,
+        occurrence_date: &str,
+        now: WallTimestamp,
+    ) -> bool {
+        let Some(todo) = self.daily_todos.iter_mut().find(|t| &t.id == id) else {
+            return false;
+        };
+        if todo.repeat_weekly {
+            if todo
+                .completed_occurrences
+                .iter()
+                .any(|d| d == occurrence_date)
+            {
+                todo.completed_occurrences.retain(|d| d != occurrence_date);
+            } else {
+                todo.completed_occurrences.push(occurrence_date.to_string());
+            }
+        } else {
+            todo.completed = !todo.completed;
+            todo.completed_at = todo.completed.then_some(now);
+        }
+        true
+    }
+}
+
+impl AcademicState {
+    /// Production's schedule-to-progress effect (`App.tsx`, the `useEffect` over
+    /// `timetableEvents/tasks/semesters/holidays`; found in Stage 19): a task with timetable events
+    /// takes no manual unit counts - its `totalUnits` is the number of its (non-release) occurrences
+    /// projected over its semester's dates (weekly recurrence expanded, skips/moves/holidays
+    /// honoured) and `completedUnits` how many of those dates are ticked. Exam-prep tasks keep their
+    /// hand-set total and only count ticks. Without a semester date range the event *records* are
+    /// counted instead. Returns whether anything changed. Production runs it after every state
+    /// change; natively it runs at load and inside the controller's single mutation choke point.
+    pub fn sync_task_units_from_schedule(&mut self) -> bool {
+        let mut changed = false;
+        for task in &mut self.tasks {
+            let events: Vec<&TimetableEvent> = self
+                .timetable_events
+                .iter()
+                .filter(|e| {
+                    e.task_id == task.id
+                        && e.kind != super::planner::TimetableEventKind::SheetRelease
+                })
+                .collect();
+            if events.is_empty() {
+                continue;
+            }
+            if task.prep {
+                let ticked: usize = events.iter().map(|e| e.completed_occurrences.len()).sum();
+                let done = (ticked as u32).min(task.total_units);
+                if done != task.completed_units {
+                    task.completed_units = done;
+                    changed = true;
+                }
+                continue;
+            }
+            let range = self
+                .semesters
+                .iter()
+                .find(|s| s.id == task.semester_id)
+                .and_then(|s| match (&s.start_date, &s.end_date) {
+                    (Some(start), Some(end))
+                        if !start.as_str().is_empty() && !end.as_str().is_empty() =>
+                    {
+                        Some((start.as_str(), end.as_str()))
+                    }
+                    _ => None,
+                });
+            let (total, completed) = match range {
+                Some((start, end)) => events.iter().fold((0u32, 0u32), |(t, c), event| {
+                    let dates = count_event_occurrence_dates(
+                        event,
+                        &self.holidays,
+                        &task.semester_id,
+                        start,
+                        end,
+                    );
+                    let done = dates
+                        .iter()
+                        .filter(|d| event.completed_occurrences.iter().any(|c| c == *d))
+                        .count();
+                    (t + dates.len() as u32, c + done as u32)
+                }),
+                None => (
+                    events.len() as u32,
+                    events
+                        .iter()
+                        .filter(|e| !e.completed_occurrences.is_empty())
+                        .count() as u32,
+                ),
+            };
+            if task.total_units != total || task.completed_units != completed {
+                task.total_units = total;
+                task.completed_units = completed;
+                changed = true;
+            }
+        }
+        changed
+    }
+}
+
+/// `countEventOccurrenceDates` (`plannerSchedule.ts`): one event's occurrence dates in an inclusive
+/// `YYYY-MM-DD` range - overrides and holidays honoured, but no semester phase/archived gate.
+/// Dates are compared as strings exactly like production.
+pub fn count_event_occurrence_dates(
+    event: &TimetableEvent,
+    holidays: &[Holiday],
+    semester_id: &SemesterId,
+    range_start: &str,
+    range_end: &str,
+) -> Vec<String> {
+    use crate::dashboard::CivilDate;
+    if range_start > range_end {
+        return Vec::new();
+    }
+    let is_holiday = |date: &str| {
+        holidays.iter().any(|h| {
+            &h.semester_id == semester_id
+                && date >= h.start_date.as_str()
+                && date <= h.end_date.as_str()
+        })
+    };
+    let mut dates = Vec::new();
+    if event.repeat_weekly {
+        let series_end = match event.recurrence_end_date.as_ref() {
+            Some(end) if end.as_str() < range_end => end.as_str(),
+            _ => range_end,
+        };
+        if range_start <= series_end {
+            let (Some(anchor), Some(start), Some(end)) = (
+                CivilDate::parse_iso(event.date.as_str()),
+                CivilDate::parse_iso(range_start),
+                CivilDate::parse_iso(series_end),
+            ) else {
+                return dates;
+            };
+            for date in crate::dashboard::schedule::expand_weekday_from(anchor, start, end) {
+                let key = date.to_iso();
+                let entry = event.occurrence_overrides.get(&key);
+                if entry.is_some_and(|o| o.skipped) {
+                    continue;
+                }
+                if let Some(moved) = entry.and_then(|o| o.date.as_ref()) {
+                    let moved = moved.as_str();
+                    if moved >= range_start && moved <= range_end && !is_holiday(moved) {
+                        dates.push(moved.to_string());
+                    }
+                    continue;
+                }
+                if is_holiday(&key) {
+                    continue;
+                }
+                dates.push(key);
+            }
+        }
+    } else if event.date.as_str() >= range_start && event.date.as_str() <= range_end {
+        dates.push(event.date.as_str().to_string());
+    }
+    dates
+}
+
+/// `countCompletedUnitOccurrences` (`plannerActions.ts`): completed occurrences of a task's
+/// non-release events.
+pub fn count_completed_unit_occurrences(events: &[TimetableEvent], task_id: &TaskId) -> i64 {
+    events
+        .iter()
+        .filter(|e| {
+            &e.task_id == task_id && e.kind != super::planner::TimetableEventKind::SheetRelease
+        })
+        .map(|e| e.completed_occurrences.len() as i64)
+        .sum()
+}
+
+/// `unitDecrementFor`: occurrences beyond `total_units` were never counted, so they are not taken
+/// back either.
+pub fn unit_decrement_for(completed_before: i64, total_units: i64, removed: i64) -> i64 {
+    let uncounted = (completed_before - total_units).max(0);
+    (removed - uncounted).max(0)
 }
 
 /// `getCompletedCalendarWholeUnits`: `floor(sum of completed amounts + 0.0001)` for one task.

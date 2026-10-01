@@ -51,7 +51,7 @@ function Run-Scenario([string]$Name, [hashtable]$Env, [bool]$Minimize = $false, 
         $lines = @(Get-Content $stdout -ErrorAction SilentlyContinue | Where-Object { $_ -like 'STATS*' })
         $framesInWindow = 0; $ticksInWindow = 0
         # STATS lines are 10 s intervals; the first (t=10) also covers startup/minimize, so only intervals wholly inside the measured window (t >= 20) are counted.
-        foreach ($l in $lines) { if ($l -match 'STATS (d+) frames=(d+) ticks=(d+)' -and [int]$Matches[1] -ge 20) { $framesInWindow += [int]$Matches[2]; $ticksInWindow += [int]$Matches[3] } }
+        foreach ($l in $lines) { if ($l -match 'STATS (\d+) frames=(\d+) ticks=(\d+)' -and [int]$Matches[1] -ge 20) { $framesInWindow += [int]$Matches[2]; $ticksInWindow += [int]$Matches[3] } }
         $storeAfter = if (Test-Path $store) { (Get-Item $store).LastWriteTimeUtc.Ticks } else { 0 }
         $logAfter = if ($logFile) { (Get-Item $logFile.FullName).Length } else { 0 }
         $recomputes = @(if ($logFile) { Select-String -Path $logFile.FullName -Pattern 'dashboard: recomputed' } else { @() }).Count

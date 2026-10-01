@@ -127,6 +127,8 @@ fn hide_to_tray() {
         hide_window(hwnd);
         log::info!("window hidden to the tray (a study session is running)");
     }
+    // Stage 19: nothing decorative may keep drawing for a hidden window.
+    crate::app_appearance::sync_sakura();
     // Production shows a notice the first time per run.
     RUNTIME.with(|r| {
         if let Some(rt) = r.borrow_mut().as_mut() {
@@ -181,6 +183,7 @@ fn show_main_window() {
             .map(|rt| rt.model.borrow().tray_state(Instant::now()))
     });
     log::info!("window shown (was hidden to tray: {was_hidden}); timer state: {timer_report:?}");
+    crate::app_appearance::sync_sakura();
 }
 
 /// After any Timer command or tick: mirror the Timer into the tray and deliver whatever

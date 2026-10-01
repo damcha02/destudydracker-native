@@ -84,9 +84,9 @@ export component StartFocusButton inherits Rectangle {
     in property <length> min-h: 0px;
     callback clicked();
 
-    background: FN.dark ? #6b6b6b : #efefef;
+    background: FN.os-dark ? #6b6b6b : #efefef;
     border-width: 2px;
-    border-color: FN.dark ? #858585 : #767676;
+    border-color: FN.os-dark ? #858585 : #767676;
     horizontal-stretch: 0;
 
     label := SansText {
@@ -94,7 +94,7 @@ export component StartFocusButton inherits Rectangle {
         y: (parent.height - self.preferred-height) / 2;
         text: root.text;
         font-size: 16px;
-        color: FN.dark ? #ffffff : #000000;
+        color: FN.os-dark ? #ffffff : #000000;
     }
 
     width: max(root.min-w, label.preferred-width + 2 * root.pad-x + 4px);
@@ -117,7 +117,8 @@ export component FnCheck inherits Rectangle {
     border-radius: 3px;
     border-width: 1px;
     border-color: root.checked ? FN.link : #8a8a8a;
-    background: root.checked ? FN.link : FN.surface;
+    // an unstyled native checkbox: white under a light `color-scheme` (e.g. Sakura)
+    background: root.checked ? FN.link : FN.os-dark ? FN.surface : #ffffff;
 
     if root.checked: Path {
         x: root.box-size * 0.2;
@@ -166,7 +167,7 @@ export component SectionRule inherits Rectangle {
     }
     HLine {
         y: parent.height - 1px;
-        tone: FN.ink;
+        tone: FN.rule-hard;
     }
 }
 

@@ -1,46 +1,100 @@
-// Production "Field Notebook" style tokens (Stage 17). Every value is read off the running
-// production app (`desktop/src/index.css` + `App.css`, `:root[data-app-style="field-notebook"]`,
-// dark and light), not invented. Names follow production's CSS custom properties.
+// Production "Field Notebook" style tokens. Since Stage 19 the values are not chosen here: Rust
+// (`src/appearance_view.rs`) resolves the persisted style/palette/theme preference through
+// `study_tracker_core::appearance` and pushes one `FnTokens` table - dark, light, or the Sakura
+// palette's pink notebook - so there is exactly one place that knows the colours. The defaults
+// below are the dark table (production's default theme) so a frame drawn before Rust pushes
+// anything is already correct. Every value was read off the running production app
+// (`desktop/src/index.css` + `App.css`, `:root[data-app-style="field-notebook"]`).
 //
 // Fonts: the packaged Tauri app's CSP (`font-src 'self' data:`, desktop/src-tauri/tauri.conf.json)
 // blocks the Google-hosted Newsreader / Courier Prime / Hanken Grotesk faces named first in the
 // CSS stacks, so the shipped app renders the *fallbacks*: Georgia (serif), Consolas (Chromium's
 // default monospace on Windows) and Arial (Helvetica Neue -> Arial). Native uses those same system
 // fonts; nothing is bundled.
+export struct FnTokens {
+    desk: color,
+    surface: color,
+    surface-2: color,
+    surface-inset: color,
+    paper-1: color,
+    paper-2: color,
+    paper-3: color,
+    slip: color,
+    ink: color,
+    ink-2: color,
+    ink-3: color,
+    ink-4: color,
+    line: color,
+    line-soft: color,
+    rule-dot: color,
+    // `--fn-rule-hard`: section and selection rules (ink, or pink under Sakura)
+    rule-hard: color,
+    stamp: color,
+    link: color,
+    blue: color,
+    green: color,
+    accent: color,
+    accent-line: color,
+    accent-soft: color,
+    danger-soft: color,
+    ring-track: color,
+    ok: color,
+    steady: color,
+    critical: color,
+    // CSS `color-scheme`: what Chromium's unstyled native controls follow (the Sakura palette
+    // forces `light` even while `data-theme` stays dark).
+    os-dark: bool,
+}
+
 export global FN {
+    // The effective `data-theme` (the sun/moon toggle icon).
     in-out property <bool> dark: true;
+    in-out property <FnTokens> t: {
+        desk: #191814, surface: #24221e, surface-2: #2b2823, surface-inset: #201e1a,
+        paper-1: #2b2823, paper-2: #363126, paper-3: #2e2a23, slip: #3a3020,
+        ink: #eee6d6, ink-2: #d7cdbb, ink-3: #aaa08d, ink-4: #817867,
+        line: #58503f, line-soft: #3f392e, rule-dot: #584f3e, rule-hard: #eee6d6, stamp: #c47a4d,
+        link: #8ea9c5, blue: #7187b4, green: #73956a, accent: #eee6d6,
+        accent-line: #eee6d652, accent-soft: #eee6d614, danger-soft: #9c5a341f, ring-track: #3d382f,
+        ok: #73956a, steady: #7187b4, critical: #c47a4d, os-dark: true,
+    };
 
     out property <string> serif: "Georgia";
     out property <string> mono: "Consolas";
     out property <string> sans: "Arial";
 
-    out property <color> desk: dark ? #191814 : #e6dfd1;
-    out property <color> surface: dark ? #24221e : #fbf8f0;
-    out property <color> surface-2: dark ? #2b2823 : #f4efe3;
-    out property <color> surface-inset: dark ? #201e1a : #f6f1e5;
-    out property <color> paper-1: dark ? #2b2823 : #f4efe3;
-    out property <color> paper-2: dark ? #363126 : #e4dccb;
-    out property <color> paper-3: dark ? #2e2a23 : #efe8da;
-    out property <color> slip: dark ? #3a3020 : #f0e6c8;
-    out property <color> ink: dark ? #eee6d6 : #23211d;
-    out property <color> ink-2: dark ? #d7cdbb : #3d382f;
-    out property <color> ink-3: dark ? #aaa08d : #6d6656;
-    out property <color> ink-4: dark ? #817867 : #8b8474;
-    out property <color> line: dark ? #58503f : #cec3ae;
-    out property <color> line-soft: dark ? #3f392e : #ded5c3;
-    out property <color> rule-dot: dark ? #584f3e : #d5cbb7;
-    out property <color> stamp: dark ? #c47a4d : #9c5a34;
-    out property <color> link: dark ? #8ea9c5 : #3c5f7a;
-    out property <color> blue: dark ? #7187b4 : #4a5f86;
-    out property <color> green: dark ? #73956a : #4f6b4a;
-    out property <color> accent: dark ? #eee6d6 : #23211d;
+    out property <color> desk: t.desk;
+    out property <color> surface: t.surface;
+    out property <color> surface-2: t.surface-2;
+    out property <color> surface-inset: t.surface-inset;
+    out property <color> paper-1: t.paper-1;
+    out property <color> paper-2: t.paper-2;
+    out property <color> paper-3: t.paper-3;
+    out property <color> slip: t.slip;
+    out property <color> ink: t.ink;
+    out property <color> ink-2: t.ink-2;
+    out property <color> ink-3: t.ink-3;
+    out property <color> ink-4: t.ink-4;
+    out property <color> line: t.line;
+    out property <color> line-soft: t.line-soft;
+    out property <color> rule-dot: t.rule-dot;
+    out property <color> rule-hard: t.rule-hard;
+    out property <color> stamp: t.stamp;
+    out property <color> link: t.link;
+    out property <color> blue: t.blue;
+    out property <color> green: t.green;
+    out property <color> accent: t.accent;
     // `settings.accent` (production default #8fb4ff) overrides `--accent` inside the page shell, so
     // everything keyed on `var(--accent)` in the Dashboard body is this blue, not the palette ink.
     out property <color> user-accent: #8fb4ff;
-    out property <color> accent-line: dark ? #eee6d652 : #23211d5c;
-    out property <color> accent-soft: dark ? #eee6d614 : #23211d12;
-    out property <color> danger-soft: #9c5a341f;
-    out property <color> ring-track: dark ? #3d382f : #e6dfd1;
+    out property <color> accent-line: t.accent-line;
+    out property <color> accent-soft: t.accent-soft;
+    out property <color> danger-soft: t.danger-soft;
+    out property <color> ring-track: t.ring-track;
+    out property <color> ok: t.ok;
+    out property <color> steady: t.steady;
+    out property <color> critical: t.critical;
+    out property <bool> os-dark: t.os-dark;
 
     // Course colours that production stores as CSS colours and sometimes omits.
     out property <color> general-layer: ink-4;

@@ -24,6 +24,11 @@ param(
     [string]$Now = '2026-09-30T12:00:00+02:00',
     [string]$Tab = 'dashboard',
     [string]$Theme = 'dark',
+    [string]$Style = 'field-notebook',
+    [string]$Palette = 'default',
+    [int]$Quiet = 0,
+    [string]$SakuraTime = '',
+    [string]$Extra = '',
     [int]$WaitMs = 2500
 )
 
@@ -58,7 +63,14 @@ $env = @{
     STUDY_NATIVE_VIEW = $Tab
     STUDY_NATIVE_DASHBOARD_DARK = $(if ($Theme -eq 'light') { '0' } else { '1' })
     SLINT_SCALE_FACTOR = "$Scale"
+    STUDY_NATIVE_STYLE = $Style
+    STUDY_NATIVE_PALETTE = $Palette
+    STUDY_NATIVE_THEME = $Theme
 }
+if ($Quiet -eq 1) { $env['STUDY_NATIVE_WABI_QUIET'] = '1' }
+if ($SakuraTime -ne '') { $env['STUDY_NATIVE_SAKURA_TIME'] = $SakuraTime }
+# Extra: "NAME=value;NAME2=value2" (Stage 19 diagnostics)
+foreach ($pair in ($Extra -split ';' | Where-Object { $_ })) { $kv = $pair -split '=', 2; $env[$kv[0]] = $kv[1] }
 foreach ($k in $env.Keys) { $psi.EnvironmentVariables[$k] = [string]$env[$k] }
 $p = [Diagnostics.Process]::Start($psi)
 try {

@@ -54,6 +54,8 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Registry",
     "Win32_Security",
     "Win32_Networking_WinHttp",
+    # Stage 19: the display language's 12/24-hour default for `displayTime` (no new crate).
+    "Win32_Globalization",
 ] }
 
 # Toast notifications (Stage 18, src/platform/win_toast.rs): WinRT `ToastNotificationManager`. The

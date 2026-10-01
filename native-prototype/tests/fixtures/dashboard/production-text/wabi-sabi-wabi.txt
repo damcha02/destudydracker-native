@@ -1,0 +1,10 @@
+## sidebar
+Kokoro | 0 | OVERALL | Critical | ? | Today | 今日 | Plan | Timer | Notes | Rest | Circle | TENDED TODAY | 53m | QUIET MODE →
+## dashboard
+TODAY | Wednesday, Sep 30, 2026 | 3 open · 1h 7m to today's goal | ONE THING | Exercise Sheet 1 | Sheet 1 of 1 · Analysis II · due Oct 3 | START | MARK DONE | SOMETHING ELSE | COMING UP | Exercise Sheet 1 | NEXTProgramming · released Sep 23 | Sep 30 · 18:00 | today | FOCUS | Exercise Sheet 1 | Analysis II · released Sep 26 | Oct 3 · 23:59 | in 3 days | FOCUS | PLANNED TODAY | Email the tutor | To-do | 09:30 | Lecture Notes 1 | Analysis II | 10:15–12:00 | Lecture Notes 2 | Linear Algebra | 14:15–16:00 | Weekly review | To-do | 17:00–17:30 | Library books back | To-do | any time | Exercise Sheet 1 | Analysis II | 1 unit | Oct 3 | Lecture Notes 2 | Linear Algebra | 1/2 unit | Oct 12 | Exercise Sheet 1 | Programming | 1/4 unit | Oct 15 | Reading 3 | Physics | 1 unit | Oct 21 | Click a title to make it the current task. Click the mark to close it out.
+## timer
+
+## quiet
+
+## quiet-mode
+NOW | Exercise Sheet 1 1 | Sheet 1 of 1 · Analysis II · due Oct 3 | 25:00 | START | DONE, LOG IT | LEAVE QUIET MODE

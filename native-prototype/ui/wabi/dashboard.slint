@@ -1,0 +1,232 @@
+// `renderWabiSabiDashboard` (Stage 19): TODAY head, ONE THING card, COMING UP (released sheet
+// deadlines) and PLANNED TODAY (timeline rows, then planned units). Draw-only: every string and flag
+// comes from Rust (`src/wabi_view.rs` <- `study_tracker_core::dashboard::wabi`). Vertical rhythm =
+// production's computed margins/paddings (the probe boxes in docs/stage19-garden-wabisabi.md).
+import { WS } from "palette.slint";
+import { WEyebrow, WSolidButton, WOutlineButton, WTextLink, WTaskDot } from "parts.slint";
+import { WabiDashData, WabiDeadlineRow, WabiPlannedRow } from "types.slint";
+
+component ListHead inherits Rectangle {
+    in property <string> text;
+    height: 21px;
+    WEyebrow { x: 0px; y: 0px; height: 12px; text: root.text; }
+    Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-hard; }
+}
+
+component DeadlineRow inherits Rectangle {
+    in property <WabiDeadlineRow> item;
+    callback mark();
+    callback focus-task();
+    callback select();
+    private property <length> title-size: item.next ? 18px : 16px;
+    height: (item.next ? 21px : 19px) + 3px + 12px + 24px + 1px;
+    Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-soft; }
+    WTaskDot { x: 0px; y: (parent.height - 1px - self.height) / 2; done: false; clicked => { root.mark(); } }
+    Text {
+        x: 38px;
+        y: 12px;
+        width: due.x - 14px - self.x;
+        height: root.item.next ? 21px : 19px;
+        vertical-alignment: center;
+        overflow: elide;
+        text: root.item.title;
+        font-family: WS.serif;
+        font-size: root.title-size;
+        letter-spacing: 0.08px;
+        color: title-touch.has-hover ? WS.sage : WS.ink;
+        title-touch := TouchArea { mouse-cursor: text; clicked => { root.select(); } }
+    }
+    status := HorizontalLayout {
+        x: 38px;
+        y: 12px + (root.item.next ? 21px : 19px) + 3px;
+        height: 12px;
+        spacing: 8px;
+        alignment: start;
+        if root.item.next: Text { text: "NEXT"; font-family: WS.sans; font-size: 11.5px; font-weight: 600; letter-spacing: 1.61px; color: WS.vermilion; vertical-alignment: center; }
+        Text { text: root.item.status; font-family: WS.sans; font-size: 11.5px; letter-spacing: 0.69px; color: WS.muted; vertical-alignment: center; }
+    }
+    due := Rectangle {
+        x: parent.width - (root.item.has-task ? focus-button.width + 14px : 14px) - self.width;
+        y: (parent.height - 1px - 26px) / 2;
+        width: max(due-main.preferred-width, due-rel.preferred-width);
+        height: 26px;
+        due-main := Text { x: parent.width - self.preferred-width; y: 0px; height: 12px; vertical-alignment: center; text: root.item.due; font-family: WS.sans; font-size: 11.5px; letter-spacing: 0.69px; color: WS.muted; }
+        due-rel := Text { x: parent.width - self.preferred-width; y: 14px; height: 12px; vertical-alignment: center; text: root.item.relative; font-family: WS.sans; font-size: 11px; letter-spacing: 0.69px; color: WS.faint; }
+    }
+    focus-button := WOutlineButton {
+        visible: root.item.has-task;
+        x: parent.width - self.width;
+        y: (parent.height - 1px - self.height) / 2;
+        h: 28px;
+        pad-x: 14px;
+        text: "FOCUS";
+        clicked => { root.focus-task(); }
+    }
+}
+
+component PlannedRow inherits Rectangle {
+    in property <WabiPlannedRow> item;
+    callback mark();
+    callback select();
+    height: 44px;
+    if root.item.selected: Rectangle { background: WS.paper-2; }
+    if root.item.selected: Rectangle { x: -12px; y: 12px; width: 2px; height: parent.height - 24px; background: WS.sage; }
+    Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-soft; }
+    WTaskDot { x: 0px; y: 14.5px; done: root.item.completed; clicked => { root.mark(); } }
+    title := Text {
+        x: 38px;
+        y: 12px;
+        width: parent.width - 38px - 14px - 160px - 14px - 90px - 14px - 76px - 14px;
+        height: 19px;
+        vertical-alignment: center;
+        overflow: elide;
+        text: root.item.title;
+        font-family: WS.serif;
+        font-size: 16px;
+        letter-spacing: 0.08px;
+        color: root.item.completed ? WS.faint : root.item.selected || title-touch.has-hover ? WS.sage : WS.ink;
+        title-touch := TouchArea { mouse-cursor: text; clicked => { root.select(); } }
+    }
+    // `text-decoration: line-through`
+    if root.item.completed: Rectangle {
+        x: title.x;
+        y: title.y + 10.5px;
+        width: min(title.width, strike.preferred-width);
+        height: 1px;
+        background: WS.faint;
+    }
+    strike := Text { visible: false; text: root.item.title; font-family: WS.serif; font-size: 16px; letter-spacing: 0.08px; }
+    Text {
+        x: parent.width - 76px - 14px - 90px - 14px - 160px;
+        y: 15.5px;
+        width: 160px;
+        height: 12px;
+        vertical-alignment: center;
+        overflow: elide;
+        text: root.item.subject;
+        font-family: WS.sans;
+        font-size: 11.5px;
+        letter-spacing: 0.92px;
+        color: WS.muted;
+    }
+    Text {
+        x: parent.width - 76px - 14px - 90px;
+        y: 14.5px;
+        width: 90px;
+        height: 14px;
+        vertical-alignment: center;
+        text: root.item.amount;
+        font-family: WS.sans;
+        font-size: 12.5px;
+        letter-spacing: 0.08px;
+        color: WS.ink-3;
+    }
+    Text {
+        x: parent.width - 76px;
+        y: 15.5px;
+        width: 76px;
+        height: 12px;
+        vertical-alignment: center;
+        horizontal-alignment: right;
+        text: root.item.due;
+        font-family: WS.sans;
+        font-size: 11.5px;
+        letter-spacing: 0.69px;
+        color: WS.muted;
+    }
+}
+
+export component WabiDashboard inherits Rectangle {
+    in property <WabiDashData> d;
+    out property <length> content-height: 79px + column.preferred-height;
+    callback start-one();
+    callback mark-one();
+    callback something-else();
+    callback deadline-mark(int);
+    callback deadline-focus(int);
+    callback deadline-select(int);
+    callback planned-mark(int);
+    callback planned-select(int);
+
+    // `.wabi-today-head`
+    WEyebrow { x: 0px; y: 7px; height: 12px; text: "TODAY"; }
+    Text { x: 0px; y: 23px; height: 30px; vertical-alignment: center; text: root.d.today-label; font-family: WS.serif; font-size: 26px; font-weight: 500; color: WS.ink; }
+    Text { x: parent.width - self.preferred-width; y: 6px; height: 14px; vertical-alignment: center; text: root.d.remaining; font-family: WS.sans; font-size: 12.5px; letter-spacing: 0.75px; color: WS.muted; }
+
+    column := VerticalLayout {
+        x: 0px;
+        y: 79px;
+        width: parent.width;
+        alignment: start;
+        // `.wabi-one-thing`
+        Rectangle {
+            background: WS.paper-1;
+            border-width: 1px;
+            border-color: WS.rule-soft;
+            height: one.preferred-height + 2px;
+            one := VerticalLayout {
+                x: 31px;
+                y: 1px;
+                width: parent.width - 62px;
+                padding-top: 28px;
+                padding-bottom: 26px;
+                WEyebrow { height: 12px; text: "ONE THING"; }
+                Rectangle { height: 8px; }
+                // CSS line-height 1.2 = 40.8 px per line; Slint's Georgia line box is ~2 px taller.
+                Text { height: max(40.8px, self.preferred-height - 2px); vertical-alignment: center; wrap: word-wrap; text: root.d.one-title; font-family: WS.serif; font-size: 34px; font-weight: 500; color: WS.ink; }
+                Rectangle { height: 6px; }
+                Text { height: 16px; vertical-alignment: center; wrap: word-wrap; text: root.d.one-meta; font-family: WS.sans; font-size: 14px; letter-spacing: 0.08px; color: WS.muted; }
+                Rectangle { height: 22px; }
+                HorizontalLayout {
+                    height: 38px;
+                    spacing: 10px;
+                    alignment: start;
+                    if root.d.one-can-start: WSolidButton { text: "START"; clicked => { root.start-one(); } }
+                    if root.d.one-can-mark: WOutlineButton { text: "MARK DONE"; clicked => { root.mark-one(); } }
+                    // drawn like production; the picker itself is not migrated yet (inert)
+                    VerticalLayout {
+                        alignment: center;
+                        WTextLink { text: "SOMETHING ELSE"; enabled: false; clicked => { root.something-else(); } }
+                    }
+                }
+            }
+        }
+        if root.d.deadlines.length > 0: VerticalLayout {
+            Rectangle { height: 30px; }
+            ListHead { text: "COMING UP"; }
+            for row[i] in root.d.deadlines: DeadlineRow {
+                item: row;
+                mark => { root.deadline-mark(i); }
+                focus-task => { root.deadline-focus(i); }
+                select => { root.deadline-select(i); }
+            }
+        }
+        Rectangle { height: 30px; }
+        ListHead { text: "PLANNED TODAY"; }
+        Rectangle { height: 6px; }
+        if root.d.planned.length == 0: Text {
+            height: 14px;
+            vertical-alignment: center;
+            text: "Nothing planned today. Add tasks from the planner calendar.";
+            font-family: WS.sans;
+            font-size: 12px;
+            color: WS.faint;
+        }
+        for row[i] in root.d.planned: PlannedRow {
+            item: row;
+            mark => { root.planned-mark(i); }
+            select => { root.planned-select(i); }
+        }
+        Rectangle { height: 16px; }
+        Text {
+            height: 14px;
+            vertical-alignment: center;
+            text: "Click a title to make it the current task. Click the mark to close it out.";
+            font-family: WS.sans;
+            font-size: 12px;
+            color: WS.faint;
+        }
+        // `.wabi-dashboard` padding-bottom 40 + `.shell` padding-bottom 56
+        Rectangle { height: 96px; }
+    }
+}

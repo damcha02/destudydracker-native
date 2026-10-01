@@ -104,6 +104,11 @@ pub struct DiscoverOutcome {
     /// The parsed `state` object (production's `AppState`, or the object itself if the file was
     /// an unwrapped pre-`backupVersion` blob) - not yet validated or converted.
     pub state: Map<String, Value>,
+    /// The wrapper's `preferences` map (`buildBackup`: raw localStorage strings such as
+    /// `study-tracker-style`), empty for an unwrapped blob - exactly what `restoreBackup` reads.
+    /// Stage 19 imports its three appearance keys; the rest stay unread (their features are not
+    /// migrated yet).
+    pub preferences: Map<String, Value>,
 }
 
 /// DISCOVER + READ SOURCE + BACKUP SOURCE/COPY, in one step because the copy must happen before
@@ -139,6 +144,14 @@ pub fn discover_and_read(
         .and_then(Value::as_u64)
         .is_some()
         && matches!(wrapper.get("state"), Some(Value::Object(_)));
+    let preferences = if is_wrapped {
+        match wrapper.get("preferences") {
+            Some(Value::Object(preferences)) => preferences.clone(),
+            _ => Map::new(),
+        }
+    } else {
+        Map::new()
+    };
     let state = if is_wrapped {
         match wrapper.get("state") {
             Some(Value::Object(state)) => state.clone(),
@@ -159,6 +172,7 @@ pub fn discover_and_read(
         source_path: source_path.to_path_buf(),
         source_copy_path,
         state,
+        preferences,
     })
 }
 
@@ -352,6 +366,9 @@ pub struct ImportReport {
     pub fields: Vec<FieldReport>,
     pub timer_imported: bool,
     pub academic_summary: AcademicImportSummary,
+    /// Stage 19: the backup carried at least one of the style/palette/theme preferences and they
+    /// were written (merged key by key, like `restoreBackup`).
+    pub appearance_imported: bool,
     pub warnings: Vec<String>,
     pub committed: bool,
 }
@@ -456,6 +473,19 @@ pub fn commit_import(
 
     envelope.timer = timer.clone();
     envelope.academic = Some(academic.clone());
+    // Stage 19: appearance preferences (style / palette / light-dark), merged key by key.
+    use crate::persistence::preferences_port::{
+        merge_production_backup_preferences, parse_appearance, write_appearance, SECTION,
+    };
+    let current_appearance = parse_appearance(envelope.other.get(SECTION));
+    let imported_appearance =
+        merge_production_backup_preferences(current_appearance, &discovered.preferences);
+    if let Some(appearance) = imported_appearance {
+        let section = envelope.other.remove(SECTION);
+        envelope
+            .other
+            .insert(SECTION.into(), write_appearance(section, appearance));
+    }
     destination_store
         .save(&envelope)
         .map_err(|err| format!("failed to write the native destination: {err}"))?;
@@ -470,7 +500,12 @@ pub fn commit_import(
             ));
         }
     };
-    if read_back.timer != timer || read_back.academic.as_ref() != Some(&academic) {
+    let appearance_mismatch = imported_appearance
+        .is_some_and(|appearance| parse_appearance(read_back.other.get(SECTION)) != appearance);
+    if read_back.timer != timer
+        || read_back.academic.as_ref() != Some(&academic)
+        || appearance_mismatch
+    {
         let _ = destination_store.save(&pre_import_envelope);
         return Err(
             "read-back verification found a mismatch after import, rolled back".to_string(),
@@ -484,6 +519,7 @@ pub fn commit_import(
         fields,
         timer_imported: timer.is_some(),
         academic_summary,
+        appearance_imported: imported_appearance.is_some(),
         warnings,
         committed: true,
     })

@@ -90,7 +90,10 @@ impl AcademicController {
     /// Real startup entry point: loads whatever the port already has (a fresh profile has
     /// nothing, exactly like `TimerController`'s own restore path treats a missing snapshot).
     pub fn load_or_new(persistence: Box<dyn AcademicPersistencePort>) -> Self {
-        let state = persistence.load().unwrap_or_default();
+        let mut state = persistence.load().unwrap_or_default();
+        // Production derives scheduled tasks' unit counts on every load (Stage 19). In memory only:
+        // a load never writes; the next real mutation persists the synced values.
+        state.sync_task_units_from_schedule();
         Self {
             state,
             persistence,
@@ -118,6 +121,9 @@ impl AcademicController {
     }
 
     fn persist(&mut self) {
+        // Every mutation passes through here, so this is where production's "after any change to
+        // events/tasks/semesters/holidays" schedule-to-progress effect runs (Stage 19).
+        self.state.sync_task_units_from_schedule();
         self.revision = self.revision.wrapping_add(1);
         self.persistence.persist(&self.state);
     }
@@ -238,6 +244,27 @@ impl AcademicController {
         now: study_tracker_core::timer::WallTimestamp,
     ) -> bool {
         let changed = self.state.toggle_calendar_entry(id, now);
+        if changed {
+            self.persist();
+        }
+        changed
+    }
+    /// A Wabi-Sabi Dashboard mark on a lecture/sheet occurrence (`toggleTimetableOccurrence`).
+    pub fn toggle_timetable_occurrence(&mut self, id: &TimetableEventId, date: &str) -> bool {
+        let changed = self.state.toggle_timetable_occurrence(id, date);
+        if changed {
+            self.persist();
+        }
+        changed
+    }
+    /// A Wabi-Sabi Dashboard mark on a to-do (`toggleDailyTodoOccurrence`).
+    pub fn toggle_daily_todo_occurrence(
+        &mut self,
+        id: &DailyTodoId,
+        date: &str,
+        now: study_tracker_core::timer::WallTimestamp,
+    ) -> bool {
+        let changed = self.state.toggle_daily_todo_occurrence(id, date, now);
         if changed {
             self.persist();
         }

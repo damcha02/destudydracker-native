@@ -39,7 +39,7 @@ component QueueItem inherits Rectangle {
     HLine { y: 0px; tone: root.item.selected ? FN.ink : FN.line-soft; }
     Rectangle { x: 0px; width: 1px; background: FN.line-soft; }
     Rectangle { x: parent.width - 1px; width: 1px; background: FN.line-soft; }
-    if root.item.selected: HLine { y: parent.height - 1px; tone: FN.ink; }
+    if root.item.selected: HLine { y: parent.height - 1px; tone: FN.rule-hard; }
     if !root.item.selected: DotLine { y: parent.height - 1px; width: parent.width; }
 
     main := TouchArea {

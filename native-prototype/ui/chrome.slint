@@ -1,0 +1,334 @@
+// Stage 19: the production menu ("Change theme / Change style / Personal / Options / Settings")
+// and its Theme / Style panel (`renderMenuPanel`, `.settings-panel`), shared by both styles. The
+// look differs per style only through `Chrome.t`, which Rust derives from the active token table
+// (`src/appearance_view.rs`) - no style branches here. Only the theme panel's own items work;
+// Personal / Options / Settings are drawn but not migrated yet (inert, like Stage 17's tabs).
+
+export struct ChromeTokens {
+    backdrop: color,
+    panel-bg: color,
+    ink: color,
+    ink-3: color,
+    muted: color,
+    card-bg: color,
+    card-border: color,
+    card-active-bg: color,
+    control-bg: color,
+    control-border: color,
+    rule-dot: color,
+    menu-item: color,
+    shadow: color,
+    serif: string,
+    sans: string,
+    mono: string,
+    // Field Notebook writes its small labels in the mono face, Wabi-Sabi in the sans face.
+    label-font: string,
+    label-weight: int,
+    // Field Notebook: the dropdown has a "MENU" caption and serif items with dotted rules;
+    // Wabi-Sabi: a padded paper card with bold sans items.
+    menu-caption: bool,
+    menu-item-font: string,
+    menu-item-size: length,
+    menu-item-weight: int,
+    // Wabi-Sabi's style panel swatches are squares, Field Notebook's palette swatches circles.
+    square-swatches: bool,
+}
+
+export global Chrome {
+    in-out property <ChromeTokens> t: {
+        backdrop: #23211d38, panel-bg: #24221e, ink: #eee6d6, ink-3: #aaa08d, muted: #817867,
+        card-bg: #2b2823, card-border: #3f392e, card-active-bg: #24221e, control-bg: #2b2823,
+        control-border: #58503f, rule-dot: #584f3e, menu-item: #eee6d6, shadow: #00000047,
+        serif: "Georgia", sans: "Arial", mono: "Consolas", label-font: "Consolas", label-weight: 400,
+        menu-caption: true, menu-item-font: "Georgia", menu-item-size: 14px, menu-item-weight: 400,
+        square-swatches: false,
+    };
+}
+
+export struct ChoiceCard {
+    title: string,
+    desc: string,
+    // 0 solid(a), 1 two-stop gradient a->b, 2 notebook bands (a 0-45 %, b 45-55 %, c 55 %+),
+    // 3 wabi bands (a 0-45 %, b 45-80 %, c 80 %+)
+    swatch-kind: int,
+    a: color,
+    b: color,
+    c: color,
+    active: bool,
+    enabled: bool,
+}
+
+component MenuItem inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    in property <bool> last;
+    callback clicked();
+    height: Chrome.t.menu-caption ? 39px : 42px;
+    background: touch.has-hover && root.enabled && !Chrome.t.menu-caption ? Chrome.t.card-bg : transparent;
+    Text {
+        x: Chrome.t.menu-caption ? 14px : 12px;
+        width: parent.width - 2 * self.x;
+        height: parent.height;
+        vertical-alignment: center;
+        text: root.text;
+        font-family: Chrome.t.menu-item-font;
+        font-size: Chrome.t.menu-item-size;
+        font-weight: Chrome.t.menu-item-weight;
+        color: Chrome.t.menu-item;
+        opacity: root.enabled ? 1 : 0.55;
+    }
+    if Chrome.t.menu-caption && !root.last: Image {
+        y: parent.height - 1px;
+        width: parent.width;
+        height: 1px;
+        source: @image-url("../assets/dashboard/dot-h.svg");
+        horizontal-tiling: repeat;
+        colorize: Chrome.t.rule-dot;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}
+
+// `.topbar-menu` - positioned by the caller.
+export component MenuDropdown inherits Rectangle {
+    callback change-theme();
+    callback change-style();
+    callback dismiss();
+    width: Chrome.t.menu-caption ? 236px : 200px;
+    height: layout.preferred-height + 2px;
+    background: Chrome.t.panel-bg;
+    border-width: 1px;
+    border-color: Chrome.t.ink;
+    drop-shadow-offset-y: Chrome.t.menu-caption ? 2px : 4px;
+    drop-shadow-blur: 0px;
+    drop-shadow-color: Chrome.t.shadow;
+    // Swallow clicks on the card itself (a click outside is handled by the caller's backdrop).
+    TouchArea { }
+    layout := VerticalLayout {
+        x: 1px;
+        y: 1px;
+        width: parent.width - 2px;
+        padding: Chrome.t.menu-caption ? 0px : 7px;
+        if Chrome.t.menu-caption: Rectangle {
+            height: 30px;
+            Text {
+                x: 14px;
+                y: 9px;
+                text: "MENU";
+                font-family: Chrome.t.mono;
+                font-size: 9.5px;
+                letter-spacing: 1.52px;
+                color: Chrome.t.muted;
+            }
+            Rectangle { y: parent.height - 1px; height: 1px; background: Chrome.t.control-border; }
+        }
+        MenuItem { text: "Change theme"; clicked => { root.change-theme(); } }
+        MenuItem { text: "Change style"; clicked => { root.change-style(); } }
+        MenuItem { text: "Personal"; enabled: false; }
+        MenuItem { text: "Options"; enabled: false; }
+        MenuItem { text: "Settings"; enabled: false; last: true; }
+    }
+}
+
+component Swatch inherits Rectangle {
+    in property <ChoiceCard> card;
+    in property <bool> square;
+    width: square ? 28px : 14px;
+    height: self.width;
+    border-radius: square ? 0px : self.width / 2;
+    // `box-shadow: 0 0 0 2px var(--ink)`: a 2 px ring outside the swatch.
+    Rectangle {
+        x: -2px;
+        y: -2px;
+        width: parent.width + 4px;
+        height: parent.height + 4px;
+        border-radius: root.square ? 0px : self.width / 2;
+        background: Chrome.t.ink;
+    }
+    Rectangle {
+        border-radius: parent.border-radius;
+        clip: true;
+        background: card.swatch-kind == 0 ? card.a
+            : card.swatch-kind == 1 ? @linear-gradient(135deg, card.a 0%, card.b 100%)
+            : card.swatch-kind == 2 ? @linear-gradient(135deg, card.a 0%, card.a 45%, card.b 45%, card.b 55%, card.c 55%, card.c 100%)
+            : @linear-gradient(135deg, card.a 0%, card.a 45%, card.b 45%, card.b 80%, card.c 80%, card.c 100%);
+    }
+}
+
+component ChoiceCardView inherits Rectangle {
+    in property <ChoiceCard> card;
+    in property <bool> square;
+    callback clicked();
+    background: card.active ? Chrome.t.card-active-bg : Chrome.t.card-bg;
+    border-width: 1px;
+    border-color: card.active ? Chrome.t.ink : Chrome.t.card-border;
+    height: max(square ? 82px : 110px, body.preferred-height + 32px);
+    swatch := Swatch {
+        x: 17px;
+        y: (parent.height - self.height) / 2;
+        card: root.card;
+        square: root.square;
+    }
+    body := VerticalLayout {
+        x: swatch.x + swatch.width + 10px;
+        y: 16px;
+        width: parent.width - self.x - 16px - (root.card.active ? 70px : 0px);
+        height: parent.height - 32px;
+        alignment: center;
+        spacing: 4px;
+        Text { text: root.card.title; font-family: Chrome.t.sans; font-size: 16px; font-weight: 700; color: Chrome.t.ink; wrap: word-wrap; }
+        Text { text: root.card.desc; font-family: Chrome.t.sans; font-size: 16px; color: Chrome.t.muted; wrap: word-wrap; }
+    }
+    if card.active: Rectangle {
+        x: parent.width - self.width - 16px;
+        y: (parent.height - self.height) / 2;
+        width: chip.preferred-width + 16px;
+        height: 22px;
+        background: Chrome.t.card-bg;
+        border-width: Chrome.t.square-swatches ? 0px : 1px;
+        border-color: Chrome.t.control-border;
+        chip := Text {
+            width: parent.width;
+            height: parent.height;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            text: "ACTIVE";
+            font-family: Chrome.t.mono;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            color: Chrome.t.ink-3;
+        }
+    }
+    TouchArea {
+        enabled: root.card.enabled;
+        mouse-cursor: root.card.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}
+
+component ModeButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> active;
+    in property <bool> enabled: true;
+    callback clicked();
+    background: Chrome.t.control-bg;
+    border-width: 1px;
+    border-color: active ? Chrome.t.ink : Chrome.t.control-border;
+    opacity: enabled ? 1 : 0.5;
+    Text {
+        width: parent.width;
+        height: parent.height;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.text;
+        font-family: Chrome.t.label-font;
+        font-size: 11px;
+        font-weight: Chrome.t.label-weight;
+        letter-spacing: 0.66px;
+        color: root.active ? Chrome.t.ink : Chrome.t.ink-3;
+    }
+    TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}
+
+// `.settings-panel` with the Theme (palettes) or Style view, plus the light/dark row.
+export component AppearancePanel inherits Rectangle {
+    in property <bool> styles-view;
+    in property <[ChoiceCard]> cards;
+    in property <bool> light-active;
+    in property <bool> dark-enabled: true;
+    // width the panel centres in (Wabi-Sabi's `scrollbar-gutter: stable` takes 10 px)
+    in property <length> centre-width: root.width;
+    callback pick(int);
+    callback set-dark(bool);
+    callback close();
+
+    private property <length> panel-w: min(560px, root.width - 40px);
+    private property <bool> two-columns: !root.styles-view && self.panel-w >= 400px;
+
+    background: Chrome.t.backdrop;
+    TouchArea { clicked => { root.close(); } }
+
+    panel := Rectangle {
+        width: root.panel-w;
+        height: content.preferred-height + 52px + 2px;
+        x: (root.centre-width - self.width) / 2;
+        y: max(20px, (parent.height - self.height) / 2);
+        background: Chrome.t.panel-bg;
+        border-width: 1px;
+        border-color: Chrome.t.ink;
+        drop-shadow-offset-y: Chrome.t.square-swatches ? 4px : 2px;
+        drop-shadow-blur: 0px;
+        drop-shadow-color: Chrome.t.shadow;
+        TouchArea { }
+        content := VerticalLayout {
+            x: 27px;
+            y: 27px;
+            width: parent.width - 54px;
+            spacing: 20px;
+            Rectangle {
+                height: 64px;
+                Text { x: 0px; y: 0px; text: "MENU"; font-family: Chrome.t.mono; font-size: 10px; letter-spacing: 1.6px; color: Chrome.t.muted; }
+                Text { x: 0px; y: 21px; text: root.styles-view ? "Style" : "Theme"; font-family: Chrome.t.serif; font-size: 24.8px; font-weight: 500; color: Chrome.t.ink; }
+                Rectangle { y: parent.height - 2px; height: 2px; background: Chrome.t.ink; }
+                Rectangle {
+                    x: parent.width - self.width;
+                    y: 0px;
+                    width: close-text.preferred-width + 28px;
+                    height: 38px;
+                    background: Chrome.t.control-bg;
+                    border-width: 1px;
+                    border-color: Chrome.t.control-border;
+                    close-text := Text {
+                        width: parent.width;
+                        height: parent.height;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        text: "CLOSE";
+                        font-family: Chrome.t.label-font;
+                        font-size: 11px;
+                        font-weight: Chrome.t.label-weight;
+                        letter-spacing: 0.66px;
+                        color: Chrome.t.ink-3;
+                    }
+                    TouchArea { mouse-cursor: pointer; clicked => { root.close(); } }
+                }
+            }
+            if root.two-columns: HorizontalLayout {
+                spacing: 10px;
+                for card[i] in root.cards: ChoiceCardView {
+                    card: card;
+                    square: false;
+                    clicked => { root.pick(i); }
+                }
+            }
+            if !root.two-columns: VerticalLayout {
+                spacing: 10px;
+                for card[i] in root.cards: ChoiceCardView {
+                    card: card;
+                    square: Chrome.t.square-swatches || root.styles-view;
+                    clicked => { root.pick(i); }
+                }
+            }
+            Rectangle {
+                height: 48px;
+                background: Chrome.t.control-bg;
+                border-width: 1px;
+                border-color: Chrome.t.control-border;
+                HorizontalLayout {
+                    padding: 5px;
+                    spacing: 8px;
+                    ModeButton { text: "LIGHT"; active: root.light-active; clicked => { root.set-dark(false); } }
+                    ModeButton { text: "DARK"; active: !root.light-active; enabled: root.dark-enabled; clicked => { root.set-dark(true); } }
+                }
+            }
+        }
+    }
+}

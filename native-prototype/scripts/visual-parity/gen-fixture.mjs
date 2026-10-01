@@ -8,10 +8,15 @@
 //
 //   node gen-fixture.mjs <scenario> <out.json> [--today YYYY-MM-DD]
 //
-// scenario: empty | small | realistic
+// scenario: empty | small | realistic | wabi
+//   wabi (Stage 19) = realistic + the planner data the Wabi-Sabi Dashboard reads: weekly lectures,
+//   sheet release/deadline pairs, to-dos (timed, any-time, repeating) and an exam-prep task. The
+//   three older scenarios are byte-identical to what Stage 17 committed.
 import { writeFileSync } from "node:fs";
 
-const [scenario = "realistic", outPath = "fixture.json", ...rest] = process.argv.slice(2);
+const [scenarioArg = "realistic", outPath = "fixture.json", ...rest] = process.argv.slice(2);
+const wabi = scenarioArg === "wabi";
+const scenario = wabi ? "realistic" : scenarioArg;
 const todayArg = rest[0] === "--today" ? rest[1] : null;
 // Wall-clock times are built with an explicit, fixed UTC offset (default +02:00 = Europe/Zurich in
 // summer) so the committed fixtures are byte-identical on every machine and every timezone; the
@@ -131,10 +136,46 @@ if (scenario === "small") {
   addSession(-1, 7, 0, 55, "course-1", "exam");
 }
 
+const timetableEvents = [];
+const dailyTodos = [];
+if (wabi) {
+  const event = (id, courseIndex, kind, taskId, label, dateOff, time, endTime, repeatWeekly, completed = []) => ({
+    id, semesterId: "sem-active", courseId: `course-${courseIndex}`, kind, taskId, label,
+    date: iso(dayOffset(dateOff)), time, endTime, repeatWeekly, recurrenceEndDate: null,
+    occurrenceOverrides: {}, url: null, completedOccurrences: completed.map((o) => iso(dayOffset(o))), createdAt,
+  });
+  // Weekly lectures anchored on today's weekday (so one occurs today); one already ticked today.
+  timetableEvents.push(event("ev-lec-0", 0, "occurrence", "task-0-1", "Lecture Notes 1", -35, "10:15", "12:00", true));
+  timetableEvents.push(event("ev-lec-1", 1, "occurrence", "task-1-1", "Lecture Notes 2", -35, "14:15", "16:00", true, [0]));
+  // Sheet series: released a week before it is due. Two are out already, one is not released yet.
+  timetableEvents.push(event("ev-rel-0", 0, "sheet-release", "task-0-0", "Exercise Sheet 1", -4, "08:00", null, false));
+  timetableEvents.push(event("ev-due-0", 0, "sheet-deadline", "task-0-0", "Exercise Sheet 1", 3, "23:59", null, false));
+  timetableEvents.push(event("ev-rel-1", 3, "sheet-release", "task-3-0", "Exercise Sheet 1", -7, "08:00", null, false));
+  timetableEvents.push(event("ev-due-1", 3, "sheet-deadline", "task-3-0", "Exercise Sheet 1", 0, "18:00", null, false));
+  timetableEvents.push(event("ev-rel-2", 4, "sheet-release", "task-4-0", "Exercise Sheet 1", 2, "08:00", null, false));
+  timetableEvents.push(event("ev-due-2", 4, "sheet-deadline", "task-4-0", "Exercise Sheet 1", 9, "12:00", null, false));
+  timetableEvents.push(event("ev-due-3", 2, "sheet-deadline", "task-2-0", "Exercise Sheet 1", 12, null, null, false));
+  const todo = (id, title, dateOff, time, endTime, completed, repeatWeekly = false, completedOccurrences = []) => ({
+    id, date: iso(dayOffset(dateOff)), time, endTime, title, notes: "", completed,
+    completedAt: completed ? at(0, 8, 0).toISOString() : null, createdAt, repeatWeekly,
+    completedOccurrences: completedOccurrences.map((o) => iso(dayOffset(o))), recurrenceEndDate: null,
+    skippedOccurrences: [], occurrenceTimes: {},
+  });
+  dailyTodos.push(todo("todo-0", "Email the tutor", 0, "09:30", null, false));
+  dailyTodos.push(todo("todo-1", "Library books back", 0, null, null, true));
+  dailyTodos.push(todo("todo-2", "Weekly review", -14, "17:00", "17:30", false, true));
+  dailyTodos.push(todo("todo-3", "Buy notebook", 1, null, null, false));
+  tasks.push({
+    id: "task-prep-0", semesterId: "sem-active", courseId: "course-1", title: "Exercise Sheet 1", subtype: "Sheet", unitLabel: "Sheet",
+    totalUnits: 6, completedUnits: 0, dueDate: null, priority: "medium", notes: "", createdAt, prep: true, prepOf: "task-1-0",
+  });
+  exams.forEach((exam, i) => { exam.kind = ["midterm", "session", "project", "endterm"][i]; });
+}
+
 const lifetimeStudyMinutes = sessions.reduce((s, x) => s + x.minutes, 0);
 const state = {
   semesters, courses, tasks, exams, sessions,
-  timetableEvents: [], holidays: [], dailyTodos: [], calendarEntries,
+  timetableEvents, holidays: [], dailyTodos, calendarEntries,
   lifetimeStudyMinutes, lifetimeStudySessions: sessions.length,
   activeTab: "dashboard",
   settings: { accent: "#8fb4ff", userName: "", dailyGoalMinutes: 120, telemetryEnabled: false },
@@ -144,4 +185,4 @@ const state = {
 delete state.timer;
 const backup = { app: "study-tracker", backupVersion: 2, exportedAt: new Date(now).toISOString(), state, preferences: {} };
 writeFileSync(outPath, JSON.stringify(backup, null, 2));
-console.log(`${scenario}: ${sessions.length} sessions, ${courses.length} courses, ${lifetimeStudyMinutes} min -> ${outPath} (today=${iso(now)})`);
+console.log(`${scenarioArg}: ${sessions.length} sessions, ${courses.length} courses, ${lifetimeStudyMinutes} min -> ${outPath} (today=${iso(now)})`);

@@ -17,6 +17,7 @@ export component FnDashboardPage inherits Rectangle {
     callback set-full(bool);
     callback set-range(int);
     callback toggle-theme();
+    callback open-menu();
     callback open-timer();
     callback start-focus();
 
@@ -58,6 +59,7 @@ export component FnDashboardPage inherits Rectangle {
             pill-label: root.d.pill-label;
             pill-score: root.d.pill-score;
             toggle-theme => { root.toggle-theme(); }
+            open-menu => { root.open-menu(); }
         }
 
         // The desk: a bordered paper sheet.

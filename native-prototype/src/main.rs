@@ -9,19 +9,23 @@
 )]
 
 mod academic_controller;
+mod app_appearance;
 mod app_model;
 #[cfg(windows)]
 mod app_platform;
 #[cfg(windows)]
 mod app_updater;
+mod appearance_view;
 mod dashboard_view;
 mod map;
 mod map_adapter;
 mod persistence;
 mod platform;
+mod sakura_controller;
 mod session_service;
 mod synthetic_dataset;
 mod timer_controller;
+mod wabi_view;
 
 use app_model::{format_clock, AppCommand, AppModel, TimerStatus};
 use dashboard_view::{ChronoLocalClock, DashboardController, DashboardUiState};
@@ -113,9 +117,15 @@ fn run() -> Result<(), StartupError> {
     // Stage 16: the real, durable academic/planner persistence adapter, replacing
     // `NullAcademicPersistencePort`. Reads/writes the same store file's `academic` section - see
     // docs/stage16-academic-domain.md, "Persistence schema".
-    let academic_port: Box<dyn academic_controller::AcademicPersistencePort> = Box::new(
-        persistence::FileAcademicPersistencePort::new(persistence::NativeStore::new(store_path)),
-    );
+    let academic_port: Box<dyn academic_controller::AcademicPersistencePort> =
+        Box::new(persistence::FileAcademicPersistencePort::new(
+            persistence::NativeStore::new(store_path.clone()),
+        ));
+    // Stage 19: the persisted style / palette / light-dark preference (same store file).
+    let preferences = persistence::PreferencesController::load(Box::new(
+        persistence::FilePreferencesPort::new(persistence::NativeStore::new(store_path)),
+    ));
+    log::info!("appearance preference loaded: {:?}", preferences.prefs());
     let (mut model, startup_recovery_effects) =
         AppModel::with_timer_persistence(timer_port, academic_port);
     if !startup_recovery_effects.is_empty() {
@@ -152,14 +162,17 @@ fn run() -> Result<(), StartupError> {
             timer.remaining(clock).as_secs(),
         );
     }
-    apply_model_to_window(&window, &model.borrow(), Instant::now());
-    if std::env::var("STUDY_NATIVE_DASHBOARD_DARK").is_ok_and(|v| v == "0") {
-        use slint::Global;
-        FN::get(&window).set_dark(false);
-    }
     let dashboard = Rc::new(RefCell::new(DashboardController::new(
         dashboard_ui_from_env(),
     )));
+    app_appearance::install(
+        &window,
+        Rc::clone(&model),
+        Rc::clone(&dashboard),
+        preferences,
+    );
+    app_appearance::apply_env_overrides();
+    apply_model_to_window(&window, &model.borrow(), Instant::now());
     refresh_dashboard(&window, &model.borrow(), &mut dashboard.borrow_mut());
     dashboard_report_if_requested(&dashboard.borrow());
     let map = map_adapter::new_controller(map_level_from_env());
@@ -178,6 +191,7 @@ fn run() -> Result<(), StartupError> {
     let _rollover_timer =
         start_date_rollover_check(&window, Rc::clone(&model), Rc::clone(&dashboard));
     let _nav_stress = start_nav_stress(&window, Rc::clone(&model), Rc::clone(&dashboard));
+    let _theme_stress = app_appearance::start_theme_stress();
     let _diagnostics = install_diagnostics(&window);
 
     log::info!("first window created; entering the event loop");
@@ -200,6 +214,7 @@ fn run() -> Result<(), StartupError> {
                                               // The tray keeps the process alive with the window hidden, so the loop must run until an
                                               // explicit quit instead of until the last window closes (`window.run()`).
         window.show()?;
+        app_appearance::after_window_shown();
         slint::run_event_loop_until_quit()?;
         app_platform::shutdown();
     }
@@ -224,6 +239,8 @@ fn report_fatal_startup_error(error: &StartupError) {
 
 static FRAMES_RENDERED: AtomicU64 = AtomicU64::new(0);
 static TIMER_TICKS: AtomicU64 = AtomicU64::new(0);
+/// Sakura clock ticks that wrote a new frame (Stage 19 diagnostics).
+pub static SAKURA_FRAMES: AtomicU64 = AtomicU64::new(0);
 
 /// Diagnostic hooks (off by default; used by the Windows benchmark scripts):
 /// - `STUDY_NATIVE_STARTUP_REPORT=1` prints `FIRST_FRAME <ms since main>` once, after the first rendered frame.
@@ -258,17 +275,20 @@ fn install_diagnostics(window: &MainWindow) -> Option<Timer> {
         return None;
     }
     let timer = Timer::default();
-    let mut last = (0u64, 0u64);
+    let mut last = (0u64, 0u64, 0u64);
     timer.start(TimerMode::Repeated, Duration::from_secs(10), move || {
         let now = (
             FRAMES_RENDERED.load(Ordering::Relaxed),
             TIMER_TICKS.load(Ordering::Relaxed),
+            SAKURA_FRAMES.load(Ordering::Relaxed),
         );
         println!(
-            "STATS {:.0} frames={} ticks={}",
+            "STATS {:.0} frames={} ticks={} sakura_ticks={} {}",
             started.elapsed().as_secs_f64(),
             now.0 - last.0,
-            now.1 - last.1
+            now.1 - last.1,
+            now.2 - last.2,
+            app_appearance::sakura_report(),
         );
         last = now;
     });
@@ -455,9 +475,10 @@ fn maybe_import_production_backup(
     match persistence::migration::commit_import(native_store, &discovered, fields, timer, academic)
     {
         Ok(report) => log::info!(
-            "import: committed = {}, timer_imported = {}, academic = {:?}, source = {}, source copy = {}, {} field(s) classified, {} warning(s)",
+            "import: committed = {}, timer_imported = {}, appearance_imported = {}, academic = {:?}, source = {}, source copy = {}, {} field(s) classified, {} warning(s)",
             report.committed,
             report.timer_imported,
+            report.appearance_imported,
             report.academic_summary,
             report.source_path.display(),
             report.source_copy_path.display(),
@@ -526,6 +547,11 @@ fn bind_model_callbacks(
         window.on_reset_timer(move || {
             dispatch(AppCommand::Reset);
         });
+    }
+    {
+        // Stage 19: Wabi-Sabi's "LOG AND CLOSE" / Quiet mode's "DONE, LOG IT".
+        let dispatch = Rc::clone(&dispatch);
+        window.on_wabi_timer_log(move || dispatch(AppCommand::CompleteManually(Instant::now())));
     }
     {
         let dispatch = Rc::clone(&dispatch);
@@ -648,6 +674,7 @@ fn apply_model_to_window(window: &MainWindow, model: &AppModel, now: Instant) {
     if !model_matches(&window.get_session_notes(), &notes) {
         window.set_session_notes(ModelRc::new(Rc::new(VecModel::from(notes))));
     }
+    app_appearance::refresh_wabi_timer(window, now);
 }
 
 /// True when `current` already holds exactly `rows`. `apply_model_to_window` runs every 100 ms while the timer
@@ -715,6 +742,7 @@ fn refresh_dashboard(window: &MainWindow, model: &AppModel, dashboard: &mut Dash
         &clock,
     );
     push_dashboard(window, dashboard, &clock);
+    app_appearance::after_dashboard_refresh(window, model, dashboard);
     if dashboard.stats().metrics != metrics_before {
         // One line per real metrics recomputation (never per Timer tick): the evidence the Stage 17 runtime
         // checks use for "no continuous recomputation" and "Timer completion refreshes the Dashboard".
@@ -802,16 +830,8 @@ fn bind_dashboard_callbacks(
             }
         });
     }
-    {
-        let weak = window.as_weak();
-        window.on_fn_toggle_theme(move || {
-            if let Some(window) = weak.upgrade() {
-                use slint::Global;
-                let palette = FN::get(&window);
-                palette.set_dark(!palette.get_dark());
-            }
-        });
-    }
+    // Stage 19: the light/dark toggle is a persisted preference now (`app_appearance`); the old
+    // session-only `fn-toggle-theme` callback is no longer used by the page.
     // "Focus" on a row/"Start focus": navigation to the Timer surface happens in Slint; linking
     // the task/course to the Timer session needs the Timer surface's context UI (Stage 18+), so
     // the native callback only records the intent for diagnostics.

@@ -1,0 +1,94 @@
+// Data the Wabi-Sabi surfaces draw (Stage 19). Built in Rust (`src/wabi_view.rs`) from
+// `study_tracker_core::dashboard::wabi`; rows carry an `index` so a click reports back which row it
+// was and Rust - not Slint - decides what that row's mark/selection means.
+
+export struct WabiTaskItem {
+    title: string,
+    selected: bool,
+}
+
+export struct WabiCourseItem {
+    name: string,
+    course-color: color,
+    has-color: bool,
+    quiet: bool,
+    days: string,
+    open: bool,
+    tasks: [WabiTaskItem],
+}
+
+export struct WabiSidebarData {
+    score: int,
+    label: string,
+    tone: int,
+    // SVG path of the score arc in a 36x36 box (starts at 12 o'clock, clockwise).
+    arc: string,
+    tended: string,
+    goal-fraction: float,
+    has-semester: bool,
+    semester-name: string,
+    semester-prep: bool,
+    semester-open: bool,
+    courses: [WabiCourseItem],
+}
+
+export struct WabiDeadlineRow {
+    title: string,
+    next: bool,
+    status: string,
+    due: string,
+    relative: string,
+    has-task: bool,
+}
+
+export struct WabiPlannedRow {
+    title: string,
+    subject: string,
+    amount: string,
+    due: string,
+    completed: bool,
+    selected: bool,
+}
+
+export struct WabiDashData {
+    today-label: string,
+    remaining: string,
+    one-title: string,
+    one-meta: string,
+    one-can-start: bool,
+    one-can-mark: bool,
+    deadlines: [WabiDeadlineRow],
+    planned: [WabiPlannedRow],
+}
+
+export struct WabiModeCard {
+    title: string,
+    detail: string,
+    active: bool,
+    // false for production presets this build's Timer does not have yet (Sprint, Custom).
+    available: bool,
+    // the native Timer mode index (or -1)
+    mode: int,
+}
+
+export struct WabiTimerData {
+    heading: string,
+    subline: string,
+    clock: string,
+    primary: string,
+    can-log: bool,
+    phase-label: string,
+    modes-enabled: bool,
+    modes: [WabiModeCard],
+}
+
+export struct WabiQuietOther {
+    title: string,
+    course: string,
+}
+
+export struct WabiQuietData {
+    title: string,
+    meta: string,
+    others: [WabiQuietOther],
+}

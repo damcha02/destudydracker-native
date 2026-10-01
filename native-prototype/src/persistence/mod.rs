@@ -7,9 +7,11 @@
 pub mod academic_port;
 pub mod migration;
 pub mod migration_academic;
+pub mod preferences_port;
 pub mod store;
 pub mod timer_port;
 
 pub use academic_port::FileAcademicPersistencePort;
+pub use preferences_port::{FilePreferencesPort, PreferencesController};
 pub use store::NativeStore;
 pub use timer_port::FileTimerPersistencePort;

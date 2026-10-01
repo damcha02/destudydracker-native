@@ -39,9 +39,9 @@ pub struct Task {
     /// Production's own comment (`App.tsx`) is preserved as domain knowledge, not just code
     /// history: no task-creation UI takes a manual `totalUnits`/`completedUnits` input - both are
     /// recomputed from how many of the task's projected occurrences (weekly recurrence expanded
-    /// across the semester, holidays excluded) are checked off. Stage 16 does not migrate that
-    /// recurrence-expansion engine (`plannerSchedule.ts`) - these two fields are carried through
-    /// as plain data, defaulting to `0`/`0` for a freshly created task, exactly as production does.
+    /// across the semester, holidays excluded) are checked off. Since Stage 19 that derivation is
+    /// ported too (`AcademicState::sync_task_units_from_schedule`); a task without timetable
+    /// events keeps these as plain data, defaulting to `0`/`0` for a freshly created task.
     pub total_units: u32,
     pub completed_units: u32,
     pub due_date: Option<LocalDate>,

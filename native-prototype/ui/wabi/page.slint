@@ -1,0 +1,161 @@
+// The Wabi-Sabi app shell (Stage 19). Production stacking (z-index) is reproduced by draw order:
+//   content (`.shell`, scrolls)  <  petal texture (`body::after`, z 0)  <  petals (`.sakura-scatter`,
+//   z 40)  <  sidebar (`.wabi-sidebar`, z 900)  <  quiet overlay + its own petals (z 950)  <  menu.
+// `:root[data-app-style="wabi-sabi"] { scrollbar-gutter: stable }` reserves 10 px at the right, so
+// fixed layers (texture, petals, quiet overlay) end 10 px before the window edge, like production.
+import { WS } from "palette.slint";
+import { WabiSidebar } from "sidebar.slint";
+import { WabiDashboard } from "dashboard.slint";
+import { WabiTimer } from "timer.slint";
+import { WabiQuiet } from "quiet.slint";
+import { WabiSidebarData, WabiDashData, WabiTimerData, WabiQuietData } from "types.slint";
+import { SakuraPetals, SakuraTexture, PetalData } from "../sakura.slint";
+
+export component WabiPage inherits Rectangle {
+    in property <WabiSidebarData> sidebar;
+    in property <WabiDashData> dash;
+    in property <WabiTimerData> timer;
+    in property <WabiQuietData> quiet-data;
+    in property <bool> on-timer;
+    in property <bool> quiet;
+    in property <bool> theme-locked;
+    in property <bool> dark;
+    in property <bool> timer-menu-open;
+    in property <bool> sakura;
+    in property <[PetalData]> petals;
+    in property <int> texture-frame;
+
+    callback open-dashboard();
+    callback open-timer();
+    callback toggle-theme();
+    callback open-menu();
+    callback toggle-quiet();
+    callback toggle-semester();
+    callback toggle-course(int);
+    callback start-one();
+    callback mark-one();
+    callback deadline-mark(int);
+    callback deadline-focus(int);
+    callback deadline-select(int);
+    callback planned-mark(int);
+    callback planned-select(int);
+    callback timer-primary();
+    callback timer-reset();
+    callback timer-log();
+    callback timer-mode(int);
+    callback quiet-pick(int);
+
+    private property <length> gutter: 10px;
+    private property <length> content-w: min(1386px, root.width - 298px);
+    private property <length> page-h: root.on-timer ? root.height : 22px + dashboard.content-height;
+
+    background: WS.desk;
+    clip: true;
+
+    flick := Flickable {
+        x: 186px;
+        width: parent.width - 186px;
+        height: parent.height;
+        viewport-width: self.width;
+        viewport-height: max(self.height, root.page-h);
+        interactive: !root.on-timer;
+
+        dashboard := WabiDashboard {
+            visible: !root.on-timer;
+            x: 32px;
+            y: 22px;
+            width: root.content-w;
+            height: self.content-height;
+            d: root.dash;
+            start-one => { root.start-one(); }
+            mark-one => { root.mark-one(); }
+            deadline-mark(i) => { root.deadline-mark(i); }
+            deadline-focus(i) => { root.deadline-focus(i); }
+            deadline-select(i) => { root.deadline-select(i); }
+            planned-mark(i) => { root.planned-mark(i); }
+            planned-select(i) => { root.planned-select(i); }
+        }
+        if root.on-timer: WabiTimer {
+            x: 32px;
+            y: 22px;
+            width: root.content-w;
+            height: root.height - 22px;
+            viewport-height: root.height;
+            d: root.timer;
+            primary => { root.timer-primary(); }
+            reset => { root.timer-reset(); }
+            log-and-close => { root.timer-log(); }
+            pick-mode(m) => { root.timer-mode(m); }
+        }
+    }
+
+    if root.sakura: SakuraTexture {
+        width: parent.width - root.gutter;
+        height: parent.height;
+        frame: root.texture-frame;
+    }
+    if root.sakura && !root.quiet: SakuraPetals {
+        width: parent.width - root.gutter;
+        height: parent.height;
+        petals: root.petals;
+    }
+
+    WabiSidebar {
+        x: 0px;
+        y: 0px;
+        height: parent.height;
+        d: root.sidebar;
+        on-dashboard: !root.on-timer;
+        on-timer: root.on-timer;
+        quiet: root.quiet;
+        theme-locked: root.theme-locked;
+        dark: root.dark;
+        timer-menu-open: root.timer-menu-open;
+        open-dashboard => { root.open-dashboard(); }
+        open-timer => { root.open-timer(); }
+        toggle-theme => { root.toggle-theme(); }
+        open-menu => { root.open-menu(); }
+        toggle-quiet => { root.toggle-quiet(); }
+        toggle-semester => { root.toggle-semester(); }
+        toggle-course(i) => { root.toggle-course(i); }
+    }
+
+    if root.quiet: Rectangle {
+        x: 186px;
+        width: parent.width - 186px - root.gutter;
+        height: parent.height;
+        WabiQuiet {
+            width: parent.width;
+            height: parent.height;
+            d: root.quiet-data;
+            clock: root.timer.clock;
+            primary: root.timer.primary;
+            primary-clicked => { root.timer-primary(); }
+            done-log => { root.timer-log(); }
+            leave => { root.toggle-quiet(); }
+            pick-other(i) => { root.quiet-pick(i); }
+        }
+        // `.wabi-quiet-overlay .sakura-scatter { position: absolute }`: the overlay's own petals.
+        if root.sakura: SakuraPetals {
+            width: parent.width;
+            height: parent.height;
+            petals: root.petals;
+        }
+    }
+
+    // thin page scrollbar in the reserved gutter (native stand-in for WebView2's scrollbar)
+    if !root.on-timer && !root.quiet && root.page-h > root.height: Rectangle {
+        x: parent.width - root.gutter;
+        width: root.gutter;
+        height: parent.height;
+        Rectangle {
+            x: 2px;
+            width: 6px;
+            border-radius: 3px;
+            background: WS.muted;
+            opacity: 0.45;
+            height: max(32px, parent.height * root.height / root.page-h);
+            y: (parent.height - self.height) * (-flick.viewport-y) / max(1px, root.page-h - root.height);
+        }
+    }
+}

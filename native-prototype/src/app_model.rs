@@ -95,6 +95,9 @@ pub enum AppCommand {
     Reset,
     SetMode(usize),
     Refresh(Instant),
+    /// Stage 19: production's "LOG AND CLOSE" / Quiet mode's "DONE, LOG IT"
+    /// (`completeSessionManually`): ends the running study/exam/stopwatch block now and logs it.
+    CompleteManually(Instant),
     /// Stage 16's minimal real CRUD surface (see `docs/stage16-academic-domain.md` section 22,
     /// "UI integration", for why this is intentionally not yet a full interactive Planner form).
     AddSemester {
@@ -313,6 +316,13 @@ impl AppModel {
                 }
             }
             AppCommand::Refresh(now) => self.apply_timer_command(TimerCommand::ObserveTime, now),
+            AppCommand::CompleteManually(now) => {
+                let phase = self.timer.controller.core().phase;
+                // Production disables the button while idle or on a break.
+                if !matches!(phase, TimerPhase::Idle | TimerPhase::Break) {
+                    self.apply_timer_command(TimerCommand::CompleteManually, now);
+                }
+            }
             AppCommand::AddSemester {
                 id,
                 name,
@@ -416,6 +426,52 @@ impl AppModel {
     fn is_break_running_for_tests(&self) -> bool {
         let core = self.timer.controller.core();
         core.phase == TimerPhase::Break && core.running
+    }
+
+    /// What the Wabi-Sabi Timer and Quiet mode show (Stage 19, `renderWabiTimer`).
+    pub fn wabi_timer_facts(&self, now: Instant) -> crate::wabi_view::TimerFacts {
+        use study_tracker_core::dashboard::format::js_number;
+        let core = self.timer.controller.core();
+        let clock = self.clock(now);
+        let word = match core.phase {
+            TimerPhase::Break => "BREAK",
+            TimerPhase::Stopwatch => "STOPWATCH",
+            _ if core.config.mode == TimerMode::Exam => "EXAM",
+            _ => "WORK",
+        };
+        let seconds = match core.phase {
+            TimerPhase::Break => core.config.break_seconds,
+            _ if core.config.mode == TimerMode::Exam => core.config.exam_seconds,
+            _ => core.config.study_seconds,
+        };
+        let detail = if core.phase == TimerPhase::Stopwatch {
+            "COUNTING UP".to_string()
+        } else {
+            format!("{} MIN", js_number(seconds as f64 / 60.0))
+        };
+        let goal = core.context.goal.trim();
+        crate::wabi_view::TimerFacts {
+            clock: format_clock(self.timer.remaining(clock)),
+            idle: core.phase == TimerPhase::Idle,
+            running: core.running,
+            endless: core.config.mode == TimerMode::Endless,
+            phase_label: format!("{word} \u{b7} {detail}"),
+            can_log: !matches!(core.phase, TimerPhase::Idle | TimerPhase::Break),
+            selected_mode: self.timer.selected_mode(),
+            heading: if goal.is_empty() {
+                "General focus".to_string()
+            } else {
+                goal.to_string()
+            },
+        }
+    }
+
+    /// The Timer's session goal while a block is active (Quiet mode shows it), else `None`.
+    pub fn active_timer_goal(&self) -> Option<String> {
+        let core = self.timer.controller.core();
+        let goal = core.context.goal.trim();
+        (!goal.is_empty() && (core.running || core.phase != TimerPhase::Idle))
+            .then(|| goal.to_string())
     }
 
     /// Drains the notifications the platform layer still has to show (oldest first).

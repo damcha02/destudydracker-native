@@ -19,7 +19,7 @@ export component FnTopbar inherits Rectangle {
 
     height: 82px;
 
-    private property <color> tone-color: root.pill-tone == 0 ? FN.green : root.pill-tone == 1 ? FN.blue : FN.stamp;
+    private property <color> tone-color: root.pill-tone == 0 ? FN.ok : root.pill-tone == 1 ? FN.steady : FN.critical;
 
     MonoText {
         x: 22px;

@@ -1,0 +1,71 @@
+// Production "Wabi-Sabi 侘寂" style tokens (Stage 19). Like `fn/palette.slint`, the values are
+// pushed from Rust (`src/appearance_view.rs`, one table each for light and dark; the Sakura palette
+// uses the light table - Wabi-Sabi + Sakura is light-only). Defaults = the light table, measured
+// from the running production app (`:root[data-app-style="wabi-sabi"]`, index.css/App.css).
+//
+// Fonts: production names Shippori Mincho / Zen Kaku Gothic New / IBM Plex Mono, all Google-hosted
+// and blocked by the packaged app's CSP, so it renders Georgia / Arial / Consolas (verified with
+// CDP `CSS.getPlatformFontsForNode`), and Chromium falls back to Microsoft YaHei for the kanji.
+export struct WsTokens {
+    desk: color,
+    paper: color,
+    paper-1: color,
+    paper-2: color,
+    ink: color,
+    ink-3: color,
+    muted: color,
+    faint: color,
+    sage: color,
+    sage-deep: color,
+    vermilion: color,
+    line: color,
+    rule-hard: color,
+    rule-soft: color,
+    rule-dot: color,
+    ring-track: color,
+    ok: color,
+    steady: color,
+    watch: color,
+    critical: color,
+    // the solid button's text (`--wabi-paper`)
+    on-ink: color,
+    dark: bool,
+}
+
+export global WS {
+    in-out property <WsTokens> t: {
+        desk: #e9e5d8, paper: #f4f1e8, paper-1: #efebe0, paper-2: #e5e1d0,
+        ink: #1c1d19, ink-3: #6f7268, muted: #8d8b7d, faint: #a8a494,
+        sage: #4f6b4a, sage-deep: #374d33, vermilion: #b0472e,
+        line: #ddd8c8, rule-hard: #1c1d19, rule-soft: #ddd8c8, rule-dot: #cdc8b4, ring-track: #ddd8c8,
+        ok: #4f6b4a, steady: #6f7268, watch: #8a7226, critical: #b0472e, on-ink: #f4f1e8, dark: false,
+    };
+
+    out property <string> serif: "Georgia";
+    out property <string> sans: "Arial";
+    out property <string> mono: "Consolas";
+    out property <string> kanji: "Microsoft YaHei";
+
+    out property <color> desk: t.desk;
+    out property <color> paper: t.paper;
+    out property <color> paper-1: t.paper-1;
+    out property <color> paper-2: t.paper-2;
+    out property <color> ink: t.ink;
+    out property <color> ink-3: t.ink-3;
+    out property <color> muted: t.muted;
+    out property <color> faint: t.faint;
+    out property <color> sage: t.sage;
+    out property <color> sage-deep: t.sage-deep;
+    out property <color> vermilion: t.vermilion;
+    out property <color> line: t.line;
+    out property <color> rule-hard: t.rule-hard;
+    out property <color> rule-soft: t.rule-soft;
+    out property <color> rule-dot: t.rule-dot;
+    out property <color> ring-track: t.ring-track;
+    out property <color> on-ink: t.on-ink;
+    out property <bool> dark: t.dark;
+
+    public pure function tone(index: int) -> color {
+        return index == 0 ? t.ok : index == 1 ? t.steady : index == 2 ? t.watch : t.critical;
+    }
+}

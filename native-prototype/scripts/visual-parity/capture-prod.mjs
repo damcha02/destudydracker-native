@@ -6,6 +6,9 @@
 //        [--w 1920 --h 1080] [--layout quiet|full] [--theme dark|light] [--tab dashboard|timer]
 //        [--eval probe.js --eval-out probe.json] [--browser <exe>]
 //        [--now 2026-09-30T12:00:00+02:00] [--tz Europe/Zurich] [--dpr 1.25]
+//        Stage 19: [--style field-notebook|wabi-sabi] [--palette default|sakura] [--quiet 1]
+//        [--anim-time <ms>]  pause every CSS/Web animation at that animation time (Sakura frames)
+//        [--reduced-motion 1] [--settle <ms>]
 //
 // Isolation: a throw-away --user-data-dir (fresh, deleted afterwards) means production's own
 // localStorage/app-data are never read or written; the fixture is injected into that temp
@@ -64,7 +67,8 @@ const seed = `(() => { try {
   if (localStorage.getItem('__seeded')) return;
   localStorage.setItem('study-tracker-desktop-v3-core', ${JSON.stringify(JSON.stringify(core))});
   localStorage.setItem('study-tracker-desktop-v3-social', ${JSON.stringify(JSON.stringify({ social }))});
-  localStorage.setItem('study-tracker-style', 'field-notebook');
+  localStorage.setItem('study-tracker-style', ${JSON.stringify(args.style ?? "field-notebook")});
+  ${args.palette ? `localStorage.setItem('study-tracker-palette', ${JSON.stringify(args.palette)});` : ""}
   localStorage.setItem('study-tracker-field-dashboard-layout', ${JSON.stringify(layout)});
   localStorage.setItem('study-tracker-theme', ${JSON.stringify(theme)});
   localStorage.setItem('study-tracker-welcome-seen', '1');
@@ -82,6 +86,7 @@ await send("Network.setBlockedURLs", { urls: [...(args.fonts === "online" ? [] :
 await send("Page.addScriptToEvaluateOnNewDocument", { source: seed });
 await send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: Number(args.dpr ?? 1), mobile: false });
 if (args.tz) await send("Emulation.setTimezoneOverride", { timezoneId: args.tz });
+if (args["reduced-motion"]) await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
 if (args.now) {
   // Freeze "now" so the synthetic fixture and the native app agree on what today is.
   const fixed = Date.parse(args.now);
@@ -89,7 +94,7 @@ if (args.now) {
 }
 await send("Page.navigate", { url: appUrl });
 for (let i = 0; i < 60; i++) {
-  const r = await send("Runtime.evaluate", { expression: "!!document.querySelector('.fn-dashboard, .dashboard-design, .timer-grid, .fn-timer')", returnByValue: true });
+  const r = await send("Runtime.evaluate", { expression: "!!document.querySelector('.fn-dashboard, .dashboard-design, .timer-grid, .fn-timer, .wabi-dashboard, .wabi-timer-grid')", returnByValue: true });
   if (r.result?.result?.value) break;
   await sleep(250);
 }
@@ -99,7 +104,48 @@ await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Es
 await sleep(400);
 if (args.tab && args.tab !== "dashboard") {
   await send("Runtime.evaluate", { expression: `[...document.querySelectorAll('.tab-button')].find(b => b.textContent.trim().toLowerCase().startsWith(${JSON.stringify(args.tab)}))?.click()` });
+  // Wabi-Sabi has a sidebar instead of the tab row; its sub-label is the production tab key.
+  await send("Runtime.evaluate", { expression: `[...document.querySelectorAll('.wabi-nav-item')].find(b => b.querySelector('.wabi-nav-sub')?.textContent.trim() === ${JSON.stringify(args.tab)})?.click()` });
   await sleep(600);
+}
+if (args.quiet) {
+  await send("Runtime.evaluate", { expression: `document.querySelector('.wabi-quiet-link')?.click()` });
+  await sleep(600);
+}
+if (args.clicks) {
+  // "sel|text:Change theme|..." - click each in order (a CSS selector, or the first button whose
+  // trimmed text equals the given text).
+  for (const step of args.clicks.split("|")) {
+    const expr = step.startsWith("text:")
+      ? `[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(step.slice(5))})?.click()`
+      : `document.querySelector(${JSON.stringify(step)})?.click()`;
+    await send("Runtime.evaluate", { expression: expr });
+    await sleep(400);
+  }
+}
+if (args.settle) await sleep(Number(args.settle));
+if (args["anim-time"] !== undefined) {
+  // Freeze every running animation (CSS keyframes included) at one deterministic time so a
+  // Sakura frame can be compared with the native petal function evaluated at the same instant.
+  await send("Runtime.evaluate", { expression: `document.getAnimations().forEach((a) => { a.pause(); a.currentTime = ${Number(args["anim-time"])}; })` });
+  await sleep(300);
+}
+if (args["platform-fonts"]) {
+  // Stage 19: which installed font Chromium actually used for each selector (CSS.getPlatformFontsForNode),
+  // since the CSP-blocked web fonts named first in the stacks never render in the packaged app.
+  await send("DOM.enable");
+  await send("CSS.enable");
+  const doc = await send("DOM.getDocument", { depth: -1 });
+  const result = {};
+  for (const sel of args["platform-fonts"].split("|")) {
+    const q = await send("DOM.querySelector", { nodeId: doc.result.root.nodeId, selector: sel });
+    const nodeId = q.result?.nodeId;
+    if (!nodeId) { result[sel] = null; continue; }
+    const f = await send("CSS.getPlatformFontsForNode", { nodeId });
+    const stack = await send("Runtime.evaluate", { expression: `getComputedStyle(document.querySelector(${JSON.stringify(sel)})).fontFamily`, returnByValue: true });
+    result[sel] = { used: f.result?.fonts, stack: stack.result?.result?.value };
+  }
+  writeFileSync(args["fonts-out"] ?? "fonts.json", JSON.stringify(result, null, 2));
 }
 if (args.eval) {
   const r = await send("Runtime.evaluate", { expression: readFileSync(args.eval, "utf8"), returnByValue: true, awaitPromise: true });
@@ -114,5 +160,5 @@ chrome.kill();
 server.close();
 await sleep(500);
 try { rmSync(profile, { recursive: true, force: true }); } catch { /* chrome may still hold a handle; temp dir */ }
-console.log(`captured ${args.out ?? "(no png)"} ${W}x${H} layout=${layout} theme=${theme}`);
+console.log(`captured ${args.out ?? "(no png)"} ${W}x${H} layout=${layout} theme=${theme} style=${args.style ?? "field-notebook"} palette=${args.palette ?? "default"}`);
 process.exit(0);

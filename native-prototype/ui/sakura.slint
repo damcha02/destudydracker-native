@@ -1,0 +1,64 @@
+// Stage 19: the Sakura palette's decorative layers. Pure drawing - poses and the texture frame
+// come from one Rust clock (`src/sakura_controller.rs`, `study_tracker_core::appearance::sakura`),
+// which only runs while a Sakura surface is actually visible. Nothing here animates by itself, takes
+// input, or appears in the accessibility tree.
+
+export struct PetalData {
+    // container-relative x (`left: N%`) plus a pixel offset, and the image centre y
+    x-frac: float,
+    dx: float,
+    y: float,
+    rot: float,
+    size: float,
+    // the petal's image with its current opacity already in the alpha channel (see
+    // `sakura_controller::PetalImages`): no per-petal opacity layer is composited per frame
+    img: image,
+}
+
+// The two production blossom images, read once by Rust to build the alpha variants.
+export global SakuraAssets {
+    out property <image> petal-0: @image-url("../assets/sakura/petal-0.png");
+    out property <image> petal-1: @image-url("../assets/sakura/petal-1.png");
+}
+
+// `SakuraScatter`: 22 falling blossoms, clipped to its container (`overflow: hidden`).
+export component SakuraPetals inherits Rectangle {
+    in property <[PetalData]> petals;
+    clip: true;
+    for p in root.petals: Image {
+        x: p.x-frac * parent.width + p.dx * 1px - p.size * 0.5px;
+        y: p.y * 1px - p.size * 0.5px;
+        width: p.size * 1px;
+        height: p.size * 1px;
+        source: p.img;
+        image-fit: contain;
+        transform-rotation: p.rot * 1deg;
+        accessible-role: none;
+    }
+}
+
+// `body::after`: production's animated 200x200 petal GIF, tiled over the window at 14 % opacity
+// (the 0.14 is baked into the frames' alpha by scripts/stage19-sakura-assets.mjs - an `opacity`
+// here would make the renderer composite a full-window layer every frame).
+export component SakuraTexture inherits Rectangle {
+    in property <int> frame;
+    Image {
+        width: parent.width;
+        height: parent.height;
+        horizontal-tiling: repeat;
+        vertical-tiling: repeat;
+        accessible-role: none;
+        source: [
+            @image-url("../assets/sakura/leaves-00.png"), @image-url("../assets/sakura/leaves-01.png"),
+            @image-url("../assets/sakura/leaves-02.png"), @image-url("../assets/sakura/leaves-03.png"),
+            @image-url("../assets/sakura/leaves-04.png"), @image-url("../assets/sakura/leaves-05.png"),
+            @image-url("../assets/sakura/leaves-06.png"), @image-url("../assets/sakura/leaves-07.png"),
+            @image-url("../assets/sakura/leaves-08.png"), @image-url("../assets/sakura/leaves-09.png"),
+            @image-url("../assets/sakura/leaves-10.png"), @image-url("../assets/sakura/leaves-11.png"),
+            @image-url("../assets/sakura/leaves-12.png"), @image-url("../assets/sakura/leaves-13.png"),
+            @image-url("../assets/sakura/leaves-14.png"), @image-url("../assets/sakura/leaves-15.png"),
+            @image-url("../assets/sakura/leaves-16.png"), @image-url("../assets/sakura/leaves-17.png"),
+            @image-url("../assets/sakura/leaves-18.png"), @image-url("../assets/sakura/leaves-19.png"),
+        ][root.frame];
+    }
+}

@@ -65,6 +65,32 @@ pub fn expand_weekday_from(
 pub struct Occurrence<'a> {
     pub event: &'a TimetableEvent,
     pub date: CivilDate,
+    /// A "move this occurrence" override (production replaces the event copy's date/time/end
+    /// time with the override's); `None` for an ordinary occurrence.
+    pub moved: Option<&'a crate::academic::OccurrenceOverride>,
+}
+
+impl<'a> Occurrence<'a> {
+    /// The time this occurrence shows at (`override.time ?? event.time`).
+    pub fn time(&self) -> &'a str {
+        self.moved
+            .and_then(|o| o.time.as_deref())
+            .unwrap_or(self.event.time.as_str())
+    }
+
+    pub fn end_time(&self) -> Option<&'a str> {
+        self.moved
+            .and_then(|o| o.end_time.as_deref())
+            .or(self.event.end_time.as_deref())
+    }
+
+    /// `occurrence.event.date`: the series anchor, or the moved date for a moved occurrence.
+    pub fn event_date(&self) -> Option<CivilDate> {
+        match self.moved {
+            Some(_) => Some(self.date),
+            None => CivilDate::from_local_date(&self.event.date),
+        }
+    }
 }
 
 /// `expandTimetableEvents` for one semester, honoring skip/move overrides and holidays. Returns
@@ -77,9 +103,31 @@ pub fn expand_timetable_events<'a>(
     range_start: CivilDate,
     range_end: CivilDate,
 ) -> Vec<Occurrence<'a>> {
-    if !is_semester_schedule_active(semester) {
+    expand_timetable_events_with(events, holidays, semester, range_start, range_end, None)
+}
+
+/// `ExpandOptions` (Stage 19, v0.1.67 Wabi-Sabi exam prep): events of `prep_task_ids` tasks run
+/// past the semester's end (up to `prep_end_date`, the semester's last exam) and ignore its phase.
+/// Production only passes these while the Wabi-Sabi style is active; every other caller passes none.
+#[derive(Debug, Clone, Default)]
+pub struct ExpandOptions<'a> {
+    pub prep_task_ids: std::collections::HashSet<&'a str>,
+    pub prep_end_date: Option<CivilDate>,
+}
+
+/// `expandTimetableEvents(events, holidays, semester, start, end, options)`.
+pub fn expand_timetable_events_with<'a>(
+    events: &'a [&'a TimetableEvent],
+    holidays: &[Holiday],
+    semester: &Semester,
+    range_start: CivilDate,
+    range_end: CivilDate,
+    options: Option<&ExpandOptions<'_>>,
+) -> Vec<Occurrence<'a>> {
+    if semester.archived {
         return Vec::new();
     }
+    let semester_active = is_semester_schedule_active(semester);
     let semester_end = semester
         .end_date
         .as_ref()
@@ -90,13 +138,25 @@ pub fn expand_timetable_events<'a>(
         .and_then(CivilDate::from_local_date);
     let effective_end = semester_end.map_or(range_end, |end| end.min(range_end));
     let effective_start = semester_start.map_or(range_start, |start| start.max(range_start));
-    if effective_start > effective_end {
-        return Vec::new();
-    }
+    let prep_end = options
+        .and_then(|o| o.prep_end_date)
+        .map_or(range_end, |end| end.min(range_end));
 
     let mut occurrences = Vec::new();
     for event in events.iter().copied() {
         if event.semester_id != semester.id {
+            continue;
+        }
+        let is_prep = options.is_some_and(|o| o.prep_task_ids.contains(event.task_id.as_str()));
+        if !is_prep && !semester_active {
+            continue;
+        }
+        let (bound_start, bound_end) = if is_prep {
+            (range_start, prep_end)
+        } else {
+            (effective_start, effective_end)
+        };
+        if bound_start > bound_end {
             continue;
         }
         let Some(event_date) = CivilDate::from_local_date(&event.date) else {
@@ -106,22 +166,28 @@ pub fn expand_timetable_events<'a>(
             .recurrence_end_date
             .as_ref()
             .and_then(CivilDate::from_local_date)
-            .map_or(effective_end, |end| end.min(effective_end));
+            .map_or(bound_end, |end| end.min(bound_end));
         if event.repeat_weekly {
-            if effective_start <= series_end {
-                for date in expand_weekday_from(event_date, effective_start, series_end) {
+            if bound_start <= series_end {
+                for date in expand_weekday_from(event_date, bound_start, series_end) {
                     let key = date.to_iso();
                     let override_entry = event.occurrence_overrides.get(&key);
                     if override_entry.is_some_and(|o| o.skipped) {
                         continue;
                     }
-                    if let Some(moved) = override_entry.and_then(|o| o.date.as_ref()) {
-                        if let Some(moved) = CivilDate::from_local_date(moved) {
-                            if moved >= effective_start
-                                && moved <= effective_end
+                    if let Some(entry) = override_entry.filter(|o| o.date.is_some()) {
+                        if let Some(moved) =
+                            entry.date.as_ref().and_then(CivilDate::from_local_date)
+                        {
+                            if moved >= bound_start
+                                && moved <= bound_end
                                 && !is_holiday(holidays, semester, moved)
                             {
-                                occurrences.push(Occurrence { event, date: moved });
+                                occurrences.push(Occurrence {
+                                    event,
+                                    date: moved,
+                                    moved: Some(entry),
+                                });
                             }
                         }
                         continue;
@@ -129,13 +195,18 @@ pub fn expand_timetable_events<'a>(
                     if is_holiday(holidays, semester, date) {
                         continue;
                     }
-                    occurrences.push(Occurrence { event, date });
+                    occurrences.push(Occurrence {
+                        event,
+                        date,
+                        moved: None,
+                    });
                 }
             }
-        } else if event_date >= effective_start && event_date <= effective_end {
+        } else if event_date >= bound_start && event_date <= bound_end {
             occurrences.push(Occurrence {
                 event,
                 date: event_date,
+                moved: None,
             });
         }
     }

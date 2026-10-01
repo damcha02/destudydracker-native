@@ -1,0 +1,95 @@
+// `renderWabiQuietMode` (Stage 19): the full-height paper overlay right of the sidebar with NOW,
+// the focus title (click: the other open tasks), the clock and the two actions. The overlay hosts
+// its own petal layer in production (it covers the app-level one); the page places that layer.
+import { WS } from "palette.slint";
+import { WEyebrow, WSolidButton, WOutlineButton } from "parts.slint";
+import { WabiQuietData } from "types.slint";
+
+export component WabiQuiet inherits Rectangle {
+    in property <WabiQuietData> d;
+    in property <string> clock;
+    in property <string> primary;
+    in-out property <bool> menu-open: false;
+    callback primary-clicked();
+    callback done-log();
+    callback leave();
+    callback pick-other(int);
+
+    background: WS.paper;
+    TouchArea { clicked => { root.menu-open = false; } }
+
+    inner := VerticalLayout {
+        width: min(640px, parent.width - 120px);
+        x: (parent.width - self.width) / 2;
+        y: max(60px, (parent.height - self.preferred-height) / 2);
+        alignment: start;
+        WEyebrow { height: 12px; horizontal-alignment: center; text: "NOW"; }
+        Rectangle { height: 18px; }
+        title := Text {
+            min-height: 57.5px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            wrap: word-wrap;
+            text: root.d.title;
+            font-family: WS.serif;
+            font-size: 46px;
+            font-weight: 500;
+            letter-spacing: 0.08px;
+            color: title-touch.has-hover ? WS.sage : WS.ink;
+            title-touch := TouchArea { mouse-cursor: pointer; clicked => { root.menu-open = !root.menu-open; } }
+        }
+        Rectangle { height: 10px; }
+        Text { height: 17px; horizontal-alignment: center; vertical-alignment: center; text: root.d.meta; font-family: WS.sans; font-size: 15px; letter-spacing: 0.08px; color: WS.muted; }
+        Rectangle { height: 44px; }
+        Text { height: 98px; horizontal-alignment: center; vertical-alignment: center; text: root.clock; font-family: WS.serif; font-size: 86px; font-weight: 500; letter-spacing: 1.72px; color: WS.ink; }
+        Rectangle { height: 30px; }
+        HorizontalLayout {
+            height: 38px;
+            alignment: center;
+            spacing: 10px;
+            WSolidButton { text: root.primary; clicked => { root.primary-clicked(); } }
+            WOutlineButton { text: "DONE, LOG IT"; clicked => { root.done-log(); } }
+        }
+        Rectangle { height: 44px; }
+        HorizontalLayout {
+            height: 12px;
+            alignment: center;
+            Text {
+                text: "LEAVE QUIET MODE";
+                font-family: WS.sans;
+                font-size: 11.5px;
+                letter-spacing: 1.61px;
+                color: leave-touch.has-hover ? WS.ink : WS.faint;
+                leave-touch := TouchArea { mouse-cursor: pointer; clicked => { root.leave(); } }
+            }
+        }
+    }
+
+    // `.wabi-quiet-dropdown`: the other open planned tasks (or "Nothing else planned for today.")
+    if root.menu-open: Rectangle {
+        width: min(420px, max(320px, list.preferred-width + 14px));
+        height: min(260px, list.preferred-height + 14px);
+        x: (parent.width - self.width) / 2;
+        y: inner.y + 12px + 18px + title.height + 8px;
+        background: WS.paper;
+        border-width: 1px;
+        border-color: WS.rule-hard;
+        drop-shadow-offset-y: 4px;
+        drop-shadow-color: #1c1d1914;
+        TouchArea { }
+        list := VerticalLayout {
+            x: 7px;
+            y: 7px;
+            width: parent.width - 14px;
+            if root.d.others.length == 0: Text { height: 36px; vertical-alignment: center; text: "   Nothing else planned for today."; font-family: WS.sans; font-size: 13px; color: WS.faint; }
+            for other[i] in root.d.others: Rectangle {
+                height: 37px;
+                background: item-touch.has-hover ? WS.paper-1 : transparent;
+                Text { x: 12px; height: parent.height; vertical-alignment: center; text: other.title; font-family: WS.sans; font-size: 14px; color: WS.ink; }
+                Text { x: parent.width - 12px - self.preferred-width; height: parent.height; vertical-alignment: center; text: other.course; font-family: WS.sans; font-size: 11.5px; color: WS.muted; }
+                if i < root.d.others.length - 1: Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-dot; }
+                item-touch := TouchArea { mouse-cursor: pointer; clicked => { root.menu-open = false; root.pick-other(i); } }
+            }
+        }
+    }
+}

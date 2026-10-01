@@ -1,0 +1,101 @@
+// Small Wabi-Sabi building blocks (`.wabi-eyebrow`, `.wabi-btn-solid`, `.wabi-btn-outline`,
+// `.wabi-text-link`, `.wabi-task-dot`). Sizes, weights and letter-spacing are production's computed
+// values; Slint has no `text-transform`, so callers pass upper-case text where production uppercases.
+import { WS } from "palette.slint";
+
+export component WEyebrow inherits Text {
+    font-family: WS.sans;
+    font-size: 10.5px;
+    letter-spacing: 2.31px;
+    color: WS.muted;
+}
+
+export component WSolidButton inherits Rectangle {
+    in property <string> text;
+    in property <length> pad-x: 26px;
+    in property <length> font-size: 12px;
+    callback clicked();
+    width: label.preferred-width + 2 * root.pad-x;
+    height: 38px;
+    background: touch.has-hover ? WS.sage : WS.ink;
+    label := Text {
+        width: parent.width;
+        height: parent.height;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.text;
+        font-family: WS.sans;
+        font-size: root.font-size;
+        font-weight: 500;
+        letter-spacing: root.font-size * 0.16;
+        color: WS.on-ink;
+    }
+    touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+export component WOutlineButton inherits Rectangle {
+    in property <string> text;
+    in property <length> pad-x: 18px;
+    in property <length> h: 38px;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: label.preferred-width + 2 * root.pad-x;
+    height: root.h;
+    border-width: 1px;
+    border-color: touch.has-hover && root.enabled ? WS.ink : WS.line;
+    // production's disabled `.wabi-btn-outline` looks the same (only the cursor changes)
+    label := Text {
+        width: parent.width;
+        height: parent.height;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.text;
+        font-family: WS.sans;
+        font-size: 12px;
+        letter-spacing: 1.92px;
+        color: WS.ink;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component WTextLink inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: label.preferred-width;
+    height: 14px;
+    label := Text {
+        height: parent.height;
+        vertical-alignment: center;
+        text: root.text;
+        font-family: WS.sans;
+        font-size: 12px;
+        letter-spacing: 1.92px;
+        color: touch.has-hover && root.enabled ? WS.ink : WS.muted;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}
+
+// `.wabi-task-dot`: a 14 px ring (1.5 px, faint) that fills sage when done.
+export component WTaskDot inherits Rectangle {
+    in property <bool> done;
+    callback clicked();
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    border-width: 1.5px;
+    border-color: root.done || touch.has-hover ? WS.sage : WS.faint;
+    background: root.done ? WS.sage : transparent;
+    touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    accessible-role: checkbox;
+    accessible-checked: root.done;
+    accessible-label: root.done ? "Mark not done" : "Mark done";
+}

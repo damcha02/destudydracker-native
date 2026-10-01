@@ -22,9 +22,9 @@ use serde_json::{Map, Value};
 
 use study_tracker_core::academic::{
     AcademicState, CalendarEntry, CalendarEntryId, Course, CourseId, DailyTodo, DailyTodoId, Exam,
-    ExamId, ExamKind, Holiday, HolidayId, LocalDate, Priority, Semester, SemesterId, SemesterPhase,
-    SessionId, SessionKind, StudySession, Task, TaskId, TaskSubtype, TimetableEvent,
-    TimetableEventId, TimetableEventKind, UnitAmount,
+    ExamId, ExamKind, Holiday, HolidayId, LocalDate, OccurrenceOverride, Priority, Semester,
+    SemesterId, SemesterPhase, SessionId, SessionKind, StudySession, Task, TaskId, TaskSubtype,
+    TimetableEvent, TimetableEventId, TimetableEventKind, UnitAmount,
 };
 use study_tracker_core::timer::WallTimestamp;
 
@@ -114,9 +114,23 @@ pub fn convert_academic(
             Err(reason) => warnings.push(format!("exams: skipped a record - {reason}")),
         }
     }
+    // `normalizeTimetableEvents(events, knownTaskIds)`: an event whose task no longer exists is
+    // dropped, not orphaned (Stage 19 - production does this on every load).
+    let known_tasks: std::collections::HashSet<String> = result
+        .tasks
+        .iter()
+        .map(|t| t.id.as_str().to_string())
+        .collect();
     for obj in array_of_objects(state, "timetableEvents") {
         match convert_timetable_event(obj, import_time) {
-            Ok(event) => result.add_timetable_event(event),
+            Ok(event) if known_tasks.contains(event.task_id.as_str()) => {
+                result.add_timetable_event(event)
+            }
+            Ok(event) => warnings.push(format!(
+                "timetableEvents: skipped {} - its task {} does not exist",
+                event.id.as_str(),
+                event.task_id.as_str()
+            )),
             Err(reason) => warnings.push(format!("timetableEvents: skipped a record - {reason}")),
         }
     }
@@ -153,6 +167,9 @@ pub fn convert_academic(
     // newest-first exactly like production's own array does (`add_study_sessions` prepends).
     sessions.reverse();
     result.add_study_sessions(sessions, import_time);
+    // Production derives scheduled tasks' unit counts from their timetable on every load (Stage
+    // 19); a backup normally already carries the synced numbers, so this is usually a no-op.
+    result.sync_task_units_from_schedule();
 
     (result, warnings)
 }
@@ -291,12 +308,69 @@ fn convert_study_session(obj: &Map<String, Value>) -> Result<StudySession, Strin
     })
 }
 
-fn timetable_event_kind(value: Option<&str>) -> TimetableEventKind {
+/// `migrateTimetableEventKind`: the current three kinds plus the legacy "class"/"lecture"/
+/// "exercise-session" (all occurrences now); anything else is not an event at all.
+fn timetable_event_kind(value: Option<&str>) -> Option<TimetableEventKind> {
     match value {
-        Some("sheet-release") => TimetableEventKind::SheetRelease,
-        Some("sheet-deadline") => TimetableEventKind::SheetDeadline,
-        _ => TimetableEventKind::Occurrence,
+        Some("sheet-release") => Some(TimetableEventKind::SheetRelease),
+        Some("sheet-deadline") => Some(TimetableEventKind::SheetDeadline),
+        Some("occurrence" | "lecture" | "class" | "exercise-session") => {
+            Some(TimetableEventKind::Occurrence)
+        }
+        _ => None,
     }
+}
+
+/// `normalizeOccurrenceOverrides`: `{skipped: true}` or a move with string `date` and `time`.
+fn occurrence_overrides(
+    obj: &Map<String, Value>,
+) -> std::collections::BTreeMap<String, OccurrenceOverride> {
+    let mut result = std::collections::BTreeMap::new();
+    let Some(map) = obj.get("occurrenceOverrides").and_then(Value::as_object) else {
+        return result;
+    };
+    for (key, raw) in map {
+        let Some(record) = raw.as_object() else {
+            continue;
+        };
+        if record.get("skipped").and_then(Value::as_bool) == Some(true) {
+            result.insert(
+                key.clone(),
+                OccurrenceOverride {
+                    skipped: true,
+                    ..OccurrenceOverride::default()
+                },
+            );
+        } else if let (Some(date), Some(time)) = (
+            get_str(record, "date").and_then(LocalDate::parse),
+            get_string(record, "time"),
+        ) {
+            result.insert(
+                key.clone(),
+                OccurrenceOverride {
+                    skipped: false,
+                    date: Some(date),
+                    time: Some(time),
+                    end_time: get_string(record, "endTime"),
+                },
+            );
+        }
+    }
+    result
+}
+
+/// A string array (`completedOccurrences`, `skippedOccurrences`), non-strings dropped.
+fn string_array(obj: &Map<String, Value>, key: &str) -> Vec<String> {
+    obj.get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn convert_timetable_event(
@@ -306,28 +380,33 @@ fn convert_timetable_event(
     let id = get_string(obj, "id").ok_or("missing id")?;
     let semester_id = get_string(obj, "semesterId").ok_or("missing semesterId")?;
     let course_id = get_string(obj, "courseId").ok_or("missing courseId")?;
-    let task_id = get_string(obj, "taskId").ok_or("missing taskId")?;
     let date = get_local_date(obj, "date").ok_or("missing or malformed date")?;
+    // Production drops an event with no string `time` (Stage 19; Stage 16 used to default it to
+    // 00:00, which made a production-invisible event appear natively).
+    let time = get_string(obj, "time").ok_or("missing time")?;
+    let kind = timetable_event_kind(get_str(obj, "kind")).ok_or("unrecognized kind")?;
+    // `taskId`, else the legacy `unitTypeId` (production's own fallback order).
+    let task_id = get_string(obj, "taskId")
+        .or_else(|| get_string(obj, "unitTypeId"))
+        .ok_or("missing taskId")?;
     Ok(TimetableEvent {
         id: TimetableEventId::new(id),
         semester_id: SemesterId::new(semester_id),
         course_id: CourseId::new(course_id),
-        kind: timetable_event_kind(get_str(obj, "kind")),
+        kind,
         task_id: TaskId::new(task_id),
-        label: get_string_or(obj, "label", ""),
+        label: get_string_or(obj, "label", "Lecture"),
         date,
-        time: get_string_or(obj, "time", "00:00"),
+        time,
         end_time: get_string(obj, "endTime"),
         repeat_weekly: get_bool(obj, "repeatWeekly"),
         recurrence_end_date: get_local_date(obj, "recurrenceEndDate"),
-        // Per-occurrence overrides and completed-occurrence lists are a nested, comparatively
-        // low-value structure for a first import pass (they refine an already-migrated recurring
-        // event, never change its existence) - left empty rather than parsed field-by-field here;
-        // preserved losslessly at the *raw* level regardless, since Reserved-section preservation
-        // (see `migration.rs`) keeps the untouched original `timetableEvents` array recoverable.
-        occurrence_overrides: Default::default(),
+        // Stage 19: these drive the Wabi-Sabi Dashboard's ticks, every schedule-health score and
+        // (through `sync_task_units_from_schedule`) task progress, so they are imported, not left
+        // empty as in Stage 16.
+        occurrence_overrides: occurrence_overrides(obj),
         url: get_string(obj, "url"),
-        completed_occurrences: Vec::new(),
+        completed_occurrences: string_array(obj, "completedOccurrences"),
         created_at: get_instant(obj, "createdAt", import_time),
     })
 }
@@ -356,21 +435,38 @@ fn convert_daily_todo(
 ) -> Result<DailyTodo, String> {
     let id = get_string(obj, "id").ok_or("missing id")?;
     let date = get_local_date(obj, "date").ok_or("missing or malformed date")?;
+    // `normalizeDailyTodos` requires a string title (Stage 19).
+    let title = get_string(obj, "title").ok_or("missing title")?;
     Ok(DailyTodo {
         id: DailyTodoId::new(id),
         date,
         time: get_string(obj, "time"),
         end_time: get_string(obj, "endTime"),
-        title: get_string_or(obj, "title", ""),
+        title,
         notes: get_string_or(obj, "notes", ""),
         completed: get_bool(obj, "completed"),
         completed_at: get_optional_instant(obj, "completedAt"),
         created_at: get_instant(obj, "createdAt", import_time),
         repeat_weekly: get_bool(obj, "repeatWeekly"),
-        completed_occurrences: Vec::new(),
+        completed_occurrences: string_array(obj, "completedOccurrences"),
         recurrence_end_date: get_local_date(obj, "recurrenceEndDate"),
-        skipped_occurrences: Vec::new(),
-        occurrence_times: Default::default(),
+        skipped_occurrences: string_array(obj, "skippedOccurrences"),
+        // `normalizeOccurrenceTimes`: per-date {time, endTime} overrides of a repeating to-do.
+        occurrence_times: obj
+            .get("occurrenceTimes")
+            .and_then(Value::as_object)
+            .map(|map| {
+                map.iter()
+                    .filter_map(|(date, entry)| {
+                        let entry = entry.as_object()?;
+                        Some((
+                            date.clone(),
+                            (get_string(entry, "time"), get_string(entry, "endTime")),
+                        ))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
     })
 }
 

@@ -1,0 +1,10 @@
+## sidebar
+Kokoro | 95 | OVERALL | Strong | ? | Today | 今日 | Plan | Timer | Notes | Rest | Circle | TENDED TODAY | 53m | QUIET MODE →
+## dashboard
+TODAY | Wednesday, Sep 30, 2026 | 1h 7m to today's goal | ONE THING | Exercise Sheet 1 1 | Programming · due Sep 30 | START | SOMETHING ELSE | COMING UP | Exercise Sheet 1 | NEXTProgramming · released Sep 23 | Sep 30 · 18:00 | today | FOCUS | Exercise Sheet 1 | Analysis II · released Sep 26 | Oct 3 · 23:59 | in 3 days | FOCUS | PLANNED TODAY | Nothing planned today. Add tasks from the planner calendar. | Click a title to make it the current task. Click the mark to close it out.
+## timer
+
+## quiet
+
+## quiet-mode
+NOW | Plan the next study block | No task pinned for today · open the planner calendar to place one unit. | 25:00 | START | DONE, LOG IT | LEAVE QUIET MODE

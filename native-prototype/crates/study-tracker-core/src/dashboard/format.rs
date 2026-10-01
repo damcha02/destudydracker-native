@@ -189,6 +189,77 @@ pub fn month_short(date: CivilDate) -> &'static str {
     MONTHS_SHORT[(date.month() - 1) as usize]
 }
 
+/// `parseTimeInput` (`lib/timeInput.ts`) for the stored "HH:MM" strings: also accepts what a person
+/// types ("9", "930", "9:30", "9:30pm"). `None` when it is not a time.
+pub fn parse_time_input(text: &str) -> Option<(u32, u32)> {
+    let s = text.trim().to_lowercase();
+    let digits = s.bytes().take_while(u8::is_ascii_digit).count();
+    // `(\d{1,2})` backtracks: "930" is 9:30, so try the longer hour first, then the shorter.
+    (1..=digits.min(2))
+        .rev()
+        .find_map(|hour_len| parse_time_after_hours(&s, hour_len))
+}
+
+fn parse_time_after_hours(s: &str, hour_len: usize) -> Option<(u32, u32)> {
+    let mut hours: u32 = s[..hour_len].parse().ok()?;
+    let after_hours = &s[hour_len..];
+    // `(?:[:.h]?(\d{2}))?` - an optional separator, but only together with two digits.
+    let mut rest = after_hours;
+    let mut minutes = 0;
+    let candidate = after_hours
+        .strip_prefix([':', '.', 'h'])
+        .unwrap_or(after_hours);
+    if candidate.len() >= 2 && candidate.as_bytes()[..2].iter().all(u8::is_ascii_digit) {
+        minutes = candidate[..2].parse().ok()?;
+        rest = &candidate[2..];
+    }
+    let rest = rest.trim_start();
+    let meridiem = match rest.chars().next() {
+        None => None,
+        Some(c @ ('a' | 'p')) => {
+            let tail = rest[1..].trim_start_matches('.').trim_start();
+            let tail = tail
+                .strip_prefix('m')
+                .unwrap_or(tail)
+                .trim_start_matches('.');
+            if !tail.is_empty() {
+                return None;
+            }
+            Some(c)
+        }
+        Some(_) => return None,
+    };
+    if minutes > 59 {
+        return None;
+    }
+    match meridiem {
+        Some(m) => {
+            if !(1..=12).contains(&hours) {
+                return None;
+            }
+            hours = hours % 12 + if m == 'p' { 12 } else { 0 };
+        }
+        None if hours > 23 => return None,
+        None => {}
+    }
+    Some((hours, minutes))
+}
+
+/// `displayTime`: "HH:MM" the way the machine's locale writes clock times - 24-hour `21:30`, or
+/// 12-hour `9:30 PM` - falling back to the raw string when it does not parse.
+pub fn display_time(time: &str, twelve_hour: bool) -> String {
+    let Some((hours, minutes)) = parse_time_input(time) else {
+        return time.to_string();
+    };
+    if twelve_hour {
+        let suffix = if hours >= 12 { "PM" } else { "AM" };
+        let h = if hours % 12 == 0 { 12 } else { hours % 12 };
+        format!("{h}:{minutes:02} {suffix}")
+    } else {
+        format!("{hours:02}:{minutes:02}")
+    }
+}
+
 /// `getTimeGreeting` (only used by the non-default Modern dashboard; ported for completeness).
 pub fn time_greeting(hour: u32) -> &'static str {
     match hour {

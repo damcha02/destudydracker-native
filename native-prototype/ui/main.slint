@@ -14,6 +14,18 @@ import { FnDashboardData, FnQueueRow, FnCourseRow, FnExamRow, FnAheadRow, FnFoss
 export { FN } from "fn/palette.slint";
 export { FnDashboardData, FnQueueRow, FnCourseRow, FnExamRow, FnAheadRow, FnFossilLayer, FnTooltipLayer, FnFossilDay, FnLegendItem, FnFossilStat, FnDiscovered } from "fn/types.slint";
 import { MapLabView } from "map-lab.slint";
+import { WS, WsTokens } from "wabi/palette.slint";
+import { WabiPage } from "wabi/page.slint";
+import { WabiSidebarData, WabiDashData, WabiTimerData, WabiQuietData, WabiCourseItem, WabiTaskItem, WabiDeadlineRow, WabiPlannedRow, WabiModeCard, WabiQuietOther } from "wabi/types.slint";
+import { Chrome, ChromeTokens, MenuDropdown, AppearancePanel, ChoiceCard } from "chrome.slint";
+import { SakuraPetals, SakuraTexture, PetalData, SakuraAssets } from "sakura.slint";
+import { FnTokens } from "fn/palette.slint";
+
+export { WS, WsTokens } from "wabi/palette.slint";
+export { WabiSidebarData, WabiDashData, WabiTimerData, WabiQuietData, WabiCourseItem, WabiTaskItem, WabiDeadlineRow, WabiPlannedRow, WabiModeCard, WabiQuietOther } from "wabi/types.slint";
+export { Chrome, ChromeTokens, ChoiceCard } from "chrome.slint";
+export { PetalData, SakuraAssets } from "sakura.slint";
+export { FnTokens } from "fn/palette.slint";
 import { MapRegionData, MapLabelData, MapMarkerData } from "map-types.slint";
 
 export { MapRegionData, MapLabelData, MapMarkerData } from "map-types.slint";
@@ -110,6 +122,49 @@ export component MainWindow inherits Window {
     in property <string> update-notice-action-label;
     callback update-notice-action();
     callback update-notice-dismiss();
+
+    // Stage 19: appearance (style / palette / light-dark) and the Wabi-Sabi surfaces. Which style
+    // is drawn, and every colour, is decided in Rust (`src/appearance_view.rs`).
+    in property <bool> wabi: false;
+    in property <bool> theme-locked: false;
+    in property <bool> appearance-dark: true;
+    in property <WabiSidebarData> wabi-sidebar;
+    in property <WabiDashData> wabi-dash;
+    in property <WabiTimerData> wabi-timer;
+    in property <WabiQuietData> wabi-quiet-data;
+    in property <bool> wabi-quiet: false;
+    in property <bool> wabi-timer-menu-open: true;
+    in property <bool> sakura: false;
+    in property <[PetalData]> petals;
+    in property <int> texture-frame;
+    in-out property <bool> menu-open: false;
+    in-out property <int> panel-view: -1;
+    in property <[ChoiceCard]> palette-cards;
+    in property <[ChoiceCard]> style-cards;
+    callback appearance-pick-palette(int);
+    callback appearance-pick-style(int);
+    callback appearance-set-dark(bool);
+    callback appearance-toggle-dark();
+    callback wabi-open-dashboard();
+    callback wabi-open-timer();
+    callback wabi-toggle-quiet();
+    callback wabi-toggle-semester();
+    callback wabi-toggle-course(int);
+    callback wabi-start-one();
+    callback wabi-mark-one();
+    callback wabi-deadline-mark(int);
+    callback wabi-deadline-focus(int);
+    callback wabi-deadline-select(int);
+    callback wabi-planned-mark(int);
+    callback wabi-planned-select(int);
+    callback wabi-timer-log();
+    callback wabi-quiet-pick(int);
+    // which production surface is on screen changed (drives the Sakura clock's visibility rule)
+    callback surface-changed();
+    private property <bool> production-surface: !root.show-text-spike && !root.show-map;
+    changed show-dashboard => { root.surface-changed(); }
+    changed show-text-spike => { root.surface-changed(); }
+    changed show-map => { root.surface-changed(); }
 
     callback toggle-timer();
     callback reset-timer();
@@ -556,7 +611,7 @@ export component MainWindow inherits Window {
         // Stage 17: the production Dashboard (Field Notebook style) covers the whole window. The
         // other surfaces below (Timer, Text spike, Map lab) are the not-yet-migrated Stage 4-14
         // screens and debug labs; the page's tab row switches between Dashboard and Timer.
-        if root.show-dashboard: FnDashboardPage {
+        if root.show-dashboard && !root.wabi: FnDashboardPage {
             x: 0px;
             y: 0px;
             width: parent.width;
@@ -568,9 +623,87 @@ export component MainWindow inherits Window {
             focus-task(id) => { root.fn-focus-task(id); }
             set-full(f) => { root.fn-set-full(f); }
             set-range(i) => { root.fn-set-range(i); }
-            toggle-theme => { root.fn-toggle-theme(); }
+            toggle-theme => { root.appearance-toggle-dark(); }
+            open-menu => { root.menu-open = !root.menu-open; }
             open-timer => { root.show-dashboard = false; root.show-text-spike = false; root.show-map = false; }
             start-focus => { root.show-dashboard = false; root.show-text-spike = false; root.show-map = false; root.fn-start-focus(); }
+        }
+
+        // Stage 19: the Wabi-Sabi style replaces the whole production surface (sidebar shell).
+        if root.wabi && root.production-surface: WabiPage {
+            width: parent.width;
+            height: parent.height;
+            sidebar: root.wabi-sidebar;
+            dash: root.wabi-dash;
+            timer: root.wabi-timer;
+            quiet-data: root.wabi-quiet-data;
+            on-timer: !root.show-dashboard;
+            quiet: root.wabi-quiet;
+            theme-locked: root.theme-locked;
+            dark: root.appearance-dark;
+            timer-menu-open: root.wabi-timer-menu-open;
+            sakura: root.sakura;
+            petals: root.petals;
+            texture-frame: root.texture-frame;
+            open-dashboard => { root.wabi-open-dashboard(); }
+            open-timer => { root.wabi-open-timer(); }
+            toggle-theme => { root.appearance-toggle-dark(); }
+            open-menu => { root.menu-open = !root.menu-open; }
+            toggle-quiet => { root.wabi-toggle-quiet(); }
+            toggle-semester => { root.wabi-toggle-semester(); }
+            toggle-course(i) => { root.wabi-toggle-course(i); }
+            start-one => { root.wabi-start-one(); }
+            mark-one => { root.wabi-mark-one(); }
+            deadline-mark(i) => { root.wabi-deadline-mark(i); }
+            deadline-focus(i) => { root.wabi-deadline-focus(i); }
+            deadline-select(i) => { root.wabi-deadline-select(i); }
+            planned-mark(i) => { root.wabi-planned-mark(i); }
+            planned-select(i) => { root.wabi-planned-select(i); }
+            timer-primary => { root.toggle-timer(); }
+            timer-reset => { root.reset-timer(); }
+            timer-log => { root.wabi-timer-log(); }
+            timer-mode(m) => { if m >= 0 { root.select-mode(m); } }
+            quiet-pick(i) => { root.wabi-quiet-pick(i); }
+        }
+
+        // Field Notebook + Sakura: the texture and the petals lie over every production surface
+        // (`body::after` z 0 and `.sakura-scatter` z 40 above the page; no sidebar to hide them).
+        if root.sakura && !root.wabi && root.production-surface: SakuraTexture {
+            width: parent.width;
+            height: parent.height;
+            frame: root.texture-frame;
+        }
+        if root.sakura && !root.wabi && root.production-surface: SakuraPetals {
+            width: parent.width;
+            height: parent.height;
+            petals: root.petals;
+        }
+
+        // The menu (`.topbar-menu` / `.wabi-toolbar-menu`) and the Theme / Style panel.
+        if root.menu-open: TouchArea {
+            width: parent.width;
+            height: parent.height;
+            clicked => { root.menu-open = false; }
+        }
+        if root.menu-open: MenuDropdown {
+            // Field Notebook: right-aligned under the hamburger (page shell min(1720, w - 32),
+            // topbar padding 22); Wabi-Sabi: under the sidebar's menu button.
+            x: root.wabi ? 102px : (parent.width + min(1720px, parent.width - 32px)) / 2 - 22px - self.width;
+            y: root.wabi ? 157px : 60px;
+            change-theme => { root.menu-open = false; root.panel-view = 0; }
+            change-style => { root.menu-open = false; root.panel-view = 1; }
+        }
+        if root.panel-view >= 0: AppearancePanel {
+            width: parent.width;
+            height: parent.height;
+            centre-width: parent.width - (root.wabi ? 10px : 0px);
+            styles-view: root.panel-view == 1;
+            cards: root.panel-view == 1 ? root.style-cards : root.palette-cards;
+            light-active: !root.appearance-dark;
+            dark-enabled: !root.theme-locked;
+            pick(i) => { if root.panel-view == 1 { root.appearance-pick-style(i); } else { root.appearance-pick-palette(i); } }
+            set-dark(d) => { root.appearance-set-dark(d); }
+            close => { root.panel-view = -1; }
         }
 
         // Stage 18: updater notice (production's "New update available." notice). Only exists

@@ -450,3 +450,74 @@ pub fn show_and_focus(hwnd: HWND) {
         SetForegroundWindow(hwnd);
     }
 }
+
+// --- main-window state watcher (Stage 19) -----------------------------------------------------
+
+/// Something about the main window's visibility changed (minimized, restored, shown, hidden) or a
+/// system setting the UI reads changed. The handler only receives this signal; it re-reads the
+/// state itself (`IsIconic`/visibility), so a coalesced or missed message cannot desynchronise it.
+type WindowWatch = Box<dyn Fn() + Send + Sync>;
+static WINDOW_WATCH: OnceLock<WindowWatch> = OnceLock::new();
+const WATCH_SUBCLASS_ID: usize = 0x5354_5749; // "STWI"
+
+unsafe extern "system" fn watch_subclass_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _id: usize,
+    _data: usize,
+) -> LRESULT {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{WM_SETTINGCHANGE, WM_SHOWWINDOW, WM_SIZE};
+    if matches!(msg, WM_SIZE | WM_SHOWWINDOW | WM_SETTINGCHANGE) {
+        if let Some(watch) = WINDOW_WATCH.get() {
+            watch();
+        }
+    }
+    // SAFETY: forwarding to the next procedure in the subclass chain with the original arguments.
+    unsafe { windows_sys::Win32::UI::Shell::DefSubclassProc(hwnd, msg, wparam, lparam) }
+}
+
+/// Observes the main window's size/show messages (minimize, restore, hide to tray, show) without
+/// polling, via a comctl32 window subclass that only forwards a signal. Call once.
+pub fn watch_main_window(hwnd: HWND, on_change: impl Fn() + Send + Sync + 'static) -> bool {
+    if WINDOW_WATCH.set(Box::new(on_change)).is_err() {
+        return false;
+    }
+    // SAFETY: `hwnd` is this thread's live main window; the subclass proc is a plain function and
+    // the subclass is removed with the window.
+    unsafe {
+        windows_sys::Win32::UI::Shell::SetWindowSubclass(
+            hwnd,
+            Some(watch_subclass_proc),
+            WATCH_SUBCLASS_ID,
+            0,
+        ) != 0
+    }
+}
+
+/// `IsIconic` + `IsWindowVisible`: the window is actually on screen (not minimized, not hidden).
+pub fn is_window_showing(hwnd: HWND) -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::IsWindowVisible;
+    // SAFETY: plain queries on a window handle owned by this process.
+    unsafe { IsWindowVisible(hwnd) != 0 && IsIconic(hwnd) == 0 }
+}
+
+/// Windows' "Show animations in Windows" (`SPI_GETCLIENTAREAANIMATION`) - what Chromium maps to
+/// `prefers-reduced-motion` on Windows. `true` when animations are turned off.
+pub fn prefers_reduced_motion() -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SystemParametersInfoW, SPI_GETCLIENTAREAANIMATION,
+    };
+    let mut enabled: i32 = 1;
+    // SAFETY: SPI_GETCLIENTAREAANIMATION writes one BOOL into the provided pointer.
+    let ok = unsafe {
+        SystemParametersInfoW(
+            SPI_GETCLIENTAREAANIMATION,
+            0,
+            &mut enabled as *mut i32 as *mut core::ffi::c_void,
+            0,
+        )
+    };
+    ok != 0 && enabled == 0
+}

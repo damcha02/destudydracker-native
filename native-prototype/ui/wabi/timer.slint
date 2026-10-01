@@ -1,0 +1,95 @@
+// `renderWabiTimer` (Stage 19): TIMER head, the 128 px clock, START/PAUSE/RESUME + RESET +
+// LOG AND CLOSE + "Switch to break", the phase line and the preset cards - vertically centred in
+// `calc(100vh - 150px)` like production. Every value comes from the real Timer (Rust); presets the
+// native Timer does not have yet (Sprint, Custom) are drawn but unavailable.
+import { WS } from "palette.slint";
+import { WEyebrow, WSolidButton, WOutlineButton, WTextLink } from "parts.slint";
+import { WabiTimerData, WabiModeCard } from "types.slint";
+
+component ModeCard inherits Rectangle {
+    in property <WabiModeCard> card;
+    in property <bool> enabled;
+    callback clicked();
+    private property <bool> usable: root.enabled && root.card.available;
+    width: max(strong.preferred-width, small.preferred-width) + 28px + 2px;
+    height: 44px;
+    background: card.active ? WS.paper-2 : transparent;
+    border-width: 1px;
+    border-color: card.active || (touch.has-hover && root.usable) ? WS.ink : WS.line;
+    strong := Text { x: 15px; y: 8px; height: 14px; vertical-alignment: center; text: root.card.title; font-family: WS.sans; font-size: 12.5px; letter-spacing: 0.75px; color: WS.ink; }
+    small := Text { x: 15px; y: 24px; height: 12px; vertical-alignment: center; text: root.card.detail; font-family: WS.sans; font-size: 10.5px; letter-spacing: 0.63px; color: WS.muted; }
+    touch := TouchArea {
+        enabled: root.usable;
+        mouse-cursor: root.usable ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+    accessible-role: button;
+    accessible-label: root.card.title;
+}
+
+export component WabiTimer inherits Rectangle {
+    in property <WabiTimerData> d;
+    in property <length> viewport-height;
+    callback primary();
+    callback reset();
+    callback log-and-close();
+    callback pick-mode(int);
+
+    // `.wabi-timer-head` (absolute, top 6px)
+    WEyebrow { x: 0px; y: 6px; height: 12px; text: "TIMER"; }
+    Text { x: 0px; y: 22px; height: 35px; vertical-alignment: center; text: root.d.heading; font-family: WS.serif; font-size: 30px; font-weight: 500; color: WS.ink; }
+    if root.d.subline != "": Text { x: 0px; y: 61px; height: 15px; vertical-alignment: center; text: root.d.subline; font-family: WS.sans; font-size: 13px; letter-spacing: 0.78px; color: WS.muted; }
+
+    // `.wabi-timer-grid`: min-height calc(100vh - 150px), padding-bottom 24px, centred column.
+    private property <length> grid-h: max(root.viewport-height - 150px, 8px + body.preferred-height + 24px);
+    body := VerticalLayout {
+        x: 0px;
+        width: parent.width;
+        y: max(0px, (root.grid-h - 24px - 8px - self.preferred-height) / 2) + 8px;
+        alignment: start;
+        Text {
+            height: 128px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            text: root.d.clock;
+            font-family: WS.serif;
+            font-size: 128px;
+            font-weight: 500;
+            letter-spacing: 0.08px;
+            color: WS.ink;
+        }
+        Rectangle { height: 22px; }
+        HorizontalLayout {
+            height: 38px;
+            alignment: center;
+            spacing: 10px;
+            WSolidButton { text: root.d.primary; clicked => { root.primary(); } }
+            WOutlineButton { text: "RESET"; clicked => { root.reset(); } }
+            WOutlineButton { text: "LOG AND CLOSE"; enabled: root.d.can-log; clicked => { root.log-and-close(); } }
+            // switching an idle timer to its break is not in the native Timer yet (drawn, inert)
+            VerticalLayout { alignment: center; WTextLink { text: "SWITCH TO BREAK →"; enabled: false; } }
+        }
+        Rectangle { height: 30px; }
+        Text {
+            height: 12px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            text: root.d.phase-label;
+            font-family: WS.sans;
+            font-size: 10.5px;
+            letter-spacing: 2.1px;
+            color: WS.vermilion;
+        }
+        Rectangle { height: 10px; }
+        HorizontalLayout {
+            height: 44px;
+            alignment: center;
+            spacing: 8px;
+            for card in root.d.modes: ModeCard {
+                card: card;
+                enabled: root.d.modes-enabled;
+                clicked => { root.pick-mode(card.mode); }
+            }
+        }
+    }
+}

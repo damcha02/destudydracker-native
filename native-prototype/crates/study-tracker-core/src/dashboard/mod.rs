@@ -17,6 +17,7 @@ pub mod focus;
 pub mod format;
 pub mod metrics;
 pub mod schedule;
+pub mod wabi;
 
 use std::collections::HashMap;
 

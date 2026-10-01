@@ -22,8 +22,8 @@ component QuietRow inherits Rectangle {
         height: root.item.selected ? 56px : parent.height;
         background: root.item.selected ? root.item.course-color.mix(FN.surface, 0.10) : (root.hovered ? root.item.course-color.mix(FN.surface, 0.07) : transparent);
     }
-    if root.item.selected: HLine { y: 0px; tone: FN.ink; }
-    if root.item.selected: HLine { y: 55px; tone: FN.ink; }
+    if root.item.selected: HLine { y: 0px; tone: FN.rule-hard; }
+    if root.item.selected: HLine { y: 55px; tone: FN.rule-hard; }
     if !root.item.selected && !root.last: DotLine { y: parent.height - 1px; width: parent.width; }
 
     ta := TouchArea {
@@ -260,7 +260,7 @@ export component QuietDashboard inherits Rectangle {
 
         // PACE
         MonoText { x: 0px; y: 0px; height: 12px; text: "PACE"; font-size: 10px; letter-spacing: 1.6px; color: FN.ink; }
-        HLine { y: 17px; tone: FN.ink; }
+        HLine { y: 17px; tone: FN.rule-hard; }
         for line[i] in root.d.pace-lines: MonoText {
             x: 0px;
             y: 25px + i * 21.6px;
@@ -285,7 +285,7 @@ export component QuietDashboard inherits Rectangle {
             y: root.ahead-y - root.pace-y;
             height: root.ahead-h;
             MonoText { x: 0px; y: 0px; height: 12px; text: "AHEAD"; font-size: 10px; letter-spacing: 1.6px; color: FN.ink; }
-            HLine { y: 17px; tone: FN.ink; }
+            HLine { y: 17px; tone: FN.rule-hard; }
             if root.d.ahead.length == 0: MonoText {
                 x: 0px;
                 y: 25px;

@@ -1,0 +1,283 @@
+// `renderWabiSidebar` (Stage 19): Kokoro brand, the overall-score ring, the toolbar (light/dark,
+// help, menu), the six-item navigation with its kanji, the Timer submenu, and the "Tended today"
+// foot with the Quiet-mode link. Geometry = production's measured boxes at 1520x980.
+import { WS } from "palette.slint";
+import { WEyebrow } from "parts.slint";
+import { WabiSidebarData } from "types.slint";
+
+component ToolbarButton inherits Rectangle {
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 32px;
+    height: 32px;
+    border-width: 1px;
+    border-color: touch.has-hover && root.enabled ? WS.ink : WS.line;
+    opacity: root.enabled ? 1 : 0.5;
+    @children
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}
+
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <string> kanji;
+    in property <bool> active;
+    in property <bool> enabled: true;
+    callback clicked();
+    height: 38px;
+    background: touch.has-hover && root.enabled ? WS.paper-2 : transparent;
+    if root.active: Rectangle { x: 0px; width: 2px; background: WS.sage; }
+    label-text := Text {
+        x: 24px;
+        y: 11px;
+        height: 16px;
+        vertical-alignment: center;
+        text: root.label;
+        font-family: WS.serif;
+        font-size: 14.5px;
+        font-weight: root.active ? 500 : 400;
+        color: root.active ? WS.ink : WS.muted;
+    }
+    if root.active: Text {
+        x: label-text.x + label-text.preferred-width + 8px;
+        y: 12px;
+        height: 16px;
+        vertical-alignment: center;
+        text: root.kanji;
+        font-family: WS.kanji;
+        font-size: 12px;
+        color: WS.vermilion;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+    accessible-role: tab;
+    accessible-label: root.label;
+}
+
+export component WabiSidebar inherits Rectangle {
+    in property <WabiSidebarData> d;
+    in property <bool> on-dashboard;
+    in property <bool> on-timer;
+    in property <bool> quiet;
+    in property <bool> theme-locked;
+    in property <bool> dark;
+    in property <bool> timer-menu-open;
+    callback toggle-semester();
+    callback toggle-course(int);
+    callback open-dashboard();
+    callback open-timer();
+    callback toggle-theme();
+    callback open-menu();
+    callback toggle-quiet();
+
+    width: 186px;
+    background: WS.paper-1;
+    // `border-right: var(--wabi-rule-soft)`
+    Rectangle { x: parent.width - 1px; width: 1px; background: WS.rule-soft; }
+    TouchArea { }
+
+    // --- brand ------------------------------------------------------------------------------------
+    Rectangle {
+        x: 22px;
+        y: 27px;
+        width: 15px;
+        height: 15px;
+        border-radius: 7.5px;
+        border-width: 1.5px;
+        border-color: WS.sage;
+    }
+    Text { x: 48px; y: 26px; height: 17px; vertical-alignment: center; text: "Kokoro"; font-family: WS.serif; font-size: 15px; font-weight: 500; letter-spacing: 0.08px; color: WS.ink; }
+
+    // --- overall score ring -------------------------------------------------------------------
+    Rectangle {
+        x: 22px;
+        y: 61px;
+        width: 36px;
+        height: 36px;
+        Path {
+            width: 36px;
+            height: 36px;
+            viewbox-width: 36;
+            viewbox-height: 36;
+            stroke: WS.ring-track;
+            stroke-width: 4px;
+            commands: "M 18 2.5 A 15.5 15.5 0 1 1 17.99 2.5";
+        }
+        if root.d.score > 0: Path {
+            width: 36px;
+            height: 36px;
+            viewbox-width: 36;
+            viewbox-height: 36;
+            stroke: WS.tone(root.d.tone);
+            stroke-width: 4px;
+            stroke-line-cap: round;
+            commands: root.d.arc;
+        }
+        Text {
+            width: parent.width;
+            height: parent.height;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            text: root.d.score;
+            font-family: WS.mono;
+            font-size: 11px;
+            font-weight: 700;
+            color: WS.ink;
+        }
+    }
+    WEyebrow { x: 68px; y: 64px; height: 12px; text: "OVERALL"; }
+    Text { x: 68px; y: 80px; height: 12px; vertical-alignment: center; text: root.d.label; font-family: WS.sans; font-size: 11.5px; font-weight: 600; color: WS.tone(root.d.tone); }
+
+    // --- toolbar --------------------------------------------------------------------------------
+    ToolbarButton {
+        x: 22px;
+        y: 117px;
+        enabled: !root.theme-locked;
+        clicked => { root.toggle-theme(); }
+        Image {
+            x: 8px;
+            y: 8px;
+            width: 16px;
+            height: 16px;
+            source: root.dark ? @image-url("../../assets/dashboard/theme-sun.svg") : @image-url("../../assets/dashboard/theme-moon.svg");
+            colorize: WS.muted;
+        }
+        accessible-role: button;
+        accessible-label: root.theme-locked ? "Sakura is light-only" : "Toggle theme";
+    }
+    ToolbarButton {
+        x: 62px;
+        y: 117px;
+        enabled: true;
+        Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "?"; font-family: WS.sans; font-size: 13px; color: WS.muted; }
+        accessible-role: button;
+        accessible-label: "Open menu help";
+    }
+    ToolbarButton {
+        x: 102px;
+        y: 117px;
+        clicked => { root.open-menu(); }
+        for i in 3: Rectangle { x: 9px; y: 10.8px + i * 4.5px; width: 14px; height: 1.5px; background: WS.muted; }
+        accessible-role: button;
+        accessible-label: "Open menu";
+    }
+
+    // --- navigation -----------------------------------------------------------------------------
+    nav := VerticalLayout {
+        x: 0px;
+        y: 169px;
+        width: parent.width - 1px;
+        NavItem { label: "Today"; kanji: "今日"; active: root.on-dashboard && !root.quiet; clicked => { root.open-dashboard(); } }
+        NavItem { label: "Plan"; kanji: "計画"; enabled: false; }
+        NavItem { label: "Timer"; kanji: "時計"; active: root.on-timer && !root.quiet; clicked => { root.open-timer(); } }
+        // `.wabi-plan-menu` under Timer: the current semester, its courses and their tasks.
+        if root.on-timer && root.timer-menu-open && !root.quiet: VerticalLayout {
+            padding-left: 34px;
+            padding-right: 22px;
+            padding-top: 2px;
+            padding-bottom: 10px;
+            spacing: 2px;
+            if !root.d.has-semester: Text { height: 21px; vertical-alignment: center; text: "No semester yet."; font-family: WS.serif; font-size: 12px; font-italic: true; color: WS.faint; }
+            if root.d.has-semester: Rectangle {
+                height: 25px;
+                Text { y: 0px; height: parent.height; vertical-alignment: center; width: parent.width - 16px; overflow: elide; text: root.d.semester-name; font-family: WS.serif; font-size: 13px; font-weight: 500; color: sem-touch.has-hover ? WS.vermilion : WS.ink; }
+                Text { x: parent.width - self.preferred-width; height: parent.height; vertical-alignment: center; text: root.d.semester-open ? "−" : "+"; font-family: WS.serif; font-size: 13px; color: WS.muted; }
+                sem-touch := TouchArea { mouse-cursor: pointer; clicked => { root.toggle-semester(); } }
+            }
+            if root.d.has-semester && root.d.semester-open: VerticalLayout {
+                spacing: 2px;
+                for course[ci] in root.d.courses: VerticalLayout {
+                    spacing: 2px;
+                    Rectangle {
+                        height: 23px;
+                        Rectangle { x: 0px; width: 2px; background: course.has-color ? course.course-color : WS.rule-soft; }
+                        Text { x: 12px; width: parent.width - 28px; height: parent.height; vertical-alignment: center; overflow: elide; text: course.name; font-family: WS.serif; font-size: 12.5px; color: course-touch.has-hover ? WS.vermilion : WS.muted; }
+                        Text { x: parent.width - self.preferred-width; height: parent.height; vertical-alignment: center; text: course.open ? "−" : "+"; font-family: WS.serif; font-size: 13px; color: WS.muted; }
+                        course-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.toggle-course(ci); }
+                        }
+                    }
+                    if course.open && course.tasks.length == 0: Text { x: 22px; height: 21px; vertical-alignment: center; text: "No tasks yet."; font-family: WS.serif; font-size: 12px; font-italic: true; color: WS.faint; }
+                    if course.open: VerticalLayout {
+                        for task in course.tasks: Text {
+                            height: 21px;
+                            x: 22px;
+                            vertical-alignment: center;
+                            overflow: elide;
+                            text: task.title;
+                            font-family: WS.serif;
+                            font-size: 12px;
+                            font-weight: task.selected ? 600 : 400;
+                            color: task.selected ? WS.ink : WS.muted;
+                        }
+                    }
+                }
+                if root.d.courses.length == 0: Text { height: 21px; vertical-alignment: center; text: "No courses yet."; font-family: WS.serif; font-size: 12px; font-italic: true; color: WS.faint; }
+            }
+            Rectangle {
+                height: 17px;
+                Text { y: 4px; height: 13px; text: "Session logs"; font-family: WS.serif; font-size: 11px; letter-spacing: 0.44px; color: WS.faint; }
+                // `text-decoration: underline` (Slint has none): a hairline under the text.
+                Rectangle { x: 0px; y: 4px + 13px + 0px; width: logs-width.preferred-width; height: 1px; background: WS.faint; }
+                logs-width := Text { visible: false; text: "Session logs"; font-family: WS.serif; font-size: 11px; letter-spacing: 0.44px; }
+            }
+        }
+        NavItem { label: "Notes"; kanji: "記録"; enabled: false; }
+        NavItem { label: "Rest"; kanji: "休み"; enabled: false; }
+        NavItem { label: "Circle"; kanji: "仲間"; enabled: false; }
+    }
+
+    // --- foot -------------------------------------------------------------------------------------
+    Rectangle {
+        y: parent.height - 137px;
+        width: parent.width - 1px;
+        height: 137px;
+        Rectangle { y: 0px; height: 1px; background: WS.rule-soft; }
+        WEyebrow { x: 22px; y: 19px; height: 12px; text: "TENDED TODAY"; }
+        Text { x: 22px; y: 34px; height: 25px; vertical-alignment: center; text: root.d.tended; font-family: WS.serif; font-size: 22px; font-weight: 500; letter-spacing: 0.08px; color: WS.ink; }
+        Rectangle {
+            x: 22px;
+            y: 67px;
+            width: parent.width - 44px;
+            height: 5px;
+            background: WS.line;
+            Rectangle { x: 0px; width: parent.width * root.d.goal-fraction; background: WS.sage; }
+        }
+        // `.wabi-quiet-link`: dotted top rule, then the link.
+        Image {
+            x: 22px;
+            y: 88px;
+            width: parent.width - 44px;
+            height: 1px;
+            source: @image-url("../../assets/dashboard/dot-h.svg");
+            horizontal-tiling: repeat;
+            colorize: WS.line;
+        }
+        quiet-link := Text {
+            x: 22px;
+            y: 102px;
+            height: 13px;
+            vertical-alignment: center;
+            text: root.quiet ? "← BACK TO THE APP" : "QUIET MODE →";
+            font-family: WS.sans;
+            font-size: 11.5px;
+            letter-spacing: 1.15px;
+            color: quiet-touch.has-hover ? WS.vermilion : WS.sage;
+        }
+        quiet-touch := TouchArea {
+            x: 22px;
+            y: 88px;
+            width: parent.width - 44px;
+            height: 27px;
+            mouse-cursor: pointer;
+            clicked => { root.toggle-quiet(); }
+        }
+    }
+}
