@@ -1,0 +1,196 @@
+# code	iso2	name	continent	region	population	landlocked	areaKm2	religion	government
+AFG	AF	Afghanistan	Asia	Southern Asia	37172386	true	652090	Islam	Republic
+ALB	AL	Albania	Europe	Southeast Europe	2866376	false	28748	Islam	Republic
+DZA	DZ	Algeria	Africa	Northern Africa	42228429	false	2381741	Islam	Republic
+AND	AD	Andorra	Europe	Southern Europe	77006	true	468	Christianity	Republic
+AGO	AO	Angola	Africa	Middle Africa	30809762	false	1246700	Christianity	Republic
+ATG	AG	Antigua and Barbuda	Americas	Caribbean	96286	false	442	Christianity	Constitutional monarchy
+ARG	AR	Argentina	Americas	South America	44494502	false	2780400	Christianity	Federal republic
+ARM	AM	Armenia	Asia	Western Asia	2951776	true	29800	Islam	Republic
+AUS	AU	Australia	Oceania	Australia and New Zealand	24982688	false	7741220	Christianity	Constitutional monarchy
+AUT	AT	Austria	Europe	Central Europe	8840521	true	83859	Christianity	Federal republic
+AZE	AZ	Azerbaijan	Asia	Western Asia	9939800	true	86600	Islam	Republic
+BHS	BS	Bahamas	Americas	Caribbean	385640	false	13878	Christianity	Constitutional monarchy
+BHR	BH	Bahrain	Asia	Western Asia	1569439	false	694	Islam	Monarchy
+BGD	BD	Bangladesh	Asia	Southern Asia	161356039	false	143998	Islam	Republic
+BRB	BB	Barbados	Americas	Caribbean	286641	false	430	Christianity	Constitutional monarchy
+BLR	BY	Belarus	Europe	Eastern Europe	9483499	true	207600	Christianity	Republic
+BEL	BE	Belgium	Europe	Western Europe	11433256	false	30518	Christianity	Constitutional monarchy
+BLZ	BZ	Belize	Americas	Central America	383071	false	22696	Christianity	Constitutional monarchy
+BEN	BJ	Benin	Africa	Western Africa	11485048	false	112622	Folk/Traditional	Republic
+BTN	BT	Bhutan	Asia	Southern Asia	754394	true	47000	Buddhism	Monarchy
+BOL	BO	Bolivia	Americas	South America	11353142	true	1098581	Christianity	Republic
+BIH	BA	Bosnia and Herzegovina	Europe	Southeast Europe	3323929	false	51197	Christianity	Federal republic
+BWA	BW	Botswana	Africa	Southern Africa	2254126	true	581730	Christianity	Republic
+BRA	BR	Brazil	Americas	South America	209469333	false	8547403	Christianity	Federal republic
+BRN	BN	Brunei	Asia	South-Eastern Asia	428962	false	5765	Islam	Monarchy
+BGR	BG	Bulgaria	Europe	Southeast Europe	7025037	false	110994	Christianity	Republic
+BFA	BF	Burkina Faso	Africa	Western Africa	19751535	true	274000	Islam	Republic
+BDI	BI	Burundi	Africa	Eastern Africa	11175378	true	27834	Christianity	Republic
+KHM	KH	Cambodia	Asia	South-Eastern Asia	16249798	false	181035	Buddhism	Constitutional monarchy
+CMR	CM	Cameroon	Africa	Middle Africa	25216237	false	475442	Christianity	Republic
+CAN	CA	Canada	Americas	North America	37057765	false	9970610	Christianity	Constitutional monarchy
+CPV	CV	Cape Verde	Africa	Western Africa	555987	false	4033	Christianity	Republic
+CAF	CF	Central African Republic	Africa	Middle Africa	4666377	true	622984	Christianity	Republic
+TCD	TD	Chad	Africa	Middle Africa	15477751	true	1284000	Islam	Republic
+CHL	CL	Chile	Americas	South America	18729160	false	756626	Christianity	Republic
+CHN	CN	China	Asia	Eastern Asia	1392730000	false	9572900	Unaffiliated	One-party state
+COL	CO	Colombia	Americas	South America	49648685	false	1138914	Christianity	Republic
+COM	KM	Comoros	Africa	Eastern Africa	832322	false	1862	Islam	Federal republic
+COG	CG	Congo	Africa	Middle Africa	5244363	false	342000	Christianity	Republic
+CRI	CR	Costa Rica	Americas	Central America	4999441	false	51100	Christianity	Republic
+HRV	HR	Croatia	Europe	Southeast Europe	4087843	false	56538	Christianity	Republic
+CUB	CU	Cuba	Americas	Caribbean	11338138	false	110861	Christianity	One-party state
+CYP	CY	Cyprus	Europe	Southern Europe	1189265	false	9251	Christianity	Republic
+CZE	CZ	Czechia	Europe	Central Europe	10629928	true	78866	Unaffiliated	Republic
+DNK	DK	Denmark	Europe	Northern Europe	5793636	false	43094	Christianity	Constitutional monarchy
+DJI	DJ	Djibouti	Africa	Eastern Africa	958920	false	23200	Islam	Republic
+DMA	DM	Dominica	Americas	Caribbean	71625	false	751	Christianity	Republic
+DOM	DO	Dominican Republic	Americas	Caribbean	10627165	false	48511	Christianity	Republic
+COD	CD	DR Congo	Africa	Middle Africa	84068091	false	2344858	Christianity	Republic
+ECU	EC	Ecuador	Americas	South America	17084357	false	283561	Christianity	Republic
+EGY	EG	Egypt	Africa	Northern Africa	98423595	false	1001449	Islam	Republic
+SLV	SV	El Salvador	Americas	Central America	6420744	false	21041	Christianity	Republic
+GNQ	GQ	Equatorial Guinea	Africa	Middle Africa	1308974	false	28051	Christianity	Republic
+ERI	ER	Eritrea	Africa	Eastern Africa	6213972	false	117600	Christianity	One-party state
+EST	EE	Estonia	Europe	Northern Europe	1321977	false	45227	Unaffiliated	Republic
+SWZ	SZ	Eswatini	Africa	Southern Africa	1136191	true	17364	Christianity	Monarchy
+ETH	ET	Ethiopia	Africa	Eastern Africa	109224559	true	1104300	Christianity	Federal republic
+FJI	FJ	Fiji	Oceania	Melanesia	883483	false	18274	Christianity	Republic
+FIN	FI	Finland	Europe	Northern Europe	5515525	false	338145	Christianity	Republic
+FRA	FR	France	Europe	Western Europe	66977107	false	551500	Christianity	Republic
+GAB	GA	Gabon	Africa	Middle Africa	2119275	false	267668	Christianity	Republic
+GMB	GM	Gambia	Africa	Western Africa	2280102	false	11295	Islam	Republic
+GEO	GE	Georgia	Asia	Western Asia	3726549	false	69700	Islam	Republic
+DEU	DE	Germany	Europe	Western Europe	82905782	false	357022	Christianity	Federal republic
+GHA	GH	Ghana	Africa	Western Africa	29767108	false	238533	Christianity	Republic
+GRC	GR	Greece	Europe	Southern Europe	10731726	false	131626	Christianity	Republic
+GRD	GD	Grenada	Americas	Caribbean	111454	false	344	Christianity	Constitutional monarchy
+GTM	GT	Guatemala	Americas	Central America	17247807	false	108889	Christianity	Republic
+GIN	GN	Guinea	Africa	Western Africa	12414318	false	245857	Islam	Republic
+GNB	GW	Guinea-Bissau	Africa	Western Africa	1874309	false	36125	Christianity	Republic
+GUY	GY	Guyana	Americas	South America	779004	false	214969	Christianity	Republic
+HTI	HT	Haiti	Americas	Caribbean	11123176	false	27750	Folk/Traditional	Republic
+HND	HN	Honduras	Americas	Central America	9587522	false	112088	Christianity	Republic
+HUN	HU	Hungary	Europe	Central Europe	9775564	true	93030	Christianity	Republic
+ISL	IS	Iceland	Europe	Northern Europe	352721	false	103000	Christianity	Republic
+IND	IN	India	Asia	Southern Asia	1352617328	false	3287263	Hinduism	Federal republic
+IDN	ID	Indonesia	Asia	South-Eastern Asia	267663435	false	1904569	Islam	Republic
+IRN	IR	Iran	Asia	Southern Asia	81800269	false	1648195	Islam	Theocracy
+IRQ	IQ	Iraq	Asia	Western Asia	38433600	false	438317	Islam	Federal republic
+IRL	IE	Ireland	Europe	Northern Europe	4867309	false	70273	Christianity	Republic
+ISR	IL	Israel	Asia	Western Asia	8882800	false	21056	Judaism	Republic
+ITA	IT	Italy	Europe	Southern Europe	60421760	false	301316	Christianity	Republic
+CIV	CI	Ivory Coast	Africa	Western Africa	25069229	false	322463	Christianity	Republic
+JAM	JM	Jamaica	Americas	Caribbean	2934855	false	10990	Christianity	Constitutional monarchy
+JPN	JP	Japan	Asia	Eastern Asia	126529100	false	377829	Unaffiliated	Constitutional monarchy
+JOR	JO	Jordan	Asia	Western Asia	9956011	false	88946	Islam	Monarchy
+KAZ	KZ	Kazakhstan	Asia	Central Asia	18272430	true	2724900	Islam	Republic
+KEN	KE	Kenya	Africa	Eastern Africa	51393010	false	580367	Christianity	Republic
+KIR	KI	Kiribati	Oceania	Micronesia	115847	false	726	Christianity	Republic
+KWT	KW	Kuwait	Asia	Western Asia	4137309	false	17818	Islam	Monarchy
+KGZ	KG	Kyrgyzstan	Asia	Central Asia	6322800	true	199900	Islam	Republic
+LAO	LA	Laos	Asia	South-Eastern Asia	7061507	true	236800	Buddhism	One-party state
+LVA	LV	Latvia	Europe	Northern Europe	1927174	false	64589	Christianity	Republic
+LBN	LB	Lebanon	Asia	Western Asia	6848925	false	10400	Islam	Republic
+LSO	LS	Lesotho	Africa	Southern Africa	2108132	true	30355	Christianity	Constitutional monarchy
+LBR	LR	Liberia	Africa	Western Africa	4818977	false	111369	Christianity	Republic
+LBY	LY	Libya	Africa	Northern Africa	6678567	false	1759540	Islam	Republic
+LIE	LI	Liechtenstein	Europe	Western Europe	37910	true	160	Christianity	Monarchy
+LTU	LT	Lithuania	Europe	Northern Europe	2801543	false	65301	Christianity	Republic
+LUX	LU	Luxembourg	Europe	Western Europe	607950	true	2586	Christianity	Constitutional monarchy
+MDG	MG	Madagascar	Africa	Eastern Africa	26262368	false	587041	Christianity	Republic
+MWI	MW	Malawi	Africa	Eastern Africa	18143315	true	118484	Christianity	Republic
+MYS	MY	Malaysia	Asia	South-Eastern Asia	31528585	false	329758	Islam	Constitutional monarchy
+MDV	MV	Maldives	Asia	Southern Asia	515696	false	298	Islam	Republic
+MLI	ML	Mali	Africa	Western Africa	19077690	true	1240192	Islam	Republic
+MLT	MT	Malta	Europe	Southern Europe	484630	false	316	Christianity	Republic
+MHL	MH	Marshall Islands	Oceania	Micronesia	58413	false	181	Christianity	Republic
+MRT	MR	Mauritania	Africa	Western Africa	4403319	false	1025520	Islam	Republic
+MUS	MU	Mauritius	Africa	Eastern Africa	1265303	false	2040	Hinduism	Republic
+MEX	MX	Mexico	Americas	North America	126190788	false	1958201	Christianity	Federal republic
+FSM	FM	Micronesia	Oceania	Micronesia	112640	false	702	Christianity	Federal republic
+MDA	MD	Moldova	Europe	Eastern Europe	2706049	true	33851	Christianity	Republic
+MCO	MC	Monaco	Europe	Western Europe	38682	false	2	Christianity	Monarchy
+MNG	MN	Mongolia	Asia	Eastern Asia	3170208	true	1566500	Buddhism	Republic
+MNE	ME	Montenegro	Europe	Southeast Europe	631219	false	13812	Christianity	Republic
+MAR	MA	Morocco	Africa	Northern Africa	36029138	false	446550	Islam	Monarchy
+MOZ	MZ	Mozambique	Africa	Eastern Africa	29495962	false	801590	Christianity	Republic
+MMR	MM	Myanmar	Asia	South-Eastern Asia	53708395	false	676578	Buddhism	Military junta
+NAM	NA	Namibia	Africa	Southern Africa	2448255	false	824292	Christianity	Republic
+NRU	NR	Nauru	Oceania	Micronesia	12704	false	21	Christianity	Republic
+NPL	NP	Nepal	Asia	Southern Asia	28087871	true	147181	Hinduism	Federal republic
+NLD	NL	Netherlands	Europe	Western Europe	17231624	false	41526	Christianity	Constitutional monarchy
+NZL	NZ	New Zealand	Oceania	Australia and New Zealand	4841000	false	270534	Christianity	Constitutional monarchy
+NIC	NI	Nicaragua	Americas	Central America	6465513	false	130000	Christianity	Republic
+NER	NE	Niger	Africa	Western Africa	22442948	true	1267000	Islam	Republic
+NGA	NG	Nigeria	Africa	Western Africa	195874740	false	923768	Christianity	Federal republic
+PRK	KP	North Korea	Asia	Eastern Asia	25549819	false	120538	Unaffiliated	One-party state
+MKD	MK	North Macedonia	Europe	Southeast Europe	2084367	true	25713	Christianity	Republic
+NOR	NO	Norway	Europe	Northern Europe	5311916	false	323877	Christianity	Constitutional monarchy
+OMN	OM	Oman	Asia	Western Asia	4829483	false	309500	Islam	Monarchy
+PAK	PK	Pakistan	Asia	Southern Asia	212215030	false	796095	Islam	Federal republic
+PLW	PW	Palau	Oceania	Micronesia	17907	false	459	Christianity	Republic
+PAN	PA	Panama	Americas	Central America	4176873	false	75517	Christianity	Republic
+PNG	PG	Papua New Guinea	Oceania	Melanesia	8606316	false	462840	Christianity	Constitutional monarchy
+PRY	PY	Paraguay	Americas	South America	6956071	true	406752	Christianity	Republic
+PER	PE	Peru	Americas	South America	31989256	false	1285216	Christianity	Republic
+PHL	PH	Philippines	Asia	South-Eastern Asia	106651922	false	300000	Islam	Republic
+POL	PL	Poland	Europe	Central Europe	37974750	false	323250	Christianity	Republic
+PRT	PT	Portugal	Europe	Southern Europe	10283822	false	91982	Christianity	Republic
+QAT	QA	Qatar	Asia	Western Asia	2781677	false	11000	Islam	Monarchy
+ROU	RO	Romania	Europe	Southeast Europe	19466145	false	238391	Christianity	Republic
+RUS	RU	Russia	Europe	Eastern Europe	144478050	false	17075400	Christianity	Federal republic
+RWA	RW	Rwanda	Africa	Eastern Africa	12301939	true	26338	Christianity	Republic
+KNA	KN	Saint Kitts and Nevis	Americas	Caribbean	52441	false	261	Christianity	Constitutional monarchy
+LCA	LC	Saint Lucia	Americas	Caribbean	181889	false	622	Christianity	Constitutional monarchy
+VCT	VC	Saint Vincent and the Grenadines	Americas	Caribbean	110210	false	388	Christianity	Constitutional monarchy
+WSM	WS	Samoa	Oceania	Polynesia	196130	false	2831	Christianity	Republic
+SMR	SM	San Marino	Europe	Southern Europe	33785	true	61	Christianity	Republic
+STP	ST	São Tomé and Príncipe	Africa	Middle Africa	211028	false	964	Christianity	Republic
+SAU	SA	Saudi Arabia	Asia	Western Asia	33699947	false	2149690	Islam	Monarchy
+SEN	SN	Senegal	Africa	Western Africa	15854360	false	196722	Islam	Republic
+SRB	RS	Serbia	Europe	Southeast Europe	6963764	true	88361	Christianity	Republic
+SYC	SC	Seychelles	Africa	Eastern Africa	96762	false	455	Christianity	Republic
+SLE	SL	Sierra Leone	Africa	Western Africa	7650154	false	71740	Islam	Republic
+SGP	SG	Singapore	Asia	South-Eastern Asia	5638676	false	618	Mixed	Republic
+SVK	SK	Slovakia	Europe	Central Europe	5446771	true	49012	Christianity	Republic
+SVN	SI	Slovenia	Europe	Central Europe	2073894	false	20256	Christianity	Republic
+SLB	SB	Solomon Islands	Oceania	Melanesia	652858	false	28896	Christianity	Constitutional monarchy
+SOM	SO	Somalia	Africa	Eastern Africa	15008154	false	637657	Islam	Federal republic
+ZAF	ZA	South Africa	Africa	Southern Africa	57779622	false	1221037	Christianity	Republic
+KOR	KR	South Korea	Asia	Eastern Asia	51606633	false	99434	Mixed	Republic
+SSD	SS	South Sudan	Africa	Middle Africa	10975920	true	619745	Christianity	Federal republic
+ESP	ES	Spain	Europe	Southern Europe	46796540	false	505992	Christianity	Constitutional monarchy
+LKA	LK	Sri Lanka	Asia	Southern Asia	21670000	false	65610	Buddhism	Republic
+SDN	SD	Sudan	Africa	Northern Africa	41801533	false	1886068	Islam	Federal republic
+SUR	SR	Suriname	Americas	South America	575991	false	163265	Mixed	Republic
+SWE	SE	Sweden	Europe	Northern Europe	10175214	false	449964	Christianity	Constitutional monarchy
+CHE	CH	Switzerland	Europe	Western Europe	8513227	true	41284	Christianity	Federal republic
+SYR	SY	Syria	Asia	Western Asia	16906283	false	185180	Islam	Republic
+TWN	TW	Taiwan	Asia	Eastern Asia	23570000	false	36193	Mixed	Republic
+TJK	TJ	Tajikistan	Asia	Central Asia	9100837	true	143100	Islam	Republic
+TZA	TZ	Tanzania	Africa	Eastern Africa	56318348	false	883749	Christianity	Republic
+THA	TH	Thailand	Asia	South-Eastern Asia	69428524	false	513115	Buddhism	Constitutional monarchy
+TLS	TL	Timor-Leste	Asia	South-Eastern Asia	1267972	false	14874	Islam	Republic
+TGO	TG	Togo	Africa	Western Africa	7889094	false	56785	Folk/Traditional	Republic
+TON	TO	Tonga	Oceania	Polynesia	103197	false	650	Christianity	Monarchy
+TTO	TT	Trinidad and Tobago	Americas	Caribbean	1389858	false	5130	Christianity	Republic
+TUN	TN	Tunisia	Africa	Northern Africa	11565204	false	163610	Islam	Republic
+TUR	TR	Türkiye	Asia	Western Asia	82319724	false	774815	Islam	Republic
+TKM	TM	Turkmenistan	Asia	Central Asia	5850908	true	488100	Islam	Republic
+TUV	TV	Tuvalu	Oceania	Polynesia	11508	false	26	Christianity	Constitutional monarchy
+UGA	UG	Uganda	Africa	Eastern Africa	42723139	true	241038	Christianity	Republic
+UKR	UA	Ukraine	Europe	Eastern Europe	44622516	false	603700	Christianity	Republic
+ARE	AE	United Arab Emirates	Asia	Western Asia	9630959	false	83600	Islam	Monarchy
+GBR	GB	United Kingdom	Europe	Northern Europe	66460344	false	242900	Christianity	Constitutional monarchy
+USA	US	United States	Americas	North America	326687501	false	9363520	Christianity	Federal republic
+URY	UY	Uruguay	Americas	South America	3449299	false	175016	Christianity	Republic
+UZB	UZ	Uzbekistan	Asia	Central Asia	32955400	true	447400	Islam	Republic
+VUT	VU	Vanuatu	Oceania	Melanesia	292680	false	12189	Christianity	Republic
+VAT	VA	Vatican City	Europe	Southern Europe	825	true	0	Christianity	Theocracy
+VEN	VE	Venezuela	Americas	South America	28870195	false	912050	Christianity	Federal republic
+VNM	VN	Vietnam	Asia	South-Eastern Asia	95540395	false	331689	Unaffiliated	One-party state
+YEM	YE	Yemen	Asia	Western Asia	28498687	false	527968	Islam	Republic
+ZMB	ZM	Zambia	Africa	Eastern Africa	17351822	true	752618	Christianity	Republic
+ZWE	ZW	Zimbabwe	Africa	Eastern Africa	14439018	true	390757	Christianity	Republic

@@ -159,6 +159,24 @@ pub fn apply_appearance(window: &MainWindow) {
         refresh_wabi(window, true);
         refresh_wabi_timer(window, Instant::now());
     }
+    // Stage 20: the game modals follow the style's CSS variables, the Rest ring's tint the tokens.
+    let base = if resolved.rendered == RenderedStyle::WabiSabi {
+        crate::game_tokens::wabi_base(resolved.dark)
+    } else {
+        let t = FN::get(window).get_t();
+        crate::game_tokens::Base {
+            surface: t.surface,
+            surface_2: t.surface_2,
+            inset: t.surface_inset,
+            border: t.line,
+            accent: t.accent,
+            text: t.ink,
+            muted: t.ink_3,
+        }
+    };
+    crate::Game::get(window).set_t(crate::game_tokens::tokens(base));
+    crate::Game::get(window).set_square_buttons(resolved.rendered != RenderedStyle::WabiSabi);
+    crate::app_break_room::push(window);
     sync_sakura();
 }
 
@@ -490,7 +508,7 @@ fn window_visible(window: &MainWindow) -> bool {
     true
 }
 
-fn reduced_motion() -> bool {
+pub(crate) fn reduced_motion() -> bool {
     if std::env::var_os("STUDY_NATIVE_REDUCED_MOTION").is_some() {
         return true;
     }

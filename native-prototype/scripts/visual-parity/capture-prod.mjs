@@ -9,6 +9,8 @@
 //        Stage 19: [--style field-notebook|wabi-sabi] [--palette default|sakura] [--quiet 1]
 //        [--anim-time <ms>]  pause every CSS/Web animation at that animation time (Sakura frames)
 //        [--reduced-motion 1] [--settle <ms>]
+//        Stage 20: [--math-random <0..1>]  pin Math.random (the Break Room's quote/stretch pick and
+//        Durak's hint), so a capture is reproducible and the native app can be told the same pick
 //
 // Isolation: a throw-away --user-data-dir (fresh, deleted afterwards) means production's own
 // localStorage/app-data are never read or written; the fixture is injected into that temp
@@ -91,6 +93,9 @@ if (args.now) {
   // Freeze "now" so the synthetic fixture and the native app agree on what today is.
   const fixed = Date.parse(args.now);
   await send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => { const R = Date; const t0 = ${fixed}; class F extends R { constructor(...a) { if (a.length === 0) super(t0); else super(...a); } static now() { return t0; } } window.Date = F; })();` });
+}
+if (args["math-random"] !== undefined) {
+  await send("Page.addScriptToEvaluateOnNewDocument", { source: `Math.random = () => ${Number(args["math-random"])};` });
 }
 await send("Page.navigate", { url: appUrl });
 for (let i = 0; i < 60; i++) {

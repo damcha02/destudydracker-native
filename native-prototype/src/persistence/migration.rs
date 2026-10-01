@@ -88,6 +88,10 @@ fn known_field_class(key: &str) -> Option<FieldClass> {
         "timer" | "semesters" | "courses" | "tasks" | "exams" | "sessions" | "timetableEvents"
         | "holidays" | "dailyTodos" | "calendarEntries" => Some(FieldClass::Consumed),
         "social" => Some(FieldClass::Withheld),
+        // Stage 20: the Break Room's 21 AppState keys -> the native `break_room` section.
+        key if crate::persistence::break_room_port::PRODUCTION_KEYS.contains(&key) => {
+            Some(FieldClass::Consumed)
+        }
         _ => None,
     }
 }
@@ -197,6 +201,11 @@ pub fn classify_fields(state: &Map<String, Value>) -> Vec<FieldReport> {
                     "device secret / friend code / verified-session anchor / cached network \
                      state - withheld, never written to the native store (see Stage 15 section 24/section 25)"
                 }
+                (key, FieldClass::Consumed)
+                    if crate::persistence::break_room_port::PRODUCTION_KEYS.contains(&key) =>
+                {
+                    "converted into the native Break Room section (see Stage 20 section 13)"
+                }
                 (_, FieldClass::Consumed) => {
                     "converted into the native academic-domain store (see Stage 16 section 15)"
                 }
@@ -252,7 +261,7 @@ struct ProductionTimerState {
     last_alive_at: Option<String>,
 }
 
-fn parse_iso_wall_timestamp(text: &str) -> Result<WallTimestamp, String> {
+pub(crate) fn parse_iso_wall_timestamp(text: &str) -> Result<WallTimestamp, String> {
     chrono::DateTime::parse_from_rfc3339(text)
         .map(|dt| WallTimestamp::from_unix_millis(dt.timestamp_millis()))
         .map_err(|err| format!("could not parse timestamp {text:?}: {err}"))
@@ -369,6 +378,9 @@ pub struct ImportReport {
     /// Stage 19: the backup carried at least one of the style/palette/theme preferences and they
     /// were written (merged key by key, like `restoreBackup`).
     pub appearance_imported: bool,
+    /// Stage 20: the Break Room section was written from the backup (always: `restoreBackup`
+    /// replaces the core state, so a backup without those keys resets them to defaults).
+    pub break_room_imported: bool,
     pub warnings: Vec<String>,
     pub committed: bool,
 }
@@ -486,6 +498,15 @@ pub fn commit_import(
             .other
             .insert(SECTION.into(), write_appearance(section, appearance));
     }
+    // Stage 20: the Break Room section, replaced like restoreBackup replaces the core state.
+    use crate::persistence::break_room_port::{self as br, SECTION as BREAK_ROOM};
+    let current_tree = br::parse_section(envelope.other.get(BREAK_ROOM)).rest_tree;
+    let break_room =
+        br::from_production_backup(&discovered.state, &discovered.preferences, current_tree);
+    let break_room_value = br::write_section(&break_room);
+    envelope
+        .other
+        .insert(BREAK_ROOM.into(), break_room_value.clone());
     destination_store
         .save(&envelope)
         .map_err(|err| format!("failed to write the native destination: {err}"))?;
@@ -502,9 +523,12 @@ pub fn commit_import(
     };
     let appearance_mismatch = imported_appearance
         .is_some_and(|appearance| parse_appearance(read_back.other.get(SECTION)) != appearance);
+    let break_room_mismatch = read_back.other.get(BREAK_ROOM) != Some(&break_room_value)
+        || br::parse_section(read_back.other.get(BREAK_ROOM)) != break_room;
     if read_back.timer != timer
         || read_back.academic.as_ref() != Some(&academic)
         || appearance_mismatch
+        || break_room_mismatch
     {
         let _ = destination_store.save(&pre_import_envelope);
         return Err(
@@ -520,6 +544,7 @@ pub fn commit_import(
         timer_imported: timer.is_some(),
         academic_summary,
         appearance_imported: imported_appearance.is_some(),
+        break_room_imported: true,
         warnings,
         committed: true,
     })
@@ -826,6 +851,72 @@ mod tests {
         let raw = fs::read_to_string(store.path()).unwrap();
         assert!(!raw.contains("deviceSecret"));
         assert!(!raw.contains("social"));
+    }
+
+    #[test]
+    fn break_room_state_imports_into_its_own_section_and_is_verified() {
+        let dir = temp_dir("break-room");
+        let store = NativeStore::new(dir.0.join("store.json"));
+        let backup = r#"{
+            "app": "study-tracker", "backupVersion": 2, "exportedAt": "2026-09-30T10:00:00.000Z",
+            "state": {
+                "sessions": [], "courses": [], "social": {"userId": "u1", "deviceSecret": "s1"},
+                "unlockedGames": ["Wordle"], "unlockedGamesDate": "2026-09-30", "totalUnlocks": 4,
+                "petRockPats": 77, "badgeCounts": {"early-bird": 2},
+                "achievementEarnedOnDates": {"first-break": "2026-09-01"},
+                "wordlePuzzle": {"seedSalt": "abc", "activeDate": "2026-09-30", "puzzleId": "p", "answer": "frost",
+                                 "guesses": [], "completed": false, "won": false, "hardMode": true}
+            },
+            "preferences": {"study-tracker-rest-tree": "2"}
+        }"#;
+        let source = write_fixture(&dir.0, "backup.json", backup);
+        let (discovered, fields, timer, academic, _w) =
+            inspect_import(&source, &dir.0.join("copies")).unwrap();
+        let classes: Vec<_> = fields
+            .iter()
+            .filter(|f| f.key == "petRockPats" || f.key == "wordlePuzzle")
+            .map(|f| f.class)
+            .collect();
+        assert_eq!(classes, [FieldClass::Consumed, FieldClass::Consumed]);
+        let report = commit_import(&store, &discovered, fields, timer.unwrap(), academic).unwrap();
+        assert!(report.break_room_imported);
+        let (loaded, _) = store.load().unwrap();
+        let section = &loaded.other["break_room"];
+        assert_eq!(section["petRockPats"], 77);
+        assert_eq!(section["badgeCounts"]["early-bird"], 2);
+        assert_eq!(section["wordlePuzzle"]["seedSalt"], "abc");
+        assert_eq!(section["restTree"], 2);
+        assert_eq!(
+            section["durakPuzzle"]["phase"], "player_attack",
+            "absent keys come back as defaults"
+        );
+        assert!(!fs::read_to_string(store.path())
+            .unwrap()
+            .contains("deviceSecret"));
+    }
+
+    #[test]
+    fn importing_an_old_backup_resets_break_room_state_like_restore_backup() {
+        let dir = temp_dir("break-room-reset");
+        let store = NativeStore::new(dir.0.join("store.json"));
+        fs::write(
+            store.path(),
+            br#"{"schema_version": 1, "break_room": {"petRockPats": 500, "restTree": 3}}"#,
+        )
+        .unwrap();
+        let source = write_fixture(
+            &dir.0,
+            "backup.json",
+            &minimal_valid_backup(valid_timer_json()),
+        );
+        let (d, f, t, a, _w) = inspect_import(&source, &dir.0.join("copies")).unwrap();
+        commit_import(&store, &d, f, t.unwrap(), a).unwrap();
+        let (loaded, _) = store.load().unwrap();
+        assert_eq!(loaded.other["break_room"]["petRockPats"], 0);
+        assert_eq!(
+            loaded.other["break_room"]["restTree"], 3,
+            "a preference absent from the backup stays"
+        );
     }
 
     #[test]

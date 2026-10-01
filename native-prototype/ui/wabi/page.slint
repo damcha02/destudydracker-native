@@ -10,6 +10,9 @@ import { WabiTimer } from "timer.slint";
 import { WabiQuiet } from "quiet.slint";
 import { WabiSidebarData, WabiDashData, WabiTimerData, WabiQuietData } from "types.slint";
 import { SakuraPetals, SakuraTexture, PetalData } from "../sakura.slint";
+import { WabiRest } from "rest.slint";
+import { WabiRestData } from "../break/types.slint";
+import { AlbumData } from "album.slint";
 
 export component WabiPage inherits Rectangle {
     in property <WabiSidebarData> sidebar;
@@ -24,6 +27,30 @@ export component WabiPage inherits Rectangle {
     in property <bool> sakura;
     in property <[PetalData]> petals;
     in property <int> texture-frame;
+    // Stage 20: the Rest room
+    in property <bool> on-rest;
+    in property <bool> rest-menu-open;
+    in property <WabiRestData> rest;
+    in property <int> rest-room;
+    in property <float> breath-ring: 60;
+    in property <int> album-cover-seq;
+    in property <int> album-leaf-seq;
+    in property <bool> album-slide-open;
+    in property <AlbumData> album;
+    in property <bool> rock-bounce;
+    callback open-rest();
+    callback pick-room(int);
+    callback rest-toggle();
+    callback rest-reset();
+    callback rest-edit(string);
+    callback rest-play(int);
+    callback rest-unlock(int);
+    callback next-tree();
+    callback pat-rock();
+    callback breath-toggle();
+    callback album-open();
+    callback album-turn(int);
+    callback album-close();
 
     callback open-dashboard();
     callback open-timer();
@@ -47,7 +74,7 @@ export component WabiPage inherits Rectangle {
 
     private property <length> gutter: 10px;
     private property <length> content-w: min(1386px, root.width - 298px);
-    private property <length> page-h: root.on-timer ? root.height : 22px + dashboard.content-height;
+    private property <length> page-h: root.on-timer || root.on-rest ? root.height : 22px + dashboard.content-height;
 
     background: WS.desk;
     clip: true;
@@ -58,10 +85,10 @@ export component WabiPage inherits Rectangle {
         height: parent.height;
         viewport-width: self.width;
         viewport-height: max(self.height, root.page-h);
-        interactive: !root.on-timer;
+        interactive: !root.on-timer && !root.on-rest;
 
         dashboard := WabiDashboard {
-            visible: !root.on-timer;
+            visible: !root.on-timer && !root.on-rest;
             x: 32px;
             y: 22px;
             width: root.content-w;
@@ -74,6 +101,31 @@ export component WabiPage inherits Rectangle {
             deadline-select(i) => { root.deadline-select(i); }
             planned-mark(i) => { root.planned-mark(i); }
             planned-select(i) => { root.planned-select(i); }
+        }
+        if root.on-rest: WabiRest {
+            x: 32px;
+            y: 22px;
+            width: root.content-w;
+            height: root.height - 52px;
+            d: root.rest;
+            room: root.rest-room;
+            breath-ring: root.breath-ring;
+            album-cover-seq: root.album-cover-seq;
+            album-leaf-seq: root.album-leaf-seq;
+            album-slide-open: root.album-slide-open;
+            album: root.album;
+            rock-bounce: root.rock-bounce;
+            rest-toggle => { root.rest-toggle(); }
+            rest-reset => { root.rest-reset(); }
+            rest-edit(t) => { root.rest-edit(t); }
+            play(i) => { root.rest-play(i); }
+            unlock(i) => { root.rest-unlock(i); }
+            next-tree => { root.next-tree(); }
+            pat-rock => { root.pat-rock(); }
+            breath-toggle => { root.breath-toggle(); }
+            album-open => { root.album-open(); }
+            album-turn(d) => { root.album-turn(d); }
+            album-close => { root.album-close(); }
         }
         if root.on-timer: WabiTimer {
             x: 32px;
@@ -105,8 +157,13 @@ export component WabiPage inherits Rectangle {
         y: 0px;
         height: parent.height;
         d: root.sidebar;
-        on-dashboard: !root.on-timer;
-        on-timer: root.on-timer;
+        on-dashboard: !root.on-timer && !root.on-rest;
+        on-timer: root.on-timer && !root.on-rest;
+        on-rest: root.on-rest;
+        rest-menu-open: root.rest-menu-open;
+        rest-room: root.rest-room;
+        open-rest => { root.open-rest(); }
+        pick-room(i) => { root.pick-room(i); }
         quiet: root.quiet;
         theme-locked: root.theme-locked;
         dark: root.dark;
@@ -144,7 +201,7 @@ export component WabiPage inherits Rectangle {
     }
 
     // thin page scrollbar in the reserved gutter (native stand-in for WebView2's scrollbar)
-    if !root.on-timer && !root.quiet && root.page-h > root.height: Rectangle {
+    if !root.on-timer && !root.on-rest && !root.quiet && root.page-h > root.height: Rectangle {
         x: parent.width - root.gutter;
         width: root.gutter;
         height: parent.height;

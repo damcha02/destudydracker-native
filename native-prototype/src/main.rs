@@ -10,13 +10,20 @@
 
 mod academic_controller;
 mod app_appearance;
+mod app_break_games;
+mod app_break_room;
 mod app_model;
 #[cfg(windows)]
 mod app_platform;
 #[cfg(windows)]
 mod app_updater;
 mod appearance_view;
+mod break_room_art;
+mod break_room_controller;
+mod break_room_flags;
+mod break_room_view;
 mod dashboard_view;
+mod game_tokens;
 mod map;
 mod map_adapter;
 mod persistence;
@@ -123,7 +130,7 @@ fn run() -> Result<(), StartupError> {
         ));
     // Stage 19: the persisted style / palette / light-dark preference (same store file).
     let preferences = persistence::PreferencesController::load(Box::new(
-        persistence::FilePreferencesPort::new(persistence::NativeStore::new(store_path)),
+        persistence::FilePreferencesPort::new(persistence::NativeStore::new(store_path.clone())),
     ));
     log::info!("appearance preference loaded: {:?}", preferences.prefs());
     let (mut model, startup_recovery_effects) =
@@ -172,6 +179,8 @@ fn run() -> Result<(), StartupError> {
         preferences,
     );
     app_appearance::apply_env_overrides();
+    // Stage 20: the Break Room (its own section of the same store file).
+    app_break_room::install(&window, Rc::clone(&model), &store_path);
     apply_model_to_window(&window, &model.borrow(), Instant::now());
     refresh_dashboard(&window, &model.borrow(), &mut dashboard.borrow_mut());
     dashboard_report_if_requested(&dashboard.borrow());
@@ -192,6 +201,8 @@ fn run() -> Result<(), StartupError> {
         start_date_rollover_check(&window, Rc::clone(&model), Rc::clone(&dashboard));
     let _nav_stress = start_nav_stress(&window, Rc::clone(&model), Rc::clone(&dashboard));
     let _theme_stress = app_appearance::start_theme_stress();
+    let _input_script = install_input_script(&window);
+    let _break_stress = app_break_room::start_stress(&window);
     let _diagnostics = install_diagnostics(&window);
 
     log::info!("first window created; entering the event loop");
@@ -248,7 +259,80 @@ pub static SAKURA_FRAMES: AtomicU64 = AtomicU64::new(0);
 ///   and Rust timer-tick callbacks in that interval (shows how often the UI redraws / the model refreshes).
 ///
 /// The returned timer must stay alive for the duration of the event loop.
+static INPUT_SCRIPT_DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// `STUDY_NATIVE_INPUT="click:X,Y;key:a;key:Return;text:slate;wait:500"` (Stage 20 diagnostics,
+/// off by default): replays pointer clicks and key presses through Slint's own event dispatch -
+/// hit testing, focus and key routing included - one step every 120 ms after a 1.5 s settle, so
+/// interaction paths can be checked on a machine with no input-synthesis tool. A pending
+/// `STUDY_NATIVE_SNAPSHOT` waits for the script to finish.
+fn install_input_script(window: &MainWindow) -> Option<Timer> {
+    use slint::platform::{Key, PointerEventButton, WindowEvent};
+    let script = std::env::var("STUDY_NATIVE_INPUT").ok()?;
+    INPUT_SCRIPT_DONE.store(false, Ordering::Relaxed);
+    let mut steps: std::collections::VecDeque<String> =
+        script.split(';').map(str::to_string).collect();
+    let weak = window.as_weak();
+    let started = Instant::now();
+    let mut wait_until = Instant::now();
+    let timer = Timer::default();
+    timer.start(TimerMode::Repeated, Duration::from_millis(120), move || {
+        let now = Instant::now();
+        if now.duration_since(started) < Duration::from_millis(1500) || now < wait_until {
+            return;
+        }
+        let Some(w) = weak.upgrade() else { return };
+        let Some(step) = steps.pop_front() else {
+            INPUT_SCRIPT_DONE.store(true, Ordering::Relaxed);
+            w.window().request_redraw();
+            return;
+        };
+        let (kind, arg) = step.split_once(':').unwrap_or((step.as_str(), ""));
+        let win = w.window();
+        let key = |text: slint::SharedString| {
+            win.dispatch_event(WindowEvent::KeyPressed { text: text.clone() });
+            win.dispatch_event(WindowEvent::KeyReleased { text });
+        };
+        match kind {
+            "click" => {
+                if let Some((x, y)) = arg
+                    .split_once(',')
+                    .and_then(|(x, y)| Some((x.parse::<f32>().ok()?, y.parse::<f32>().ok()?)))
+                {
+                    let position = slint::LogicalPosition::new(x, y);
+                    win.dispatch_event(WindowEvent::PointerMoved { position });
+                    win.dispatch_event(WindowEvent::PointerPressed {
+                        position,
+                        button: PointerEventButton::Left,
+                    });
+                    win.dispatch_event(WindowEvent::PointerReleased {
+                        position,
+                        button: PointerEventButton::Left,
+                    });
+                }
+            }
+            "key" => key(match arg {
+                "Return" => Key::Return.into(),
+                "Backspace" => Key::Backspace.into(),
+                "Escape" => Key::Escape.into(),
+                "Right" => Key::RightArrow.into(),
+                "Left" => Key::LeftArrow.into(),
+                other => other.into(),
+            }),
+            "text" => arg.chars().for_each(|c| key(c.to_string().into())),
+            "wait" => wait_until = now + Duration::from_millis(arg.parse().unwrap_or(0)),
+            _ => {}
+        }
+        println!("INPUT {step}");
+    });
+    Some(timer)
+}
+
 fn install_diagnostics(window: &MainWindow) -> Option<Timer> {
+    if let Ok(path) = std::env::var("STUDY_NATIVE_SNAPSHOT") {
+        install_snapshot(window, path);
+        return None;
+    }
     let startup = std::env::var_os("STUDY_NATIVE_STARTUP_REPORT").is_some();
     let stats = std::env::var_os("STUDY_NATIVE_FRAME_STATS").is_some();
     if !startup && !stats {
@@ -283,16 +367,80 @@ fn install_diagnostics(window: &MainWindow) -> Option<Timer> {
             SAKURA_FRAMES.load(Ordering::Relaxed),
         );
         println!(
-            "STATS {:.0} frames={} ticks={} sakura_ticks={} {}",
+            "STATS {:.0} frames={} ticks={} sakura_ticks={} {} {}",
             started.elapsed().as_secs_f64(),
             now.0 - last.0,
             now.1 - last.1,
             now.2 - last.2,
             app_appearance::sakura_report(),
+            app_break_room::report(),
         );
         last = now;
     });
     Some(timer)
+}
+
+/// `STUDY_NATIVE_SNAPSHOT=<file.png>` (Stage 20 parity captures, off by default): once the window
+/// has rendered `STUDY_NATIVE_SNAPSHOT_FRAMES` frames (default 3) after
+/// `STUDY_NATIVE_SNAPSHOT_DELAY_MS` (default 1500), saves the window's pixels as a PNG and quits.
+/// The snapshot is taken inside the rendering notifier: on Wayland femtovg's back buffer is only
+/// valid there.
+fn install_snapshot(window: &MainWindow, path: String) {
+    let delay = std::env::var("STUDY_NATIVE_SNAPSHOT_DELAY_MS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1500u64);
+    let started = Instant::now();
+    let weak = window.as_weak();
+    let mut armed_frames = 0u32;
+    let result = window.window().set_rendering_notifier(move |state, _| {
+        if !matches!(state, slint::RenderingState::AfterRendering) {
+            return;
+        }
+        let Some(w) = weak.upgrade() else { return };
+        if started.elapsed() < Duration::from_millis(delay)
+            || !INPUT_SCRIPT_DONE.load(Ordering::Relaxed)
+        {
+            w.window().request_redraw();
+            return;
+        }
+        armed_frames += 1;
+        if armed_frames < 3 {
+            w.window().request_redraw();
+            return;
+        }
+        if armed_frames > 3 {
+            return;
+        }
+        match w.window().take_snapshot() {
+            Ok(shot) => {
+                let written = std::fs::File::create(&path)
+                    .map_err(|e| e.to_string())
+                    .and_then(|file| {
+                        let mut enc = png::Encoder::new(
+                            std::io::BufWriter::new(file),
+                            shot.width(),
+                            shot.height(),
+                        );
+                        enc.set_color(png::ColorType::Rgba);
+                        enc.set_depth(png::BitDepth::Eight);
+                        enc.write_header()
+                            .and_then(|mut wr| wr.write_image_data(shot.as_bytes()))
+                            .map_err(|e| e.to_string())
+                    });
+                println!(
+                    "SNAPSHOT {path} {}x{} {written:?}",
+                    shot.width(),
+                    shot.height()
+                );
+            }
+            Err(error) => println!("SNAPSHOT failed: {error}"),
+        }
+        let _ = slint::quit_event_loop();
+    });
+    if let Err(error) = result {
+        eprintln!("rendering notifier unavailable: {error}");
+    }
 }
 
 /// Optional environment overrides so benchmarks and screenshots can start in a known state
@@ -475,10 +623,11 @@ fn maybe_import_production_backup(
     match persistence::migration::commit_import(native_store, &discovered, fields, timer, academic)
     {
         Ok(report) => log::info!(
-            "import: committed = {}, timer_imported = {}, appearance_imported = {}, academic = {:?}, source = {}, source copy = {}, {} field(s) classified, {} warning(s)",
+            "import: committed = {}, timer_imported = {}, appearance_imported = {}, break_room_imported = {}, academic = {:?}, source = {}, source copy = {}, {} field(s) classified, {} warning(s)",
             report.committed,
             report.timer_imported,
             report.appearance_imported,
+            report.break_room_imported,
             report.academic_summary,
             report.source_path.display(),
             report.source_copy_path.display(),
@@ -743,6 +892,7 @@ fn refresh_dashboard(window: &MainWindow, model: &AppModel, dashboard: &mut Dash
     );
     push_dashboard(window, dashboard, &clock);
     app_appearance::after_dashboard_refresh(window, model, dashboard);
+    app_break_room::after_academic_change(window, model);
     if dashboard.stats().metrics != metrics_before {
         // One line per real metrics recomputation (never per Timer tick): the evidence the Stage 17 runtime
         // checks use for "no continuous recomputation" and "Timer completion refreshes the Dashboard".

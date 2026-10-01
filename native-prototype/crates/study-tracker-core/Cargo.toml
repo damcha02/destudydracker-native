@@ -7,3 +7,7 @@ publish = false
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+# Golden fixtures (tests/fixtures/break_room/*.json) are JSON; test-only, already in the tree.
+serde_json = "1"

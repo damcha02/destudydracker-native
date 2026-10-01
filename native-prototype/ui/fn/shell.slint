@@ -160,7 +160,7 @@ component FnTab inherits Rectangle {
 }
 
 // `.tab-row`: full-bleed paper strip with the six primary tabs and the `?` page-help button.
-// Only Dashboard and Timer are migrated; the other four are drawn (production has them) but
+// Dashboard, Timer and (Stage 20) Break Room are migrated; the other four are drawn (production has them) but
 // inert, with a "not migrated yet" tooltip string exposed to the host.
 export component FnTabRow inherits Rectangle {
     in property <length> content-x;
@@ -182,7 +182,7 @@ export component FnTabRow inherits Rectangle {
         FnTab { label: "Planner"; icon: @image-url("../../assets/dashboard/tab-planner.svg"); active: root.active-tab == 1; enabled: false; }
         FnTab { label: "Timer"; icon: @image-url("../../assets/dashboard/tab-timer.svg"); active: root.active-tab == 2; clicked => { root.picked(2); } }
         FnTab { label: "Vault"; icon: @image-url("../../assets/dashboard/tab-vault.svg"); active: root.active-tab == 3; enabled: false; }
-        FnTab { label: "Break Room"; icon: @image-url("../../assets/dashboard/tab-break.svg"); active: root.active-tab == 4; enabled: false; }
+        FnTab { label: "Break Room"; icon: @image-url("../../assets/dashboard/tab-break.svg"); active: root.active-tab == 4; clicked => { root.picked(4); } }
         FnTab { label: "Social"; icon: @image-url("../../assets/dashboard/tab-social.svg"); active: root.active-tab == 5; enabled: false; }
     }
 

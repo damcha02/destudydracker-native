@@ -1,0 +1,220 @@
+{
+  "light": {
+    "scene": {
+      "x": 218,
+      "y": 28,
+      "w": 1222,
+      "h": 928
+    },
+    "rows": [
+      {
+        "name": "desk.jpg",
+        "file": "assets/break/album/light/desk.jpg",
+        "css": [
+          218,
+          28,
+          1222,
+          928
+        ],
+        "pad": 0
+      },
+      {
+        "name": "cup.png",
+        "file": "assets/break/album/light/cup.png",
+        "css": [
+          1213.3,
+          112.22,
+          183,
+          183
+        ],
+        "pad": 10
+      },
+      {
+        "name": "pen.png",
+        "file": "assets/break/album/light/pen.png",
+        "css": [
+          1294.72,
+          317.19,
+          20.13,
+          585.94
+        ],
+        "pad": 10
+      },
+      {
+        "name": "cover.jpg",
+        "file": "assets/break/album/light/cover.jpg",
+        "css": [
+          480.4,
+          202.38,
+          436.14,
+          559.16
+        ],
+        "pad": 0
+      },
+      {
+        "name": "edge.png",
+        "file": "assets/break/album/light/edge.png",
+        "css": [
+          480.4,
+          202.38,
+          472.47,
+          595.48
+        ],
+        "pad": 10
+      },
+      {
+        "name": "board-left.jpg",
+        "file": "assets/break/album/light/board-left.jpg",
+        "css": [
+          280,
+          202.38,
+          436.14,
+          559.16
+        ],
+        "pad": 0
+      },
+      {
+        "name": "board-right.jpg",
+        "file": "assets/break/album/light/board-right.jpg",
+        "css": [
+          716.14,
+          202.38,
+          436.14,
+          559.16
+        ],
+        "pad": 0
+      },
+      {
+        "name": "page-left.jpg",
+        "file": "assets/break/album/light/page-left.jpg",
+        "css": [
+          297.44,
+          219.81,
+          401.25,
+          524.27
+        ],
+        "pad": 0
+      },
+      {
+        "name": "page-right.jpg",
+        "file": "assets/break/album/light/page-right.jpg",
+        "css": [
+          733.59,
+          219.81,
+          401.25,
+          524.27
+        ],
+        "pad": 0
+      }
+    ]
+  },
+  "dark": {
+    "scene": {
+      "x": 218,
+      "y": 28,
+      "w": 1222,
+      "h": 928
+    },
+    "rows": [
+      {
+        "name": "desk.jpg",
+        "file": "assets/break/album/dark/desk.jpg",
+        "css": [
+          218,
+          28,
+          1222,
+          928
+        ],
+        "pad": 0
+      },
+      {
+        "name": "cup.png",
+        "file": "assets/break/album/dark/cup.png",
+        "css": [
+          1213.3,
+          112.22,
+          183,
+          183
+        ],
+        "pad": 10
+      },
+      {
+        "name": "pen.png",
+        "file": "assets/break/album/dark/pen.png",
+        "css": [
+          1294.72,
+          317.19,
+          20.13,
+          585.94
+        ],
+        "pad": 10
+      },
+      {
+        "name": "cover.jpg",
+        "file": "assets/break/album/dark/cover.jpg",
+        "css": [
+          480.4,
+          202.38,
+          436.14,
+          559.16
+        ],
+        "pad": 0
+      },
+      {
+        "name": "edge.png",
+        "file": "assets/break/album/dark/edge.png",
+        "css": [
+          480.4,
+          202.38,
+          472.47,
+          595.48
+        ],
+        "pad": 10
+      },
+      {
+        "name": "board-left.jpg",
+        "file": "assets/break/album/dark/board-left.jpg",
+        "css": [
+          280,
+          202.38,
+          436.14,
+          559.16
+        ],
+        "pad": 0
+      },
+      {
+        "name": "board-right.jpg",
+        "file": "assets/break/album/dark/board-right.jpg",
+        "css": [
+          716.14,
+          202.38,
+          436.14,
+          559.16
+        ],
+        "pad": 0
+      },
+      {
+        "name": "page-left.jpg",
+        "file": "assets/break/album/dark/page-left.jpg",
+        "css": [
+          297.44,
+          219.81,
+          401.25,
+          524.27
+        ],
+        "pad": 0
+      },
+      {
+        "name": "page-right.jpg",
+        "file": "assets/break/album/dark/page-right.jpg",
+        "css": [
+          733.59,
+          219.81,
+          401.25,
+          524.27
+        ],
+        "pad": 0
+      }
+    ]
+  }
+}

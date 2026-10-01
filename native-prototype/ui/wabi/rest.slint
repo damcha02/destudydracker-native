@@ -1,0 +1,526 @@
+// The Wabi-Sabi Rest room (`renderWabiBreakRoom`, Stage 20): the games room (rest timer card,
+// tree, pet rock, the XP "water" gauge and the six game cards), the 4-7-8 breathing room, and the
+// achievements album (album.slint). Geometry: production's measured boxes at 1520x980, relative to
+// the content origin (sidebar 186 + 32, y 22).
+//
+// The rest ring: production draws it with a WebGL fluid simulation (~30 fps while the timer runs)
+// and ships an SVG fallback (two wave paths over a circle) for reduced motion / no WebGL. Native
+// draws that fallback's geometry at the elapsed fraction, redrawn once a second, and leaves the
+// vessel empty at 0 % exactly like the fluid ring does - no continuous simulation.
+import { WS } from "palette.slint";
+import { WEyebrow, WSolidButton, WTextLink } from "parts.slint";
+import { WabiRestData, BrCard, Emoji } from "../break/types.slint";
+import { WabiAlbum, AlbumData } from "album.slint";
+
+component RestRing inherits Rectangle {
+    in property <float> progress;
+    in property <bool> light-ink;
+    in property <color> vessel-bg;
+    width: 84px;
+    height: 84px;
+    // `.wabi-rest-fluid-ring`: 1.5 px line border, clipped to the circle
+    vessel := Rectangle {
+        x: 1.5px;
+        y: 1.5px;
+        width: parent.width - 3px;
+        height: parent.height - 3px;
+        border-radius: self.width / 2;
+        clip: true;
+        background: root.vessel-bg;
+        private property <length> unit: self.width / 90;
+        // fallback offset `19 - progress * 90` in its 100-unit viewBox (circle r45 -> 90 units)
+        private property <length> offset: (19 - clamp(root.progress, 0, 1) * 90) * self.unit - 5 * self.unit;
+        // moves once a second by 1/300 of the ring at most: drawn per second, not animated
+        if root.progress > 0.001: Path {
+            x: -5 * vessel.unit;
+            y: vessel.offset;
+            width: 100 * vessel.unit;
+            height: 100 * vessel.unit;
+            viewbox-width: 100;
+            viewbox-height: 100;
+            commands: "M-8 76 C8 71 19 80 33 75 C47 70 60 80 73 74 C86 68 99 79 108 73 L108 110 L-8 110Z";
+            fill: root.light-ink ? #e8e3d3 : #11110d;
+            opacity: 0.92;
+        }
+        if root.progress > 0.001: Path {
+            x: -5 * vessel.unit;
+            y: vessel.offset + 2 * vessel.unit;
+            width: 100 * vessel.unit;
+            height: 100 * vessel.unit;
+            viewbox-width: 100;
+            viewbox-height: 100;
+            commands: "M-8 78 C9 73 20 82 35 77 C50 72 61 82 76 76 C89 71 100 80 108 75 L108 110 L-8 110Z";
+            fill: root.light-ink ? #bdb7a6 : #303128;
+            opacity: 0.42;
+        }
+    }
+    Rectangle {
+        border-radius: self.width / 2;
+        border-width: 1.5px;
+        border-color: WS.line;
+    }
+    accessible-role: progress-indicator;
+    accessible-value: round(root.progress * 100) + " percent of the break elapsed";
+}
+
+component RestCard inherits Rectangle {
+    in property <WabiRestData> d;
+    callback toggle();
+    callback reset();
+    callback edit(string);
+    private property <bool> editing: false;
+    background: WS.paper-1;
+    border-width: 1px;
+    border-color: WS.line;
+
+    RestRing {
+        x: (parent.width - self.width) / 2;
+        y: 27px;
+        progress: root.d.progress;
+        light-ink: WS.t.dark;
+        vessel-bg: root.d.ring-bg;
+    }
+    Text {
+        x: 0px;
+        y: 129px;
+        width: parent.width;
+        horizontal-alignment: center;
+        text: root.d.rest-title;
+        font-family: WS.serif;
+        font-size: 18px;
+        font-weight: 500;
+        color: WS.ink;
+    }
+    Text {
+        x: (parent.width - self.width) / 2;
+        y: 156px;
+        width: 300px;
+        wrap: word-wrap;
+        horizontal-alignment: center;
+        text: "Water the plant on the sill, or play one round of something small.";
+        font-family: WS.sans;
+        font-size: 10.5px;
+        letter-spacing: 0.08px;
+        color: WS.muted;
+    }
+    if !root.editing: clock := Text {
+        x: (parent.width - self.preferred-width) / 2;
+        y: 204.7px;
+        text: root.d.clock;
+        font-family: WS.serif;
+        font-size: 22.5px;
+        font-weight: 500;
+        letter-spacing: 0.08px;
+        color: WS.ink;
+        TouchArea {
+            enabled: !root.d.running;
+            mouse-cursor: root.d.running ? default : pointer;
+            clicked => { root.editing = true; }
+        }
+        accessible-role: button;
+        accessible-label: "Break timer " + root.d.clock + (root.d.running ? "" : ", click to edit");
+    }
+    if root.editing: Rectangle {
+        x: (parent.width - 80px) / 2;
+        y: 202px;
+        width: 80px;
+        height: 30px;
+        border-width: 1px;
+        border-color: WS.line;
+        input := TextInput {
+            x: 4px;
+            width: parent.width - 8px;
+            height: parent.height;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            text: root.d.clock;
+            font-family: WS.serif;
+            font-size: 22.5px;
+            color: WS.ink;
+            single-line: true;
+            input-type: number;
+            init => { self.focus(); self.select-all(); }
+            accepted => { root.editing = false; root.edit(self.text); }
+            key-pressed(event) => {
+                if event.text == Key.Escape { root.editing = false; return accept; }
+                reject
+            }
+            changed has-focus => { if !self.has-focus && root.editing { root.editing = false; root.edit(self.text); } }
+        }
+        accessible-role: text-input;
+        accessible-label: "Break timer duration";
+    }
+    HorizontalLayout {
+        x: (parent.width - self.preferred-width) / 2;
+        y: 246.7px;
+        height: 28px;
+        spacing: 10px;
+        WSolidButton {
+            text: root.d.running ? "PAUSE" : "START";
+            pad-x: 20px;
+            font-size: 9px;
+            height: 28px;
+            clicked => { root.toggle(); }
+            accessible-role: button;
+            accessible-label: root.d.running ? "Pause break timer" : "Start break timer";
+        }
+        Rectangle {
+            width: reset.preferred-width;
+            reset := Text {
+                y: 9px;
+                text: "RESET";
+                font-family: WS.sans;
+                font-size: 9px;
+                letter-spacing: 1.44px;
+                color: reset-touch.has-hover ? WS.ink : WS.muted;
+            }
+            reset-touch := TouchArea { mouse-cursor: pointer; clicked => { root.reset(); } }
+            accessible-role: button;
+            accessible-label: "Reset break timer";
+        }
+    }
+}
+
+component WabiGameCard inherits Rectangle {
+    in property <BrCard> card;
+    callback play();
+    callback unlock();
+    background: WS.paper-1;
+    border-width: 1px;
+    border-color: WS.line;
+    // `.celebrating`: fadeUp 0.4 s
+    opacity: root.card.celebrating ? 0.6 : 1;
+    animate opacity { duration: 200ms; easing: ease; }
+    private property <length> top: (self.height - 60px) / 2;
+    Text {
+        x: 17px;
+        y: root.top;
+        height: 21px;
+        width: parent.width - 34px - 60px;
+        vertical-alignment: center;
+        text: root.card.name;
+        font-family: WS.serif;
+        font-size: 18px;
+        font-weight: 500;
+        letter-spacing: 0.08px;
+        color: WS.ink;
+    }
+    if root.card.unlocked: Text {
+        x: parent.width - 17px - self.preferred-width;
+        y: root.top + 6px;
+        text: "READY";
+        font-family: WS.sans;
+        font-size: 10.5px;
+        letter-spacing: 1.47px;
+        color: WS.vermilion;
+    }
+    Text {
+        x: 17px;
+        y: root.top + 24px;
+        width: parent.width - 34px;
+        overflow: elide;
+        text: root.card.desc;
+        font-family: WS.sans;
+        font-size: 11.5px;
+        letter-spacing: 0.92px;
+        color: WS.muted;
+    }
+    if root.card.unlocked && root.card.status != "": Text {
+        x: 17px;
+        y: root.top + 46px;
+        height: 14px;
+        vertical-alignment: center;
+        text: root.card.status;
+        font-family: WS.sans;
+        font-size: 12px;
+        letter-spacing: 0.08px;
+        color: WS.muted;
+    }
+    if root.card.unlocked: WTextLink {
+        x: parent.width - 17px - self.width;
+        y: root.top + 46px;
+        text: "PLAY";
+        clicked => { root.play(); }
+        accessible-role: button;
+        accessible-label: "Play " + root.card.name;
+    }
+    if !root.card.unlocked && root.card.can-unlock: WTextLink {
+        x: 17px;
+        y: root.top + 46px;
+        text: "UNLOCK";
+        clicked => { root.unlock(); }
+        accessible-role: button;
+        accessible-label: "Unlock " + root.card.name;
+    }
+    if !root.card.unlocked && !root.card.can-unlock: Text {
+        x: 17px;
+        y: root.top + 46px;
+        height: 14px;
+        vertical-alignment: center;
+        text: root.card.wait;
+        font-family: WS.sans;
+        font-size: 12px;
+        letter-spacing: 0.08px;
+        color: WS.muted;
+    }
+}
+
+component GuideColumn inherits Rectangle {
+    in property <string> seconds;
+    in property <string> title;
+    in property <string> body;
+    in property <bool> active;
+    // `color-mix(in srgb, sage 12%, paper-1)`
+    background: root.active ? WS.sage.mix(WS.paper-1, 0.12) : transparent;
+    Text { x: 20px; y: 14px; text: root.seconds; font-family: WS.serif; font-size: 26px; font-weight: 500; letter-spacing: 0.08px; color: root.active ? WS.vermilion : WS.muted; }
+    Text { x: 42px; y: 28px; text: "SECONDS"; font-family: WS.sans; font-size: 10px; letter-spacing: 1.6px; color: WS.faint; }
+    Text { x: 20px; y: 52px; text: root.title; font-family: WS.serif; font-size: 16px; color: WS.ink; }
+    Text { x: 20px; y: 74px; width: parent.width - 40px; wrap: word-wrap; text: root.body; font-family: WS.sans; font-size: 12.5px; letter-spacing: 0.08px; color: WS.muted; }
+}
+
+component Meditation inherits Rectangle {
+    in property <WabiRestData> d;
+    // the ring's target diameter in px, as its own property: `d` is replaced every second and a
+    // binding on it would restart the 1 s ease on every push
+    in property <float> ring-target: 60;
+    callback toggle();
+    // `.wabi-breath-ring { transition: width 1s linear, height 1s linear }`: eases between the
+    // per-second sizes while the exercise runs (bounded: it stops with the exercise)
+    private property <length> ring-size: root.ring-target * 1px;
+    animate ring-size { duration: 1000ms; easing: linear; }
+    background: WS.paper-1;
+    border-width: 1px;
+    border-color: WS.line;
+    // orbit
+    Rectangle {
+        x: (parent.width - 180px) / 2;
+        y: 29px;
+        width: 180px;
+        height: 180px;
+        border-radius: 90px;
+        border-width: 1px;
+        border-color: WS.line;
+        ring := Rectangle {
+            x: (parent.width - root.ring-size) / 2;
+            y: (parent.height - root.ring-size) / 2;
+            width: root.ring-size;
+            height: root.ring-size;
+            border-radius: root.ring-size / 2;
+            border-width: 1.5px;
+            border-color: WS.sage;
+        }
+        Text {
+            width: parent.width;
+            height: parent.height;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            text: root.d.breath-count;
+            font-family: WS.sans;
+            font-size: 13px;
+            letter-spacing: 2.34px;
+            color: WS.ink;
+        }
+        accessible-role: text;
+        accessible-label: root.d.breath-title + " " + root.d.breath-count;
+    }
+    Text { x: 0px; y: 231px; width: parent.width; horizontal-alignment: center; text: root.d.breath-title; font-family: WS.serif; font-size: 24px; font-weight: 500; color: WS.ink; }
+    Rectangle {
+        // `font: 14px/1.7`: two 23.8 px lines
+        x: (parent.width - 400px) / 2;
+        y: 264px;
+        width: 400px;
+        height: 47.6px;
+        Text { width: parent.width; height: parent.height; wrap: word-wrap; horizontal-alignment: center; vertical-alignment: center; text: root.d.breath-desc; font-family: WS.sans; font-size: 14px; letter-spacing: 0.08px; color: WS.muted; }
+    }
+    WSolidButton {
+        x: (parent.width - self.width) / 2;
+        y: 333.6px;
+        text: root.d.breath-button;
+        clicked => { root.toggle(); }
+        accessible-role: button;
+        accessible-label: root.d.breath-on ? "Stop breathing exercise" : "Begin breathing exercise";
+    }
+    Text { x: 0px; y: 383.6px; width: parent.width; horizontal-alignment: center; text: root.d.breath-round; font-family: WS.sans; font-size: 11.5px; letter-spacing: 0.92px; color: WS.faint; }
+    guide := Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: 425.6px;
+        width: min(760px, parent.width - 48px);
+        height: 148px;
+        Rectangle { y: 0px; height: 1px; background: WS.rule-hard; }
+        Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-soft; }
+        for col[i] in [
+            { s: "4", t: "Breathe in", b: "Through the nose, quietly." },
+            { s: "7", t: "Hold", b: "Still, shoulders down." },
+            { s: "8", t: "Breathe out", b: "Through the mouth, slow and audible." },
+        ]: GuideColumn {
+            x: i * parent.width / 3;
+            y: 1px;
+            width: parent.width / 3;
+            height: 146px;
+            seconds: col.s;
+            title: col.t;
+            body: col.b;
+            active: root.d.breath-on && root.d.breath-phase == i;
+        }
+        for i in 2: Rectangle { x: (i + 1) * parent.width / 3 - 1px; y: 1px; width: 1px; height: 146px; background: WS.rule-soft; }
+    }
+    Text { x: 0px; y: 587.6px; width: parent.width; horizontal-alignment: center; text: "Nose in, tongue behind the front teeth, mouth out. Sitting up, not lying down."; font-family: WS.sans; font-size: 12px; letter-spacing: 0.08px; color: WS.faint; }
+}
+
+export component WabiRest inherits Rectangle {
+    in property <WabiRestData> d;
+    // the room on show, as its own property: `d` is replaced on every push, and a condition on it
+    // would rebuild the room (and restart the album's motions) each time
+    in property <int> room;
+    in property <float> breath-ring: 60;
+    in property <int> album-cover-seq;
+    in property <int> album-leaf-seq;
+    in property <bool> album-slide-open;
+    in property <AlbumData> album;
+    in property <bool> rock-bounce;
+    callback rest-toggle();
+    callback rest-reset();
+    callback rest-edit(string);
+    callback play(int);
+    callback unlock(int);
+    callback next-tree();
+    callback pat-rock();
+    callback breath-toggle();
+    callback album-open();
+    callback album-turn(int);
+    callback album-close();
+
+    private property <length> lower-y: 317.7px;
+    private property <length> right-x: 150px;
+    private property <length> right-w: root.width - root.right-x;
+
+    if root.room == 0: Rectangle {
+        RestCard {
+            x: root.right-x;
+            y: 6px;
+            width: root.right-w;
+            height: 297.7px;
+            d: root.d;
+            toggle => { root.rest-toggle(); }
+            reset => { root.rest-reset(); }
+            edit(t) => { root.rest-edit(t); }
+        }
+        // the tree: click cycles pine / sakura / maple / green tree, all on the pine's baseline
+        tree := Rectangle {
+            x: -15px;
+            y: 18px;
+            width: 150px;
+            height: 131px;
+            private property <[{img: image, w: length, h: length}]> trees: [
+                { img: @image-url("../../assets/break/japanese-pine.png"), w: 111px, h: 115px },
+                { img: @image-url("../../assets/break/japanese-sakura.png"), w: 150px, h: 95.7px },
+                { img: @image-url("../../assets/break/japanese-maple.png"), w: 131px, h: 104.6px },
+                { img: @image-url("../../assets/break/japanese-green-tree.png"), w: 99px, h: 92.6px },
+            ];
+            Image {
+                private property <{img: image, w: length, h: length}> t: tree.trees[mod(root.d.tree, 4)];
+                x: (parent.width - self.t.w) / 2;
+                y: parent.height - self.t.h;
+                width: self.t.w;
+                height: self.t.h;
+                source: self.t.img;
+            }
+            TouchArea { mouse-cursor: pointer; clicked => { root.next-tree(); } }
+            accessible-role: button;
+            accessible-label: "Next tree";
+        }
+        // the pet rock (rock 35.2 px, plant at its lower right, faint label)
+        Rectangle {
+            x: 0px;
+            y: 205px;
+            width: 120px;
+            height: 60px;
+            Text {
+                x: 38px;
+                y: 0px;
+                text: "\u{1FAA8}";
+                font-family: Emoji.family;
+                font-size: 35.2px;
+                transform-origin: { x: 22px, y: 21px };
+                transform-scale: root.rock-bounce ? 0.8 : 1;
+                animate transform-scale { duration: 170ms; easing: ease-out; }
+            }
+            if root.d.rock-plant != "": Text { x: 70px; y: 27px; text: root.d.rock-plant; font-family: Emoji.family; font-size: 16px; }
+            Text { x: 0px; y: 46px; width: parent.width; horizontal-alignment: center; text: root.d.rock-label; font-family: WS.sans; font-size: 10.5px; letter-spacing: 0.08px; color: WS.faint; }
+            TouchArea { mouse-cursor: pointer; clicked => { root.pat-rock(); } }
+            accessible-role: button;
+            accessible-label: "Pet rock: " + root.d.rock-label;
+            accessible-action-default => { root.pat-rock(); }
+        }
+        // XP water gauge
+        Rectangle {
+            x: 0px;
+            y: root.lower-y;
+            width: 120px;
+            height: root.height - root.lower-y;
+            background: WS.paper-1;
+            border-width: 1px;
+            border-color: WS.line;
+            Rectangle {
+                x: 47px;
+                y: 15px;
+                width: 26px;
+                height: parent.height - 15px - 37px;
+                background: WS.line;
+                Rectangle {
+                    y: parent.height - self.height;
+                    height: parent.height * clamp(root.d.water-fraction, 0, 1);
+                    background: WS.sage;
+                    animate height { duration: 300ms; easing: ease; }
+                }
+            }
+            Text { x: 0px; y: parent.height - 27px; width: parent.width; horizontal-alignment: center; text: root.d.water-label; font-family: WS.sans; font-size: 11px; letter-spacing: 0.66px; color: WS.muted; }
+            accessible-role: progress-indicator;
+            accessible-label: "Break XP, " + root.d.water-label + " games available";
+        }
+        // games column
+        Rectangle {
+            x: root.right-x;
+            y: root.lower-y;
+            width: root.right-w;
+            height: 23px;
+            WEyebrow { x: 0px; y: 1px; text: "GAMES"; }
+            Text { x: parent.width - self.preferred-width; y: 0px; text: root.d.games-note; font-family: WS.sans; font-size: 12px; letter-spacing: 0.08px; color: WS.faint; }
+            Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-hard; }
+        }
+        for card[i] in root.d.cards: WabiGameCard {
+            private property <length> grid-y: root.lower-y + 33px;
+            private property <length> row-h: (root.height - self.grid-y - 20px) / 3;
+            x: root.right-x + mod(i, 2) * (root.right-w + 10px) / 2;
+            y: self.grid-y + floor(i / 2) * (self.row-h + 10px);
+            width: (root.right-w - 10px) / 2;
+            height: self.row-h;
+            card: card;
+            play => { root.play(i); }
+            unlock => { root.unlock(i); }
+        }
+    }
+    if root.room == 1: Meditation {
+        x: 0px;
+        y: 6px;
+        width: root.width;
+        height: 649px;
+        d: root.d;
+        ring-target: root.breath-ring;
+        toggle => { root.breath-toggle(); }
+    }
+    if root.room == 2: WabiAlbum {
+        x: 0px;
+        y: 6px;
+        width: root.width;
+        // production's scene is the grid row's full height, pushed down 6 px by the grid padding
+        height: root.height;
+        d: root.album;
+        cover-seq: root.album-cover-seq;
+        leaf-seq: root.album-leaf-seq;
+        slide-open: root.album-slide-open;
+        open => { root.album-open(); }
+        turn(dir) => { root.album-turn(dir); }
+        close => { root.album-close(); }
+    }
+}

@@ -1,0 +1,460 @@
+// The production Break Room page in the Field Notebook style (`state.activeTab === "break"`,
+// `.break-grid.fn-break` in `desktop/src/App.tsx` + `App.css`), drawn from `FnBreakData`.
+// Geometry and colours were read off production at 1520x980 (scripts/visual-parity/probe-break.js):
+// the same topbar / tab row / bordered desk as the Dashboard, then head, XP bar, quote, the 2x3
+// game grid, stats, water, badges, stretch idea and the pet rock.
+//
+// Animations: only bounded one-shots (card unlock glow 0.7 s, rock bounce 0.35 s / celebration
+// 0.8 s), driven by properties Rust flips back. Production's infinite Unlock-button pulse is drawn
+// as a static glow at its mid-point, so an idle Break Room renders nothing (Stage 20 doc).
+import { FN } from "../fn/palette.slint";
+import { MonoText, SerifText, SansText, HLine, DotLine } from "../fn/parts.slint";
+import { FnTopbar, FnTabRow } from "../fn/shell.slint";
+import { FnBreakData, BrCard, BrBadge, Emoji } from "types.slint";
+
+component PlayChip inherits Rectangle {
+    callback clicked();
+    width: label.preferred-width + 16px + 2px;
+    height: 22px;
+    background: @linear-gradient(135deg, #8fb4ff 0%, #bbd2ff 100%);
+    label := MonoText {
+        x: 9px;
+        y: (parent.height - self.preferred-height) / 2;
+        text: "PLAY";
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.8px;
+        color: #ffffff;
+    }
+    TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: "Play";
+}
+
+component UnlockButton inherits Rectangle {
+    callback clicked();
+    width: label.preferred-width + 28px;
+    height: 29px;
+    border-radius: 2px;
+    background: @linear-gradient(135deg, #8fb4ff 0%, #b0cbff 100%);
+    // `break-unlock-pulse` (6 px <-> 18 px glow, 1.8 s, infinite) held at its mean.
+    drop-shadow-blur: 12px;
+    drop-shadow-color: touch.has-hover ? transparent : #8fb4ffa6;
+    opacity: touch.has-hover ? 0.9 : 1;
+    label := MonoText {
+        x: 14px;
+        y: (parent.height - self.preferred-height) / 2;
+        text: "Unlock";
+        font-size: 12.48px;
+        font-weight: 700;
+        color: #ffffff;
+    }
+    touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: "Unlock";
+}
+
+component GameCard inherits Rectangle {
+    in property <BrCard> card;
+    callback play();
+    callback unlock();
+    height: 170px;
+    // `celebrating`: break-unlock-glow (scale 1 -> 1.08 -> 1 with an accent halo, 0.7 s ease-out)
+    transform-origin: { x: self.width / 2, y: self.height / 2 };
+    transform-scale: root.card.celebrating ? 1.08 : 1;
+    animate transform-scale { duration: 280ms; easing: ease-out; }
+
+    Rectangle {
+        // the faded part of a locked card (`opacity: 0.5` on the whole card)
+        opacity: root.card.unlocked ? 1 : 0.5;
+        SansText {
+            x: 16px;
+            y: 13px;
+            width: parent.width - 32px;
+            text: root.card.name;
+            font-size: 16.8px;
+            font-weight: 700;
+            color: FN.ink;
+        }
+        SansText {
+            x: 16px;
+            y: 37px;
+            width: parent.width - 32px;
+            wrap: word-wrap;
+            text: root.card.desc;
+            font-size: 13.6px;
+            color: FN.ink-3;
+        }
+        if root.card.unlocked && root.card.status != "": SansText {
+            x: 16px;
+            y: parent.height - 14px - 11px - self.preferred-height / 2;
+            text: root.card.status;
+            font-size: 15.2px;
+            font-weight: 800;
+            color: FN.ink-3;
+        }
+        if root.card.unlocked: PlayChip {
+            x: parent.width - 16px - self.width;
+            y: parent.height - 14px - 22px;
+            clicked => { root.play(); }
+        }
+        if !root.card.unlocked && root.card.can-unlock: UnlockButton {
+            x: 16px;
+            y: parent.height - 14px - 29px;
+            clicked => { root.unlock(); }
+        }
+        if !root.card.unlocked && !root.card.can-unlock: Rectangle {
+            // `.break-lock`: pill, inset surface, mono 0.82rem, ink-4
+            x: 16px;
+            y: parent.height - 14px - self.height;
+            width: lock.preferred-width + 24px;
+            height: lock.preferred-height + 12px;
+            border-radius: 999px;
+            background: FN.surface-inset;
+            lock := MonoText {
+                x: 12px;
+                y: 6px;
+                text: root.card.wait;
+                font-size: 13.12px;
+                color: FN.ink-4;
+            }
+        }
+    }
+    // right: `--fn-rule-soft` (solid line-soft); bottom: `--fn-rule-dot`
+    Rectangle { x: parent.width - 1px; width: 1px; background: FN.line-soft; }
+    DotLine { y: parent.height - 1px; width: parent.width; tone: FN.rule-dot; }
+    if root.card.celebrating: Rectangle {
+        background: transparent;
+        drop-shadow-blur: 30px;
+        drop-shadow-color: #8fb4ff99;
+    }
+}
+
+component StatChip inherits Rectangle {
+    in property <string> icon;
+    in property <string> glyph;
+    in property <string> text;
+    height: 26px;
+    width: row.preferred-width + 24px;
+    row := HorizontalLayout {
+        x: 12px;
+        spacing: 4px;
+        if root.icon != "": Text { text: root.icon; font-family: Emoji.family; font-size: 13.12px; vertical-alignment: center; }
+        if root.glyph != "": SansText { text: root.glyph; font-size: 9px; color: FN.ink-3; vertical-alignment: center; }
+        SansText { text: root.text; font-size: 13.12px; font-weight: 600; color: FN.ink-3; vertical-alignment: center; }
+    }
+    DotLine { y: parent.height - 1px; width: parent.width; }
+}
+
+component Badge inherits Rectangle {
+    in property <BrBadge> badge;
+    height: 26px;
+    width: icon.preferred-width + 6px + name.preferred-width + 22px;
+    opacity: root.badge.earned ? 1 : 0.4;
+    icon := Text {
+        x: 11px;
+        y: (parent.height - self.preferred-height) / 2;
+        text: root.badge.icon;
+        font-family: Emoji.family;
+        font-size: 12.48px;
+    }
+    name := SansText {
+        x: 11px + icon.preferred-width + 6px;
+        y: (parent.height - self.preferred-height) / 2;
+        text: root.badge.name;
+        font-size: 12.48px;
+        color: FN.ink-3;
+    }
+    DotLine { y: parent.height - 1px; width: parent.width; }
+    accessible-role: text;
+    accessible-label: root.badge.name + (root.badge.earned ? ", earned" : ", not earned yet");
+}
+
+export component FnBreakPage inherits Rectangle {
+    in property <FnBreakData> d;
+    in property <bool> rock-bounce;
+    in property <bool> rock-celebrate;
+    in property <int> pill-tone;
+    in property <string> pill-label;
+    in property <string> pill-score;
+    callback toggle-theme();
+    callback open-menu();
+    callback picked-tab(int);
+    callback play(int);
+    callback unlock(int);
+    callback add-water();
+    callback next-stretch();
+    callback pat-rock();
+
+    private property <length> shell-w: min(1720px, root.width - 32px);
+    private property <length> shell-x: (root.width - root.shell-w) / 2;
+    private property <length> tab-pad: max(28px, root.width / 2 - 860px);
+    private property <length> desk-y: 82px + 37px + 12px;
+    private property <bool> narrow: root.width <= 780px;
+    private property <length> pad-l: root.narrow ? 16px : 34px;
+    private property <length> inner-w: root.shell-w - 2px - 2 * root.pad-l;
+    private property <length> grid-w: min(980px, root.inner-w);
+    // the desk ends after its content (no min-height, unlike the Dashboard)
+    private property <length> desk-h: 2px + 26px + body.preferred-height + 30px;
+    private property <length> page-h: root.desk-y - 13px + root.desk-h + 68px + 13px;
+
+    background: FN.desk;
+    clip: true;
+    forward-focus: keys;
+
+    keys := FocusScope { }
+
+    flick := Flickable {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: parent.width;
+        viewport-height: root.page-h;
+
+        FnTopbar {
+            x: root.shell-x;
+            y: 0px;
+            width: root.shell-w;
+            pill-tone: root.pill-tone;
+            pill-label: root.pill-label;
+            pill-score: root.pill-score;
+            toggle-theme => { root.toggle-theme(); }
+            open-menu => { root.open-menu(); }
+        }
+
+        Rectangle {
+            x: root.shell-x;
+            y: root.desk-y;
+            width: root.shell-w;
+            height: root.desk-h;
+            background: FN.surface;
+            border-width: 1px;
+            border-color: FN.line;
+
+            body := VerticalLayout {
+                x: 1px + root.pad-l;
+                y: 1px + 26px;
+                width: root.inner-w;
+                alignment: start;
+
+                // ---- section head
+                Rectangle {
+                    height: 92px;
+                    MonoText { x: 0px; y: 0px; text: "RECHARGE"; font-size: 10px; letter-spacing: 1.8px; color: FN.ink-4; }
+                    SerifText { x: 0px; y: 23px; text: "Break Room"; font-size: 48px; font-weight: 500; letter-spacing: -0.48px; color: FN.ink; }
+                    MonoText { x: parent.width - self.preferred-width; y: 0px; text: root.d.note; font-size: 11px; color: FN.ink-4; }
+                    Rectangle { x: 0px; y: parent.height - 2px; width: parent.width; height: 2px; background: FN.rule-hard; }
+                }
+                Rectangle { height: 24px; }
+
+                // ---- XP bar
+                Rectangle {
+                    height: 14px;
+                    border-radius: 7px;
+                    background: FN.surface-inset;
+                    Rectangle {
+                        x: 0px;
+                        width: parent.width * clamp(root.d.xp-fraction, 0, 1);
+                        border-radius: 7px;
+                        background: @linear-gradient(90deg, #8fb4ff 0%, #4ade80 100%);
+                        drop-shadow-blur: 8px;
+                        drop-shadow-color: #8fb4ff66;
+                        animate width { duration: 400ms; easing: ease-out; }
+                    }
+                    for p in [0.25, 0.5, 0.75]: Rectangle {
+                        x: parent.width * p - 1px;
+                        width: 2px;
+                        border-radius: 1px;
+                        background: #ffffff40;
+                    }
+                }
+                Rectangle { height: 10px; }
+                Rectangle {
+                    height: 21px;
+                    xp := MonoText { x: 0px; y: 2px; text: root.d.xp-label; font-size: 12.48px; color: FN.ink-3; }
+                    if root.d.streak != "": Rectangle {
+                        x: xp.preferred-width + 10px;
+                        y: 0px;
+                        width: streak-row.preferred-width + 20px;
+                        height: 21px;
+                        border-radius: 2px;
+                        background: @linear-gradient(135deg, #f97316 0%, #ef4444 100%);
+                        streak-row := HorizontalLayout {
+                            x: 10px;
+                            spacing: 4px;
+                            Text { text: root.d.streak-icon; font-family: Emoji.family; font-size: 12.48px; vertical-alignment: center; }
+                            SansText { text: root.d.streak; font-size: 12.48px; font-weight: 700; color: FN.ink-3; vertical-alignment: center; }
+                        }
+                    }
+                }
+                Rectangle { height: 20px; }
+
+                // ---- quote (max-width 600, centred, italic)
+                // `line-height: 1.5` (21.12 px): Slint text has no line height, so the block takes
+                // production's height for its line count and the text is centred in it.
+                Rectangle {
+                    height: round(quote.preferred-height / 16.2px) * 21.12px;
+                    quote := SansText {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.preferred-height) / 2;
+                        width: min(600px, root.inner-w);
+                        wrap: word-wrap;
+                        horizontal-alignment: center;
+                        text: root.d.quote;
+                        font-size: 14.08px;
+                        font-italic: true;
+                        color: FN.ink-3;
+                    }
+                }
+                Rectangle { height: 24px; }
+
+                // ---- game grid: two columns, `--fn-rule-hard` on top
+                HorizontalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: root.grid-w;
+                        height: 1px + 170px * ceil(root.d.cards.length / 2);
+                        Rectangle { x: 0px; y: 0px; width: parent.width; height: 1px; background: FN.rule-hard; }
+                        for card[i] in root.d.cards: GameCard {
+                            x: mod(i, 2) * parent.width / 2;
+                            y: 1px + floor(i / 2) * 170px;
+                            width: parent.width / 2;
+                            card: card;
+                            play => { root.play(i); }
+                            unlock => { root.unlock(i); }
+                        }
+                    }
+                }
+                Rectangle { height: 8px; }
+
+                // ---- stats row
+                Rectangle {
+                    height: 44px;
+                    HLine { y: 0px; tone: FN.line; }
+                    HLine { y: parent.height - 1px; tone: FN.line; }
+                    HorizontalLayout {
+                        y: 9px;
+                        height: 26px;
+                        alignment: center;
+                        spacing: 10px;
+                        StatChip { icon: "\u{1F513}"; text: root.d.stats-unlocked; }
+                        StatChip { glyph: "\u{25B6}"; text: root.d.stats-played; }
+                        if root.d.full-house: StatChip { icon: "\u{1F3C6}"; text: "Full house!"; }
+                    }
+                }
+                Rectangle { height: 20px; }
+
+                // ---- water
+                Rectangle {
+                    height: 58.6px;
+                    HorizontalLayout {
+                        y: 12px;
+                        height: 33.6px;
+                        alignment: center;
+                        spacing: 12px;
+                        Rectangle {
+                            width: 48px;
+                            Text { x: (parent.width - self.preferred-width) / 2; y: (parent.height - self.preferred-height) / 2; text: "\u{1F4A7}"; font-family: Emoji.family; font-size: 25.6px; }
+                            TouchArea { mouse-cursor: pointer; clicked => { root.add-water(); } }
+                            accessible-role: button;
+                            accessible-label: "Add a glass of water";
+                        }
+                        MonoText { vertical-alignment: center; text: root.d.water; font-size: 14.4px; color: FN.ink-3; }
+                        Rectangle {
+                            y: 2.2px;
+                            width: 33.2px;
+                            height: 29.2px;
+                            background: FN.surface-2;
+                            border-width: 1px;
+                            border-color: FN.line;
+                            border-radius: 2px;
+                            SansText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "+"; font-size: 19.2px; font-weight: 700; color: FN.ink-3; }
+                            TouchArea { mouse-cursor: pointer; clicked => { root.add-water(); } }
+                            accessible-role: button;
+                            accessible-label: "Add a glass of water";
+                        }
+                    }
+                    DotLine { y: parent.height - 1px; width: parent.width; }
+                }
+                Rectangle { height: 16px; }
+
+                // ---- achievements
+                SerifText { height: 18px; horizontal-alignment: center; text: "Achievements"; font-size: 15.2px; font-weight: 500; color: FN.ink-2; }
+                Rectangle { height: 8px; }
+                badge-flow := Rectangle {
+                    // wrapping row, centred line by line (flex-wrap: wrap; justify-content: center)
+                    private property <length> row-w: self.width;
+                    height: 26px;
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 8px;
+                        for b in root.d.badges: Badge { badge: b; }
+                    }
+                }
+                Rectangle { height: 24px; }
+
+                // ---- stretch idea
+                Rectangle {
+                    height: 59px;
+                    Text { x: 18px; y: 17px; text: "\u{1F9D8}"; font-family: Emoji.family; font-size: 20.8px; }
+                    SansText { x: 56px; y: 19px; width: parent.width - 56px - 18px - 36px - 12px; text: root.d.stretch; font-size: 14.08px; color: FN.ink-3; }
+                    Rectangle {
+                        x: parent.width - 18px - self.width;
+                        y: 14px;
+                        width: 35.6px;
+                        height: 30px;
+                        background: FN.surface-2;
+                        border-width: 1px;
+                        border-color: FN.line;
+                        border-radius: 2px;
+                        SansText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "\u{21BB}"; font-size: 16px; color: FN.ink-3; }
+                        TouchArea { mouse-cursor: pointer; clicked => { root.next-stretch(); } }
+                        accessible-role: button;
+                        accessible-label: "Another stretch idea";
+                    }
+                    DotLine { y: parent.height - 1px; width: parent.width; }
+                }
+                Rectangle { height: 12px; }
+
+                // ---- pet rock
+                rock-box := Rectangle {
+                    height: 97px;
+                    rock := Text {
+                        x: (parent.width - 43.9px) / 2;
+                        y: 16px;
+                        text: "\u{1FAA8}";
+                        font-family: Emoji.family;
+                        font-size: 35.2px;
+                        // rock-bounce 0.35 s (squash then overshoot) / rock-celebrate 0.8 s
+                        transform-origin: { x: 22px, y: 21px };
+                        transform-scale: root.rock-celebrate ? 1.4 : root.rock-bounce ? 0.8 : 1;
+                        transform-rotation: root.rock-celebrate ? 10deg : 0deg;
+                        animate transform-scale { duration: 170ms; easing: ease-out; }
+                        animate transform-rotation { duration: 400ms; easing: ease-out; }
+                    }
+                    if root.d.rock-plant != "": Text {
+                        x: (parent.width - 43.9px) / 2 + 32px;
+                        y: 16px + 27px;
+                        text: root.d.rock-plant;
+                        font-family: Emoji.family;
+                        font-size: 16px;
+                    }
+                    MonoText { x: (parent.width - self.preferred-width) / 2; y: 64px; text: root.d.rock-label; font-size: 12px; color: FN.ink-3; }
+                    DotLine { y: parent.height - 1px; width: parent.width; }
+                    TouchArea { mouse-cursor: pointer; clicked => { root.pat-rock(); } }
+                    accessible-role: button;
+                    accessible-label: "Pet rock: " + root.d.rock-label;
+                    accessible-action-default => { root.pat-rock(); }
+                }
+            }
+        }
+    }
+
+    FnTabRow {
+        x: 0px;
+        y: max(0px, 82px + flick.viewport-y);
+        width: parent.width;
+        content-x: root.tab-pad;
+        active-tab: 4;
+        picked(i) => { root.picked-tab(i); }
+    }
+}

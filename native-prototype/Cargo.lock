@@ -4608,6 +4608,7 @@ name = "study-tracker-core"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -4619,6 +4620,8 @@ dependencies = [
  "embed-resource",
  "log",
  "minisign-verify",
+ "png",
+ "resvg",
  "serde",
  "serde_json",
  "slint",

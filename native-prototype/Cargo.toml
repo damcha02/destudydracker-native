@@ -37,6 +37,14 @@ serde = { version = "1", features = ["derive"] }
 # (production's `plugins.updater.pubkey`). Zero dependencies of its own, ~600 lines, written by the
 # minisign author; the one new crate of this stage.
 minisign-verify = "0.2"
+# Stage 20: PNG encoding for the native parity snapshot (`STUDY_NATIVE_SNAPSHOT`) and the
+# Flaggle preview. Already resolved transitively (slint -> i-slint-core -> image -> png 0.18);
+# adds no new crate.
+png = "0.18"
+# Stage 20: Flaggle rasterizes flags into 240x180 RGBA like production's canvas. resvg 0.47 (with
+# usvg/tiny-skia) is ALREADY linked by Slint for SVG images; no default features are requested, so
+# this adds no crate and no code beyond what Slint already compiles.
+resvg = { version = "0.47", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 # MessageBoxW fallback for fatal startup errors once the release build has no console (Stage 13,

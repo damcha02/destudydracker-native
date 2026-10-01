@@ -68,6 +68,12 @@ export component WabiSidebar inherits Rectangle {
     in property <bool> theme-locked;
     in property <bool> dark;
     in property <bool> timer-menu-open;
+    // Stage 20: the Rest item and its rooms submenu (Games / Meditation / Achievements)
+    in property <bool> on-rest;
+    in property <bool> rest-menu-open;
+    in property <int> rest-room;
+    callback open-rest();
+    callback pick-room(int);
     callback toggle-semester();
     callback toggle-course(int);
     callback open-dashboard();
@@ -230,7 +236,34 @@ export component WabiSidebar inherits Rectangle {
             }
         }
         NavItem { label: "Notes"; kanji: "記録"; enabled: false; }
-        NavItem { label: "Rest"; kanji: "休み"; enabled: false; }
+        NavItem { label: "Rest"; kanji: "休み"; active: root.on-rest && !root.quiet; clicked => { root.open-rest(); } }
+        // `.wabi-plan-menu.wabi-notes-menu` under Rest: the three rooms
+        if root.rest-menu-open && !root.quiet: VerticalLayout {
+            padding-left: 34px;
+            padding-right: 22px;
+            padding-top: 2px;
+            padding-bottom: 10px;
+            for room[i] in ["Games", "Meditation", "Achievements"]: Rectangle {
+                private property <bool> selected: root.on-rest && root.rest-room == i;
+                height: 26px;
+                if self.selected: Text { x: -12px; y: 5px; height: 16px; vertical-alignment: center; text: "•"; font-family: WS.serif; font-size: 13px; color: WS.sage; }
+                Text {
+                    x: parent.selected ? -1.4px : 0px;
+                    y: 5px;
+                    height: 16px;
+                    vertical-alignment: center;
+                    text: room;
+                    font-family: WS.serif;
+                    font-size: 13px;
+                    font-weight: parent.selected ? 600 : 400;
+                    letter-spacing: 0.08px;
+                    color: parent.selected || touch.has-hover ? WS.ink : WS.muted;
+                }
+                touch := TouchArea { mouse-cursor: pointer; clicked => { root.pick-room(i); } }
+                accessible-role: tab;
+                accessible-label: room;
+            }
+        }
         NavItem { label: "Circle"; kanji: "仲間"; enabled: false; }
     }
 

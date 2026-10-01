@@ -1,0 +1,969 @@
+// The Break Room game screens (Stage 20): production's modals (`App.tsx`'s portal block and
+// `components/SkribblRoom.tsx`), drawn from Rust-prepared data. Colours come from `Game` (the
+// style's CSS variables and their oklch mixes), geometry from production's measured boxes at
+// 1520x980. Every screen is event-driven: nothing animates or ticks while a board is idle; the
+// only motion is the bounded hover/selection lift on Durak cards.
+//
+// Closing: the backdrop and the ✕ close a game, like production (which binds no Escape here).
+import { FN } from "../fn/palette.slint";
+import { Game, GamesData, WordleData, WTile, WKey, GeodleData, GeoRow, GeoClue, CountryOption,
+         FlaggleData, FlagRow, DurakData, DCard, DCol, Emoji } from "types.slint";
+
+component Kicker inherits Text {
+    font-family: FN.sans;
+    font-size: 12.48px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    color: Game.t.muted;
+}
+
+component Heading inherits Text {
+    font-family: FN.serif;
+    font-size: 48px;
+    font-weight: 700;
+    letter-spacing: -1.92px;
+    color: Game.t.text;
+}
+
+component CloseButton inherits Rectangle {
+    in property <length> size: 16px;
+    callback clicked();
+    width: 27.6px;
+    height: 30px;
+    border-radius: 10px;
+    background: touch.has-hover ? Game.t.hover-14 : transparent;
+    Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "✕"; font-family: FN.sans; font-size: root.size; color: touch.has-hover ? Game.t.text : Game.t.muted; }
+    touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: "Close";
+}
+
+// The dimmed backdrop (rgba(0,0,0,.58)); a click outside the modal closes it.
+component Backdrop inherits Rectangle {
+    in property <float> dim: 0.58;
+    callback close();
+    background: rgba(0, 0, 0, root.dim);
+    TouchArea { clicked => { root.close(); } }
+}
+
+// A radial glow from a point near the top-left corner (`radial-gradient(circle at 12% 0%, ...)`).
+component CornerGlow inherits Rectangle {
+    in property <color> tint;
+    private property <length> r: 0.36 * sqrt((0.88 * root.width / 1px) * (0.88 * root.width / 1px) + (root.height / 1px) * (root.height / 1px)) * 1px;
+    Rectangle {
+        x: 0.12 * root.width - root.r;
+        y: -root.r;
+        width: 2 * root.r;
+        height: 2 * root.r;
+        background: @radial-gradient(circle, root.tint 0%, transparent 100%);
+    }
+}
+
+// A modal panel: centred, at most 92 % of the window high, scrolling its content when taller.
+component Panel inherits Rectangle {
+    in property <length> panel-w;
+    in property <length> pad;
+    in property <length> content-h;
+    in property <length> radius;
+    in property <brush> fill;
+    in property <color> glow;
+    in property <bool> has-glow;
+    private property <length> max-h: root.height * 0.92;
+    private property <length> h: min(root.max-h, root.content-h + 2 * root.pad + 2px);
+    // swallow clicks so only the backdrop closes the modal
+    TouchArea {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(root.panel-w, parent.width - 32px);
+        height: root.h;
+    }
+    panel := Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(root.panel-w, parent.width - 32px);
+        height: root.h;
+        border-radius: root.radius;
+        border-width: 1px;
+        border-color: Game.t.border;
+        background: root.fill;
+        drop-shadow-offset-y: 12px;
+        drop-shadow-blur: 48px;
+        drop-shadow-color: #0000006b;
+        clip: true;
+        if root.has-glow: CornerGlow { width: parent.width; height: parent.height; tint: root.glow; }
+        Flickable {
+            x: 1px + root.pad;
+            y: 1px + root.pad;
+            width: parent.width - 2px - 2 * root.pad;
+            height: parent.height - 2px - 2 * root.pad;
+            viewport-height: root.content-h;
+            interactive: root.content-h > self.height;
+            @children
+        }
+    }
+}
+
+// ------------------------------------------------------------------------------------- Wordle
+
+component WordleTile inherits Rectangle {
+    in property <WTile> tile;
+    accessible-role: text;
+    accessible-label: root.tile.letter == "" ? "Empty" : root.tile.letter + (root.tile.state == 2 ? ", correct" : root.tile.state == 3 ? ", present" : root.tile.state == 4 ? ", absent" : "");
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    border-width: 2px;
+    border-color: root.tile.state == 0 ? Game.t.tile-border : Game.t.tile-filled-border;
+    background: root.tile.state == 2 ? #2f9e44 : root.tile.state == 3 ? #f08c00 : root.tile.state == 4 ? #495057 : Game.t.inset;
+    Text {
+        width: parent.width;
+        height: parent.height;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.tile.letter;
+        font-family: FN.mono;
+        font-size: 30.4px;
+        font-weight: 900;
+        color: root.tile.state >= 2 ? #ffffff : Game.t.text;
+    }
+}
+
+component WordleKey inherits Rectangle {
+    in property <WKey> k;
+    in property <bool> enabled;
+    callback pressed(string);
+    width: root.k.wide ? 58px : 30px;
+    height: 44px;
+    border-radius: Game.square-buttons ? 0px : 9px;
+    border-width: 1px;
+    border-color: root.k.state == 2 ? #2f9e44 : root.k.state == 3 ? #f08c00 : root.k.state == 4 ? #495057 : Game.t.border;
+    background: root.k.state == 2 ? #2f9e44 : root.k.state == 3 ? #f08c00 : root.k.state == 4 ? #495057 : #ffffff;
+    transform-origin: { x: self.width / 2, y: self.height / 2 };
+    Text {
+        y: touch.has-hover && root.enabled ? -1px : 0px;
+        width: parent.width;
+        height: parent.height;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.k.label;
+        font-family: FN.sans;
+        font-size: root.k.wide ? 11.52px : 12.48px;
+        font-weight: 900;
+        color: root.k.state >= 2 ? #ffffff : #1f2933;
+    }
+    touch := TouchArea { enabled: root.enabled; mouse-cursor: root.enabled ? pointer : default; clicked => { root.pressed(root.k.key); } }
+    accessible-role: button;
+    accessible-label: root.k.label == "⌫" ? "Backspace" : root.k.label;
+}
+
+component WordleModal inherits Rectangle {
+    in property <WordleData> d;
+    callback close();
+    callback key(string);
+    callback hard();
+    forward-focus: keys;
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return { root.key("enter"); return accept; }
+            if event.text == Key.Backspace { root.key("back"); return accept; }
+            if event.text.is-empty || event.modifiers.control || event.modifiers.alt || event.modifiers.meta { return reject; }
+            root.key(event.text.to-lowercase());
+            accept
+        }
+    }
+    Backdrop { close => { root.close(); } }
+    Panel {
+        panel-w: 520px;
+        pad: 22px;
+        radius: 24px;
+        fill: Game.t.wordle-bg;
+        content-h: 681px;
+        Rectangle {
+            Kicker { x: 0px; y: 0px; text: "DAILY WORDLE"; font-size: 12px; font-weight: 800; letter-spacing: 1.92px; }
+            Heading { x: 0px; y: 20px; text: "Find the 5-letter word"; font-size: 35.2px; letter-spacing: -1.056px; }
+            Text { x: 0px; y: 67px; text: root.d.counts; font-family: FN.sans; font-size: 12px; color: Game.t.muted; }
+            // hard-mode pill (production disables it during a puzzle: opacity .72)
+            hard := Rectangle {
+                private property <length> badge-w: max(30px, on.preferred-width + 12px);
+                x: parent.width - self.width;
+                y: 0px;
+                width: 11px + hard-label.preferred-width + 8px + self.badge-w + 11px;
+                height: 32px;
+                border-radius: 16px;
+                border-width: 1px;
+                border-color: root.d.hard ? #f08c00 : Game.t.border;
+                background: root.d.hard ? Game.t.hard-active-bg : Game.t.inset;
+                opacity: root.d.hard-locked ? 0.72 : 1;
+                hard-label := Text { x: 11px; height: parent.height; vertical-alignment: center; text: "Hard mode"; font-family: FN.sans; font-size: 12px; font-weight: 800; color: Game.t.muted; }
+                Rectangle {
+                    x: 11px + hard-label.preferred-width + 8px;
+                    y: 8px;
+                    height: 16px;
+                    width: parent.badge-w;
+                    border-radius: 8px;
+                    background: root.d.hard ? #f08c00 : #495057;
+                    on := Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.d.hard ? "ON" : "OFF"; font-family: FN.sans; font-size: 10.56px; font-weight: 900; letter-spacing: 0.84px; color: #ffffff; }
+                }
+                TouchArea { enabled: !root.d.hard-locked; mouse-cursor: self.enabled ? pointer : default; clicked => { root.hard(); } }
+                accessible-role: switch;
+                accessible-checked: root.d.hard;
+                accessible-label: "Hard mode";
+            }
+            if root.d.hard-locked: Text { x: parent.width - self.preferred-width; y: 38px; text: "Locked during puzzle"; font-family: FN.sans; font-size: 10.24px; color: Game.t.muted; }
+            CloseButton { x: parent.width - self.width; y: 55px; clicked => { root.close(); } }
+
+            // board: six rows of five 56 px tiles, 7 px apart, centred
+            for tile[i] in root.d.tiles: WordleTile {
+                x: (parent.width - 5 * 56px - 4 * 7px) / 2 + mod(i, 5) * 63px;
+                y: 104px + floor(i / 5) * 63px;
+                tile: tile;
+            }
+            Text {
+                x: 0px;
+                y: 493px;
+                width: parent.width;
+                height: 24px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                text: root.d.status;
+                font-family: FN.sans;
+                font-size: 16px;
+                font-weight: 800;
+                color: Game.t.text;
+            }
+            // keyboard rows: 10, 9 and Enter + 7 + ⌫
+            for krow[row] in [root.d.keys0, root.d.keys1, root.d.keys2]: HorizontalLayout {
+                y: 535px + row * 51px;
+                height: 44px;
+                alignment: center;
+                spacing: 5px;
+                for k in krow: WordleKey {
+                    k: k;
+                    enabled: !root.d.completed || k.key == "enter";
+                    pressed(code) => { root.key(code); }
+                }
+            }
+        }
+    }
+    accessible-role: groupbox;
+    accessible-label: "Daily Wordle puzzle";
+}
+
+// ---------------------------------------------------------------- country combo (Geodle/Flaggle)
+
+component CountryCombo inherits Rectangle {
+    in property <string> draft;
+    in property <bool> dropdown;
+    in property <[CountryOption]> options;
+    in property <bool> enabled;
+    in property <string> placeholder;
+    in property <bool> flags;
+    in property <length> menu-h;
+    callback edited(string);
+    callback toggle();
+    callback pick(string);
+    callback submit();
+    height: 52px;
+    // typing replaces a TextInput's one-way `text` binding, so the controller's draft (cleared after
+    // a guess, set by a pick) is pushed into the field explicitly whenever it changes
+    changed draft => { if input.text != root.draft { input.text = root.draft; } }
+    Rectangle {
+        border-width: 1px;
+        border-color: Game.t.border;
+        border-radius: 2px;
+        background: Game.t.surface;
+        input := TextInput {
+            x: 16px;
+            width: parent.width - 16px - 82px;
+            height: parent.height;
+            vertical-alignment: center;
+            text: root.draft;
+            enabled: root.enabled;
+            single-line: true;
+            font-family: FN.sans;
+            font-size: 16px;
+            font-weight: 800;
+            color: Game.t.text;
+            edited => { root.edited(self.text); }
+            accepted => { root.submit(); }
+            changed has-focus => { if self.has-focus && !root.dropdown && root.enabled { root.toggle(); } }
+            accessible-role: text-input;
+            accessible-label: root.placeholder;
+        }
+        if input.text == "": Text {
+            x: 16px;
+            height: parent.height;
+            vertical-alignment: center;
+            text: root.placeholder;
+            font-family: FN.sans;
+            font-size: 16px;
+            font-weight: 800;
+            color: Game.t.muted;
+        }
+        if root.draft != "": Rectangle {
+            x: parent.width - 45px - 34px;
+            y: 9px;
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: clear.has-hover ? #edf2ff : transparent;
+            Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "×"; font-family: FN.sans; font-size: 21.6px; color: #495057; }
+            clear := TouchArea { clicked => { root.edited(""); input.focus(); } }
+            accessible-role: button;
+            accessible-label: "Clear country";
+        }
+        Rectangle {
+            x: parent.width - 8px - 34px;
+            y: 9px;
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: drop.has-hover ? #edf2ff : transparent;
+            Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "▾"; font-family: FN.sans; font-size: 16px; color: #495057; }
+            drop := TouchArea { mouse-cursor: pointer; clicked => { root.toggle(); } }
+            accessible-role: button;
+            accessible-label: "Show countries";
+        }
+    }
+    if root.dropdown && root.enabled: Rectangle {
+        y: parent.height + 6px;
+        height: min(root.menu-h, list.preferred-height + 18px);
+        border-width: 1px;
+        border-color: Game.t.border;
+        border-radius: 16px;
+        background: Game.t.surface;
+        drop-shadow-offset-y: 16px;
+        drop-shadow-blur: 36px;
+        drop-shadow-color: #00000052;
+        clip: true;
+        Flickable {
+            x: 9px;
+            y: 9px;
+            width: parent.width - 18px;
+            height: parent.height - 18px;
+            viewport-height: list.preferred-height;
+            list := VerticalLayout {
+                spacing: 2px;
+                if root.options.length == 0: Text { text: "No countries found."; font-family: FN.sans; font-size: 12.48px; color: Game.t.muted; }
+                for o in root.options: Rectangle {
+                    height: root.flags ? 74px : 39px;
+                    border-radius: 12px;
+                    background: row.has-hover ? Game.t.hover-16 : transparent;
+                    if root.flags: Rectangle {
+                        x: 12px;
+                        y: 10px;
+                        width: 72px;
+                        height: 54px;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Game.t.border;
+                        background: #111111;
+                        clip: true;
+                        Image { width: parent.width; height: parent.height; image-fit: cover; source: o.flag; }
+                    }
+                    Text {
+                        x: root.flags ? 12px + 78px + 14px : 12px;
+                        height: parent.height;
+                        vertical-alignment: center;
+                        text: o.name;
+                        font-family: FN.sans;
+                        font-size: 16px;
+                        font-weight: 700;
+                        color: Game.t.text;
+                    }
+                    if !root.flags: Text {
+                        x: parent.width - 12px - self.preferred-width;
+                        height: parent.height;
+                        vertical-alignment: center;
+                        text: o.detail;
+                        font-family: FN.sans;
+                        font-size: 12.48px;
+                        color: Game.t.muted;
+                    }
+                    row := TouchArea { mouse-cursor: pointer; clicked => { root.pick(o.name); } }
+                    accessible-role: list-item;
+                    accessible-label: o.name;
+                }
+            }
+        }
+    }
+}
+
+component SubmitButton inherits Rectangle {
+    in property <string> text;
+    in property <brush> fill;
+    in property <color> ink;
+    in property <length> radius;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: label.preferred-width + 44px;
+    height: 52px;
+    border-radius: root.radius;
+    background: root.fill;
+    opacity: root.enabled ? 1 : 0.6;
+    label := Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.text; font-family: FN.sans; font-size: 16px; font-weight: 900; color: root.ink; }
+    TouchArea { enabled: root.enabled; mouse-cursor: self.enabled ? pointer : default; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.text;
+}
+
+// ------------------------------------------------------------------------------------- Geodle
+
+component ClueChip inherits Rectangle {
+    in property <GeoClue> clue;
+    width: max(72px, min(112px, small.preferred-width + 16px));
+    height: 50px;
+    border-radius: 14px;
+    background: root.clue.state == 0 ? #2f9e44 : root.clue.state == 1 ? #e03131 : root.clue.state == 2 ? #15aabf : #f08c00;
+    Text { y: 8px; width: parent.width; horizontal-alignment: center; text: root.clue.glyph; font-family: FN.sans; font-size: 16px; font-weight: 900; color: #ffffff; }
+    small := Text { x: (parent.width - min(96px, self.preferred-width)) / 2; y: 30px; width: min(96px, self.preferred-width); overflow: elide; text: root.clue.value; font-family: FN.sans; font-size: 10.24px; font-weight: 800; color: #ffffff; }
+    tip-touch := TouchArea { }
+    // the hint tooltip (`::after` on hover/focus)
+    if tip-touch.has-hover: Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: -10px - self.height;
+        width: min(260px, tip.preferred-width + 22px);
+        height: tip.preferred-height + 18px;
+        border-radius: 10px;
+        border-width: 1px;
+        border-color: Game.t.border;
+        background: Game.t.tooltip-bg;
+        drop-shadow-offset-y: 10px;
+        drop-shadow-blur: 28px;
+        drop-shadow-color: #00000057;
+        tip := Text { x: 11px; y: 9px; width: parent.width - 22px; wrap: word-wrap; text: root.clue.hint; font-family: FN.sans; font-size: 11.52px; font-weight: 800; color: Game.t.text; }
+    }
+    accessible-role: text;
+    accessible-label: root.clue.hint;
+}
+
+component GeodleModal inherits Rectangle {
+    in property <GeodleData> d;
+    callback close();
+    callback edited(string);
+    callback toggle();
+    callback pick(string);
+    callback submit();
+    // production's measured column widths (auto table layout, min-width 820 px)
+    private property <[float]> cols: [135, 124, 134.5, 141.9, 115.2, 114.8, 162.7];
+    private property <length> table-h: 42.5px + max(1, root.d.rows.length) * 79px + 2px;
+    Backdrop { close => { root.close(); } }
+    Panel {
+        panel-w: 980px;
+        pad: 24px;
+        radius: 26px;
+        fill: Game.t.geodle-bg;
+        content-h: 227px + root.table-h;
+        Rectangle {
+            Kicker { x: 0px; y: 0px; text: "DAILY GEODLE"; }
+            Heading { x: 0px; y: 20px; text: "Guess the country"; }
+            Text { x: 0px; y: 82px; text: root.d.header; font-family: FN.sans; font-size: 12.48px; color: Game.t.muted; }
+            CloseButton { x: parent.width - self.width; y: 0px; clicked => { root.close(); } }
+            // status and table first, so the dropdown draws over them
+            Text { x: 0px; y: 185px; width: parent.width; height: 24px; horizontal-alignment: center; vertical-alignment: center; text: root.d.status; font-family: FN.sans; font-size: 16px; font-weight: 800; color: Game.t.text; }
+            Rectangle {
+                y: 227px;
+                height: root.table-h;
+                border-radius: 20px;
+                border-width: 1px;
+                border-color: Game.t.border;
+                background: Game.t.geodle-table-bg;
+                private property <float> scale: (self.width - 2px) / 928px;
+                for label[c] in ["COUNTRY", "CONTINENT", "POPULATION", "LANDLOCKED", "RELIGION", "AREA", "GOV."]: Text {
+                    private property <length> x0: 1px + (c == 0 ? 0 : c == 1 ? 135 : c == 2 ? 259 : c == 3 ? 393.5 : c == 4 ? 535.4 : c == 5 ? 650.6 : 765.4) * parent.scale * 1px;
+                    x: c == 0 ? self.x0 + 12px : self.x0 + (root.cols[c] * parent.scale * 1px - self.preferred-width) / 2;
+                    y: 15px;
+                    text: label;
+                    font-family: FN.sans;
+                    font-size: 11.84px;
+                    font-weight: 700;
+                    letter-spacing: 1.18px;
+                    color: Game.t.muted;
+                }
+                Rectangle { x: 1px; y: 42.5px; width: parent.width - 2px; height: 1px; background: Game.t.geodle-rule; }
+                if root.d.rows.length == 0: Text {
+                    y: 42.5px;
+                    width: parent.width;
+                    height: 79px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    text: "No guesses yet.";
+                    font-family: FN.sans;
+                    font-size: 16px;
+                    font-italic: true;
+                    color: Game.t.muted;
+                }
+                for row[r] in root.d.rows: Rectangle {
+                    x: 1px;
+                    y: 43.5px + r * 79px;
+                    width: parent.width - 2px;
+                    height: 79px;
+                    private property <float> s: (self.width) / 928px;
+                    Text { x: 12px; height: parent.height - 1px; vertical-alignment: center; text: row.country; font-family: FN.sans; font-size: 16px; font-weight: 900; color: Game.t.text; }
+                    for clue[c] in row.clues: ClueChip {
+                        private property <length> x0: (c == 0 ? 135 : c == 1 ? 259 : c == 2 ? 393.5 : c == 3 ? 535.4 : c == 4 ? 650.6 : 765.4) * parent.s * 1px;
+                        private property <length> w: root.cols[c + 1] * parent.s * 1px;
+                        x: self.x0 + (self.w - self.width) / 2;
+                        y: 14.5px;
+                        clue: clue;
+                    }
+                    Rectangle { y: parent.height - 1px; height: 1px; background: Game.t.geodle-rule; }
+                }
+            }
+            CountryCombo {
+                x: 0px;
+                y: 115px;
+                width: parent.width - submit.width - 10px;
+                draft: root.d.draft;
+                dropdown: root.d.dropdown;
+                options: root.d.options;
+                enabled: !root.d.completed;
+                placeholder: "Country";
+                flags: false;
+                menu-h: 260px;
+                edited(t) => { root.edited(t); }
+                toggle => { root.toggle(); }
+                pick(n) => { root.pick(n); }
+                submit => { root.submit(); }
+            }
+            submit := SubmitButton {
+                x: parent.width - self.width;
+                y: 115px;
+                text: "SUBMIT";
+                fill: @linear-gradient(135deg, #00b894 0%, #38d9a9 100%);
+                ink: #062d24;
+                radius: Game.square-buttons ? 0px : 16px;
+                enabled: !root.d.completed;
+                clicked => { root.submit(); }
+            }
+        }
+    }
+    accessible-role: groupbox;
+    accessible-label: "Daily Geodle puzzle";
+}
+
+// ------------------------------------------------------------------------------------ Flaggle
+
+component FlaggleModal inherits Rectangle {
+    in property <FlaggleData> d;
+    callback close();
+    callback edited(string);
+    callback toggle();
+    callback pick(string);
+    callback submit();
+    private property <length> history-h: max(1, root.d.rows.length) * 90px - 10px;
+    Backdrop { close => { root.close(); } }
+    Panel {
+        panel-w: 920px;
+        pad: 24px;
+        radius: 26px;
+        fill: Game.t.flaggle-bg;
+        content-h: 627px + root.history-h;
+        Rectangle {
+            Kicker { x: 0px; y: 0px; text: "DAILY FLAGGLE"; }
+            Heading { x: 0px; y: 20px; text: "Guess the flag"; }
+            Text { x: 0px; y: 82px; text: root.d.header; font-family: FN.sans; font-size: 12.48px; color: Game.t.muted; }
+            CloseButton { x: parent.width - self.width; y: 0px; clicked => { root.close(); } }
+            // the target flag, revealed where guessed flags share its colours (240 x 180, scaled)
+            Rectangle {
+                y: 115px;
+                height: 382px;
+                border-radius: 20px;
+                border-width: 1px;
+                border-color: Game.t.border;
+                background: #111111;
+                clip: true;
+                if root.d.has-preview: Image {
+                    y: 1px;
+                    width: parent.width;
+                    height: 380px;
+                    image-fit: contain;
+                    source: root.d.preview;
+                    accessible-role: image;
+                    accessible-label: "Revealed target flag clue";
+                }
+                if !root.d.has-preview: Text {
+                    width: parent.width;
+                    height: parent.height;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    text: "Guess a country to reveal matching flag colors.";
+                    font-family: FN.sans;
+                    font-size: 16px;
+                    font-weight: 800;
+                    color: Game.t.muted;
+                }
+            }
+            Text { x: 0px; y: 585px; width: parent.width; height: 24px; horizontal-alignment: center; vertical-alignment: center; text: root.d.status; font-family: FN.sans; font-size: 16px; font-weight: 800; color: Game.t.text; }
+            if root.d.rows.length == 0: Rectangle {
+                y: 627px;
+                height: 80px;
+                border-radius: 16px;
+                border-width: 1px;
+                border-color: Game.t.border;
+                background: Game.t.flaggle-row-bg;
+                Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "No guesses yet."; font-family: FN.sans; font-size: 16px; font-italic: true; color: Game.t.muted; }
+            }
+            for row[i] in root.d.rows: Rectangle {
+                y: 627px + i * 90px;
+                height: 80px;
+                border-radius: 16px;
+                border-width: 1px;
+                border-color: Game.t.border;
+                background: Game.t.flaggle-row-bg;
+                Text { x: 17px; height: parent.height; vertical-alignment: center; text: row.country; font-family: FN.sans; font-size: 17.28px; font-weight: 700; color: Game.t.text; }
+                Text { x: parent.width - 17px - 90px - 18px - self.preferred-width; height: parent.height; vertical-alignment: center; text: row.similarity; font-family: FN.mono; font-size: 17.6px; font-weight: 900; color: Game.t.text; }
+                Rectangle {
+                    x: parent.width - 17px - 90px;
+                    y: 13px;
+                    width: 72px;
+                    height: 54px;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: Game.t.border;
+                    background: #111111;
+                    clip: true;
+                    Image { width: parent.width; height: parent.height; image-fit: cover; source: row.flag; }
+                }
+                accessible-role: list-item;
+                accessible-label: row.country + ", " + row.similarity + " shared colour";
+            }
+            CountryCombo {
+                x: 0px;
+                y: 515px;
+                width: parent.width - fsubmit.width - 10px;
+                draft: root.d.draft;
+                dropdown: root.d.dropdown;
+                options: root.d.options;
+                enabled: !root.d.completed;
+                placeholder: "Choose a country";
+                flags: true;
+                menu-h: 310px;
+                edited(t) => { root.edited(t); }
+                toggle => { root.toggle(); }
+                pick(n) => { root.pick(n); }
+                submit => { root.submit(); }
+            }
+            fsubmit := SubmitButton {
+                x: parent.width - self.width;
+                y: 515px;
+                text: "GUESS";
+                fill: @linear-gradient(135deg, #8fb4ff 0%, #b7ccff 100%);
+                ink: #10203f;
+                radius: 16px;
+                enabled: !root.d.completed;
+                clicked => { root.submit(); }
+            }
+        }
+    }
+    accessible-role: groupbox;
+    accessible-label: "Daily Flaggle puzzle";
+}
+
+// -------------------------------------------------------------------------------------- Durak
+
+component DurakCardView inherits Rectangle {
+    in property <DCard> card;
+    in property <bool> interactive;
+    out property <bool> hovered: touch.has-hover;
+    callback clicked();
+    width: 56px;
+    height: 78px;
+    border-radius: 8px;
+    border-width: root.card.kind == 0 ? 1.5px : 1px;
+    border-color: root.card.kind == 1 ? #1a252f : root.card.kind == 2 ? Game.t.muted : (root.card.selected || root.card.playable ? Game.t.accent : Game.t.border);
+    background: root.card.kind == 1 ? @linear-gradient(135deg, #2c3e50 0%, #34495e 100%)
+              : root.card.kind == 2 ? Game.t.durak-undefended-bg
+              : root.card.selected ? Game.t.durak-selected-bg : #ffffff;
+    if root.card.kind == 1: Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "?"; font-family: FN.sans; font-size: 22.4px; font-weight: 700; color: #ffffff4d; }
+    if root.card.kind == 2: Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "?"; font-family: FN.sans; font-size: 19.2px; color: Game.t.muted; }
+    if root.card.kind == 0: Text { y: 11px; width: parent.width; horizontal-alignment: center; text: root.card.rank; font-family: FN.sans; font-size: 16px; font-weight: 700; color: root.card.red ? #e74c3c : #2c3e50; }
+    if root.card.kind == 0: Text { y: 46px; width: parent.width; horizontal-alignment: center; text: root.card.suit; font-family: FN.sans; font-size: 19.2px; font-weight: 700; color: root.card.red ? #e74c3c : #2c3e50; }
+    touch := TouchArea { enabled: root.interactive; mouse-cursor: root.interactive ? pointer : default; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.card.kind == 1 ? "Hidden card" : root.card.kind == 2 ? "Undefended" : root.card.rank + root.card.suit + (root.card.selected ? ", selected" : "");
+}
+
+component DurakButton inherits Rectangle {
+    in property <string> text;
+    in property <int> kind;   // 0 primary, 1 secondary, 2 danger, 3 accent
+    in property <bool> enabled: true;
+    callback clicked();
+    width: label.preferred-width + 40px;
+    height: 35px;
+    border-radius: Game.square-buttons ? 0px : 10px;
+    background: root.kind == 0 ? Game.t.accent : root.kind == 1 ? Game.t.surface-2 : root.kind == 2 ? #e74c3c : #f39c12;
+    opacity: !root.enabled ? 0.4 : touch.has-hover ? 0.85 : 1;
+    label := Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.text; font-family: FN.sans; font-size: 13.6px; font-weight: 800; color: root.kind == 0 ? Game.t.surface : root.kind == 1 ? Game.t.muted : #ffffff; }
+    touch := TouchArea { enabled: root.enabled; mouse-cursor: self.enabled ? pointer : default; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.text;
+}
+
+component DurakModal inherits Rectangle {
+    in property <DurakData> d;
+    callback close();
+    callback card(int);
+    callback act(string);
+    // `.durak-game` is one block: its parts stack flush (the modal's 12 px gap is outside it)
+    private property <length> table-h: root.d.table.length == 0 ? 80px : 162px;
+    private property <int> hand-rows: max(1, ceil(root.d.hand.length / 7));
+    private property <length> hand-h: 18px + self.hand-rows * 78px + (self.hand-rows - 1) * 6px;
+    private property <length> table-y: 170.8px;
+    private property <length> hand-y: root.table-y + root.table-h;
+    private property <length> actions-y: root.hand-y + root.hand-h;
+    private property <length> body-h: root.d.view != 0 ? 110px
+        : root.actions-y + (root.d.finished == 0 ? 35px + 20px : 120px);
+    Backdrop { dim: 0.55; close => { root.close(); } }
+    Panel {
+        panel-w: 480px;
+        pad: 20px;
+        radius: 20px;
+        fill: Game.t.surface;
+        content-h: root.body-h;
+        if root.d.view == 1: VerticalLayout {
+            spacing: 12px;
+            padding-top: 8px;
+            HorizontalLayout {
+                alignment: center;
+                spacing: 8px;
+                Text { text: "🎉"; font-family: Emoji.family; font-size: 25.6px; }
+                Text { vertical-alignment: center; text: "All 3 puzzles solved for today!"; font-family: FN.sans; font-size: 17.6px; font-weight: 800; color: #27ae60; }
+            }
+            HorizontalLayout { alignment: center; DurakButton { text: "Close"; kind: 0; clicked => { root.close(); } } }
+        }
+        if root.d.view == 0: Rectangle {
+            // head: hint, trump, close
+            Text { x: 0px; y: 0px; text: "HINT"; font-family: FN.sans; font-size: 9.6px; font-weight: 900; letter-spacing: 1.15px; color: Game.t.muted; }
+            Text { x: 0px; y: 13px; width: parent.width - 100px; text: root.d.hint; font-family: FN.sans; font-size: 12.48px; color: Game.t.text; }
+            Text { x: parent.width - 23.5px - 12px - 39.9px; y: 0px; width: 39.9px; horizontal-alignment: center; text: "TRUMP"; font-family: FN.sans; font-size: 9.6px; font-weight: 900; letter-spacing: 1.15px; color: Game.t.muted; }
+            Text { x: parent.width - 23.5px - 12px - 39.9px; y: 13px; width: 39.9px; horizontal-alignment: center; text: root.d.trump; font-family: FN.sans; font-size: 28.8px; color: Game.t.text; }
+            CloseButton { x: parent.width - self.width; y: 0px; width: 23.5px; height: 28px; size: 19.2px; clicked => { root.close(); } }
+            // CPU hand (backs only)
+            Text { x: 0px; y: 41.8px; text: "CPU (" + root.d.cpu-cards + ")"; font-family: FN.sans; font-size: 11.2px; font-weight: 700; color: Game.t.muted; }
+            for i in root.d.cpu-cards: DurakCardView {
+                x: i * 62px;
+                y: 59.8px;
+                card: { kind: 1 };
+            }
+            // message between hairlines
+            Rectangle {
+                y: 137.8px;
+                height: 33px + max(0px, msg.preferred-height - 16px);
+                Rectangle { y: 0px; height: 1px; background: Game.t.durak-rule; }
+                msg := Text { x: 0px; y: 8px; width: parent.width; wrap: word-wrap; horizontal-alignment: center; text: root.d.message; font-family: FN.sans; font-size: 13.6px; font-weight: 600; color: Game.t.text; }
+                Rectangle { y: parent.height - 1px; height: 1px; background: Game.t.durak-rule; }
+            }
+            // the table: attack/defence pairs, the side to act on top
+            Rectangle {
+                y: root.table-y;
+                height: root.table-h;
+                if root.d.table.length == 0: Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "Play your cards to attack"; font-family: FN.sans; font-size: 12.48px; font-italic: true; color: Game.t.muted; }
+                for col[i] in root.d.table: Rectangle {
+                    x: (parent.width - root.d.table.length * 66px + 10px) / 2 + i * 66px;
+                    width: 56px;
+                    DurakCardView { y: 0px; card: col.top; drop-shadow-blur: col.active && col.top.kind == 2 ? 6px : 0px; drop-shadow-color: Game.t.accent; }
+                    DurakCardView { y: 84px; card: col.bottom; drop-shadow-blur: col.active && col.bottom.kind == 2 ? 6px : 0px; drop-shadow-color: Game.t.accent; }
+                }
+            }
+            // the player's hand, centred, wrapping at seven
+            Rectangle {
+                y: root.hand-y;
+                height: root.hand-h;
+                Text { x: 0px; y: 0px; text: "Your hand (" + root.d.hand.length + ")"; font-family: FN.sans; font-size: 11.2px; font-weight: 700; color: Game.t.muted; }
+                for c[i] in root.d.hand: DurakCardView {
+                    private property <int> per-row: min(7, root.d.hand.length - floor(i / 7) * 7);
+                    x: (parent.width - self.per-row * 62px + 6px) / 2 + mod(i, 7) * 62px;
+                    y: 18px + floor(i / 7) * 84px - (c.selected ? 10px : self.hovered ? 4px : 0px);
+                    animate y { duration: 120ms; }
+                    card: c;
+                    interactive: true;
+                    drop-shadow-offset-y: c.selected ? 4px : 0px;
+                    drop-shadow-blur: c.selected ? 12px : 0px;
+                    drop-shadow-color: #00000033;
+                    clicked => { root.card(i); }
+                }
+            }
+            // actions / result
+            Rectangle {
+                y: root.actions-y;
+                height: 120px;
+                if root.d.finished == 0: HorizontalLayout {
+                    y: 0px;
+                    height: 35px;
+                    alignment: center;
+                    spacing: 8px;
+                    if root.d.phase == 0: DurakButton { text: "Attack"; enabled: root.d.has-selection; clicked => { root.act("attack"); } }
+                    if root.d.phase == 2: DurakButton { text: "Throw"; enabled: root.d.has-selection; clicked => { root.act("throw"); } }
+                    if root.d.phase == 2: DurakButton { text: "Pass"; kind: 1; clicked => { root.act("pass"); } }
+                    if root.d.phase == 1: DurakButton { text: "Defend"; enabled: root.d.can-defend; clicked => { root.act("defend"); } }
+                    if root.d.phase == 1: DurakButton { text: "Slide"; kind: 3; enabled: root.d.can-slide; clicked => { root.act("slide"); } }
+                    if root.d.phase == 1: DurakButton { text: "Pick up"; kind: 2; clicked => { root.act("pickup"); } }
+                }
+                if root.d.finished == 0: HorizontalLayout {
+                    y: 39px;
+                    height: 16px;
+                    alignment: center;
+                    spacing: 4px;
+                    Text { text: "❌"; font-family: Emoji.family; font-size: 12px; }
+                    Text { text: root.d.failures; font-family: FN.mono; font-size: 12px; color: Game.t.muted; }
+                }
+                if root.d.finished != 0: VerticalLayout {
+                    y: 8px;
+                    spacing: 12px;
+                    alignment: start;
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 8px;
+                        Text { text: root.d.finished == 1 ? "🎉" : "💀"; font-family: Emoji.family; font-size: 25.6px; }
+                        Text { vertical-alignment: center; text: root.d.finished == 1 ? "You solved the puzzle!" : "CPU wins! Try a different approach."; font-family: FN.sans; font-size: 17.6px; font-weight: 800; color: root.d.finished == 1 ? #27ae60 : #e74c3c; }
+                    }
+                    if root.d.finished == 1: HorizontalLayout {
+                        alignment: center;
+                        spacing: 4px;
+                        Text { text: "❌"; font-family: Emoji.family; font-size: 13.12px; }
+                        Text { text: root.d.failures; font-family: FN.sans; font-size: 13.12px; color: Game.t.muted; }
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        if root.d.finished == 1: DurakButton { text: "Close"; clicked => { root.close(); } }
+                        if root.d.finished == 2: DurakButton { text: "Try Again"; clicked => { root.act("retry"); } }
+                    }
+                }
+            }
+        }
+    }
+    accessible-role: groupbox;
+    accessible-label: "Daily Durak puzzle";
+}
+
+// ------------------------------------------------------------ Skribbl (Stage 22) / Travle (Stage 21)
+
+component SkribblModal inherits Rectangle {
+    callback close();
+    Backdrop { close => { root.close(); } }
+    Panel {
+        panel-w: 960px;
+        pad: 18px;
+        radius: 22px;
+        fill: Game.t.surface;
+        glow: Game.t.accent-glow-20;
+        has-glow: true;
+        content-h: 140px;
+        Rectangle {
+            Kicker { x: 0px; y: 0px; text: "DAILY SKRIBBL"; }
+            Heading { x: 0px; y: 18px; text: "Draw today's theme"; font-size: 33.6px; letter-spacing: -1.34px; }
+            CloseButton { x: parent.width - self.width; y: 0px; clicked => { root.close(); } }
+            // production with no social identity (`!socialConfigured`): theme, drawing, upload,
+            // gallery and votes all live on the social Worker, which arrives in Stage 22
+            Text {
+                y: 70px;
+                width: parent.width;
+                height: 70px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                wrap: word-wrap;
+                text: "Connect the Social tab once to enable Daily Skribbl, then come back and draw.";
+                font-family: FN.sans;
+                font-size: 16px;
+                color: Game.t.muted;
+            }
+        }
+    }
+    accessible-role: groupbox;
+    accessible-label: "Daily Skribbl";
+}
+
+component TravleModal inherits Rectangle {
+    in property <string> header;
+    callback close();
+    Backdrop { close => { root.close(); } }
+    Panel {
+        panel-w: 880px;
+        pad: 18px;
+        radius: 22px;
+        fill: Game.t.travle-bg;
+        glow: Game.t.accent-glow-24;
+        has-glow: true;
+        content-h: 330px;
+        Rectangle {
+            Kicker { x: 0px; y: 0px; text: "DAILY TRAVLE"; }
+            Heading { x: 0px; y: 18px; text: "Build the border route"; font-size: 36px; letter-spacing: -1.44px; }
+            Text { x: 0px; y: 64px; text: root.header; font-family: FN.sans; font-size: 12.48px; color: Game.t.muted; }
+            CloseButton { x: parent.width - self.width; y: 0px; clicked => { root.close(); } }
+            // the route map and its gameplay are the Stage 21 map migration: no fake game here
+            Rectangle {
+                y: 96px;
+                height: 230px;
+                border-radius: 18px;
+                border-width: 1px;
+                border-color: Game.t.border;
+                background: #2f2d2a;
+                Text {
+                    width: parent.width;
+                    height: parent.height;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                    text: "The Travle route map is not part of this build yet.";
+                    font-family: FN.sans;
+                    font-size: 16px;
+                    font-weight: 800;
+                    color: #a99d85;
+                }
+                Text { x: 14px; y: parent.height - 10px - self.preferred-height; text: "travle"; font-family: FN.sans; font-size: 28.8px; font-weight: 900; letter-spacing: -1.7px; color: #e8dcc71f; }
+            }
+        }
+    }
+    accessible-role: groupbox;
+    accessible-label: "Daily Travle puzzle";
+}
+
+export component BreakGames inherits Rectangle {
+    in property <GamesData> d;
+    callback close();
+    callback wordle-key(string);
+    callback wordle-hard();
+    callback geodle-edited(string);
+    callback geodle-toggle();
+    callback geodle-pick(string);
+    callback geodle-submit();
+    callback flaggle-edited(string);
+    callback flaggle-toggle();
+    callback flaggle-pick(string);
+    callback flaggle-submit();
+    callback durak-card(int);
+    callback durak-act(string);
+    if root.d.open == 0: DurakModal { width: parent.width; height: parent.height; d: root.d.durak; close => { root.close(); } card(i) => { root.durak-card(i); } act(a) => { root.durak-act(a); } }
+    if root.d.open == 1: wordle := WordleModal {
+        width: parent.width;
+        height: parent.height;
+        d: root.d.wordle;
+        close => { root.close(); }
+        key(k) => { root.wordle-key(k); }
+        hard => { root.wordle-hard(); }
+        init => { self.focus(); }
+    }
+    if root.d.open == 2: TravleModal { width: parent.width; height: parent.height; header: root.d.travle-header; close => { root.close(); } }
+    if root.d.open == 3: FlaggleModal {
+        width: parent.width;
+        height: parent.height;
+        d: root.d.flaggle;
+        close => { root.close(); }
+        edited(t) => { root.flaggle-edited(t); }
+        toggle => { root.flaggle-toggle(); }
+        pick(n) => { root.flaggle-pick(n); }
+        submit => { root.flaggle-submit(); }
+    }
+    if root.d.open == 4: SkribblModal { width: parent.width; height: parent.height; close => { root.close(); } }
+    if root.d.open == 5: GeodleModal {
+        width: parent.width;
+        height: parent.height;
+        d: root.d.geodle;
+        close => { root.close(); }
+        edited(t) => { root.geodle-edited(t); }
+        toggle => { root.geodle-toggle(); }
+        pick(n) => { root.geodle-pick(n); }
+        submit => { root.geodle-submit(); }
+    }
+}

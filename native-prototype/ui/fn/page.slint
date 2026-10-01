@@ -19,6 +19,7 @@ export component FnDashboardPage inherits Rectangle {
     callback toggle-theme();
     callback open-menu();
     callback open-timer();
+    callback open-break();
     callback start-focus();
 
     // Transient, purely visual state (hover tooltip / milestone popover) stays in Slint.
@@ -119,7 +120,7 @@ export component FnDashboardPage inherits Rectangle {
         width: parent.width;
         content-x: root.tab-pad;
         active-tab: 0;
-        picked(i) => { if i == 2 { root.open-timer(); } }
+        picked(i) => { if i == 2 { root.open-timer(); } else if i == 4 { root.open-break(); } }
     }
 
     // --- hover tooltip over the weekly chart (`.fossil-tooltip`) ----------------------------------

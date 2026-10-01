@@ -1,0 +1,172 @@
+// Stage 20: the Break Room / Rest view data. Rust (`src/break_room_view.rs`) prepares every
+// string and number; nothing here computes tokens, unlocks or achievements.
+
+// The platform colour-emoji face. Production's emoji come from the browser's platform font
+// (Segoe UI Emoji on Windows, Noto Color Emoji on Linux); naming it explicitly keeps font fallback
+// from picking a monochrome symbol face first. Rust sets the family at startup.
+export global Emoji {
+    in-out property <string> family: "Segoe UI Emoji";
+}
+
+// One game card (`studyBreakGames` entry in its current state).
+export struct BrCard {
+    name: string,
+    desc: string,
+    unlocked: bool,
+    // "0/3", "Solved", "Failed", "Daily" or "" (left of the Play button)
+    status: string,
+    can-unlock: bool,
+    // "~15 min" when locked and no token is free
+    wait: string,
+    celebrating: bool,
+}
+
+export struct BrBadge {
+    icon: string,
+    name: string,
+    earned: bool,
+}
+
+// The Field Notebook Break Room (`.break-grid.fn-break`).
+export struct FnBreakData {
+    note: string,
+    xp-fraction: float,
+    xp-label: string,
+    // "1-day streak" or "" and its flames ("🔥".."🔥🔥🔥")
+    streak: string,
+    streak-icon: string,
+    quote: string,
+    cards: [BrCard],
+    stats-unlocked: string,
+    stats-played: string,
+    full-house: bool,
+    water: string,
+    badges: [BrBadge],
+    stretch: string,
+    rock-plant: string,
+    rock-label: string,
+}
+
+// The Wabi-Sabi Rest room (`renderWabiBreakRoom`): 0 games, 1 meditation, 2 achievements.
+export struct WabiRestData {
+    room: int,
+    // games room
+    rest-title: string,
+    clock: string,
+    running: bool,
+    progress: float,
+    dark: bool,
+    // the fluid ring's empty vessel: production's WebGL output (ink colour at alpha 0) is
+    // composited premultiplied, i.e. *added* to the card - a faint tint in light, a bright disc in dark
+    ring-bg: color,
+    water-fraction: float,
+    water-label: string,
+    games-note: string,
+    cards: [BrCard],
+    tree: int,
+    rock-plant: string,
+    rock-label: string,
+    // meditation
+    breath-on: bool,
+    breath-size: float,
+    breath-count: string,
+    breath-title: string,
+    breath-desc: string,
+    breath-button: string,
+    breath-round: string,
+    breath-phase: int,
+}
+
+// The game modals' colours (production's app-wide CSS variables and their oklch mixes), resolved
+// by Rust (`src/game_tokens.rs`) for the current style / theme / palette.
+export struct GameTokens {
+    surface: color, surface-2: color, inset: color, border: color, accent: color, text: color, muted: color,
+    wordle-bg: color, geodle-bg: color, flaggle-bg: color, travle-bg: color,
+    accent-glow-20: color, accent-glow-24: color,
+    tile-border: color, tile-filled-border: color, input-border: color,
+    hover-14: color, hover-16: color, hard-active-bg: color,
+    flaggle-row-bg: color, geodle-table-bg: color, geodle-rule: color, tooltip-bg: color,
+    durak-rule: color, durak-selected-bg: color, durak-undefended-bg: color,
+    travle-card-bg: color, travle-route-bg: color,
+}
+
+export global Game {
+    // Field Notebook's button reset squares the games' buttons (keys, submits, Durak actions);
+    // Wabi-Sabi keeps their CSS radii
+    in-out property <bool> square-buttons: true;
+    in-out property <GameTokens> t: {
+        surface: #24221e, surface-2: #2b2823, inset: #201e1a, border: #58503f, accent: #eee6d6, text: #eee6d6, muted: #aaa08d,
+    };
+}
+
+// ---- game screens (one modal at a time, production's portal order)
+// Wordle tile state: 0 empty, 1 typed (draft), 2 correct, 3 present, 4 absent
+export struct WTile { letter: string, state: int }
+// Wordle key: state 0 unused, 2 correct, 3 present, 4 absent; `key` is what pressing it sends
+export struct WKey { label: string, state: int, row: int, wide: bool, key: string }
+export struct WordleData {
+    tiles: [WTile],
+    keys0: [WKey],
+    keys1: [WKey],
+    keys2: [WKey],
+    status: string,
+    counts: string,
+    hard: bool,
+    hard-locked: bool,
+    completed: bool,
+}
+// Geodle clue state: 0 match, 1 miss, 2 higher/lower, 3 close
+export struct GeoClue { glyph: string, value: string, state: int, hint: string }
+export struct GeoRow { country: string, clues: [GeoClue] }
+export struct CountryOption { name: string, detail: string, flag: image }
+export struct GeodleData {
+    header: string,
+    draft: string,
+    dropdown: bool,
+    options: [CountryOption],
+    status: string,
+    rows: [GeoRow],
+    completed: bool,
+}
+export struct FlagRow { country: string, similarity: string, flag: image }
+export struct FlaggleData {
+    header: string,
+    preview: image,
+    has-preview: bool,
+    draft: string,
+    dropdown: bool,
+    options: [CountryOption],
+    status: string,
+    rows: [FlagRow],
+    completed: bool,
+}
+// Durak card kind: 0 face, 1 back, 2 undefended slot
+export struct DCard { rank: string, suit: string, red: bool, kind: int, selected: bool, playable: bool }
+export struct DCol { top: DCard, bottom: DCard, active: bool }
+export struct DurakData {
+    // 0 game, 1 all three solved, 2 nothing to show
+    view: int,
+    hint: string,
+    trump: string,
+    cpu-cards: int,
+    message: string,
+    table: [DCol],
+    hand: [DCard],
+    // 0 attack, 1 defend, 2 throw-in, 3 waiting/finished
+    phase: int,
+    // 0 playing, 1 won, 2 lost
+    finished: int,
+    failures: string,
+    has-selection: bool,
+    can-defend: bool,
+    can-slide: bool,
+}
+export struct GamesData {
+    // -1 none, else the open game's index in `studyBreakGames`
+    open: int,
+    wordle: WordleData,
+    geodle: GeodleData,
+    flaggle: FlaggleData,
+    durak: DurakData,
+    travle-header: string,
+}

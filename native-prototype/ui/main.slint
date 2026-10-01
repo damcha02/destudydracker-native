@@ -20,6 +20,14 @@ import { WabiSidebarData, WabiDashData, WabiTimerData, WabiQuietData, WabiCourse
 import { Chrome, ChromeTokens, MenuDropdown, AppearancePanel, ChoiceCard } from "chrome.slint";
 import { SakuraPetals, SakuraTexture, PetalData, SakuraAssets } from "sakura.slint";
 import { FnTokens } from "fn/palette.slint";
+import { FnBreakPage } from "break/fn-break.slint";
+import { BreakGames } from "break/games.slint";
+import { GamesData } from "break/types.slint";
+import { FnBreakData, BrCard, BrBadge, Emoji } from "break/types.slint";
+export { FnBreakData, BrCard, BrBadge, Emoji, WabiRestData, Game, GameTokens, GamesData, WordleData, WTile, WKey, GeodleData, GeoRow, GeoClue, CountryOption, FlaggleData, FlagRow, DurakData, DCard, DCol } from "break/types.slint";
+import { WabiRestData } from "break/types.slint";
+import { AlbumData, AlbumRow, AlbumPageData } from "wabi/album.slint";
+export { AlbumData, AlbumRow, AlbumPageData } from "wabi/album.slint";
 
 export { WS, WsTokens } from "wabi/palette.slint";
 export { WabiSidebarData, WabiDashData, WabiTimerData, WabiQuietData, WabiCourseItem, WabiTaskItem, WabiDeadlineRow, WabiPlannedRow, WabiModeCard, WabiQuietOther } from "wabi/types.slint";
@@ -210,6 +218,48 @@ export component MainWindow inherits Window {
     in-out property <bool> show-text-spike: false;
     in-out property <bool> show-dashboard: true;
     in-out property <bool> show-map: false;
+    // Stage 20: the Break Room / Rest surface (takes precedence over Dashboard and Timer).
+    in-out property <bool> show-break: false;
+    in property <FnBreakData> fn-break;
+    in property <bool> rock-bounce;
+    in property <bool> rock-celebrate;
+    callback break-opened();
+    in property <GamesData> games: { open: -1 };
+    callback game-close();
+    callback wordle-key(string);
+    callback wordle-hard();
+    callback geodle-edited(string);
+    callback geodle-toggle();
+    callback geodle-pick(string);
+    callback geodle-submit();
+    callback flaggle-edited(string);
+    callback flaggle-toggle();
+    callback flaggle-pick(string);
+    callback flaggle-submit();
+    callback durak-card(int);
+    callback durak-act(string);
+    in property <WabiRestData> wabi-rest;
+    in property <int> rest-room;
+    in property <float> breath-ring: 60;
+    in property <int> album-cover-seq;
+    in property <int> album-leaf-seq;
+    in property <bool> album-slide-open;
+    in property <AlbumData> album;
+    in-out property <bool> rest-menu-open: false;
+    callback rest-pick-room(int);
+    callback rest-toggle();
+    callback rest-reset();
+    callback rest-edit(string);
+    callback rest-tree();
+    callback rest-breath();
+    callback album-open();
+    callback album-turn(int);
+    callback album-close();
+    callback break-play(int);
+    callback break-unlock(int);
+    callback break-water();
+    callback break-stretch();
+    callback break-pat();
     private property <bool> text-input-focused: false;
     private property <string> single-line-sample: "Study Tracker - 日本語 note - cafe - sigma σ²";
     private property <string> mixed-line-sample: "Quantum Mechanics — 第4章 — σ² = 2.35 × 10⁻⁴";
@@ -244,7 +294,7 @@ export component MainWindow inherits Window {
         focus-on-click: true;
 
         key-pressed(event) => {
-            if root.show-dashboard || root.show-map { reject }
+            if root.show-dashboard || root.show-map || root.show-break { reject }
             else if !root.text-input-focused && event.text == Key.Space {
                 root.toggle-timer();
                 accept
@@ -271,7 +321,7 @@ export component MainWindow inherits Window {
             height: parent.height - 2 * root.shell-padding;
         }
 
-        if !root.show-dashboard && !root.show-map: ScrollView {
+        if !root.show-dashboard && !root.show-map && !root.show-break: ScrollView {
             x: root.content-x;
             y: root.shell-padding;
             width: root.main-width;
@@ -550,7 +600,7 @@ export component MainWindow inherits Window {
             }
         }
 
-        if root.rail-width > 0px && !root.show-text-spike && !root.show-dashboard && !root.show-map: Rectangle {
+        if root.rail-width > 0px && !root.show-text-spike && !root.show-dashboard && !root.show-map && !root.show-break: Rectangle {
             x: root.content-x + root.main-width + 22px;
             y: root.shell-padding;
             width: root.rail-width;
@@ -611,7 +661,7 @@ export component MainWindow inherits Window {
         // Stage 17: the production Dashboard (Field Notebook style) covers the whole window. The
         // other surfaces below (Timer, Text spike, Map lab) are the not-yet-migrated Stage 4-14
         // screens and debug labs; the page's tab row switches between Dashboard and Timer.
-        if root.show-dashboard && !root.wabi: FnDashboardPage {
+        if root.show-dashboard && !root.wabi && !root.show-break: FnDashboardPage {
             x: 0px;
             y: 0px;
             width: parent.width;
@@ -626,7 +676,31 @@ export component MainWindow inherits Window {
             toggle-theme => { root.appearance-toggle-dark(); }
             open-menu => { root.menu-open = !root.menu-open; }
             open-timer => { root.show-dashboard = false; root.show-text-spike = false; root.show-map = false; }
+            open-break => { root.show-break = true; root.break-opened(); }
             start-focus => { root.show-dashboard = false; root.show-text-spike = false; root.show-map = false; root.fn-start-focus(); }
+        }
+
+        // Stage 20: the Field Notebook Break Room.
+        if root.show-break && !root.wabi: FnBreakPage {
+            width: parent.width;
+            height: parent.height;
+            d: root.fn-break;
+            rock-bounce: root.rock-bounce;
+            rock-celebrate: root.rock-celebrate;
+            pill-tone: root.fn-data.pill-tone;
+            pill-label: root.fn-data.pill-label;
+            pill-score: root.fn-data.pill-score;
+            toggle-theme => { root.appearance-toggle-dark(); }
+            open-menu => { root.menu-open = !root.menu-open; }
+            picked-tab(i) => {
+                if i == 0 { root.show-break = false; root.show-dashboard = true; root.surface-changed(); }
+                if i == 2 { root.show-break = false; root.show-dashboard = false; root.show-text-spike = false; root.show-map = false; root.surface-changed(); }
+            }
+            play(i) => { root.break-play(i); }
+            unlock(i) => { root.break-unlock(i); }
+            add-water => { root.break-water(); }
+            next-stretch => { root.break-stretch(); }
+            pat-rock => { root.break-pat(); }
         }
 
         // Stage 19: the Wabi-Sabi style replaces the whole production surface (sidebar shell).
@@ -637,7 +711,34 @@ export component MainWindow inherits Window {
             dash: root.wabi-dash;
             timer: root.wabi-timer;
             quiet-data: root.wabi-quiet-data;
-            on-timer: !root.show-dashboard;
+            on-timer: !root.show-dashboard && !root.show-break;
+            on-rest: root.show-break;
+            rest-menu-open: root.rest-menu-open;
+            rest: root.wabi-rest;
+            rest-room: root.rest-room;
+            breath-ring: root.breath-ring;
+            album-cover-seq: root.album-cover-seq;
+            album-leaf-seq: root.album-leaf-seq;
+            album-slide-open: root.album-slide-open;
+            album: root.album;
+            rock-bounce: root.rock-bounce;
+            // "Already on Rest: toggle the submenu. Coming from elsewhere: open it."
+            open-rest => {
+                if root.show-break { root.rest-menu-open = !root.rest-menu-open; }
+                else { root.rest-menu-open = true; root.show-break = true; root.break-opened(); }
+            }
+            pick-room(i) => { root.rest-pick-room(i); }
+            rest-toggle => { root.rest-toggle(); }
+            rest-reset => { root.rest-reset(); }
+            rest-edit(t) => { root.rest-edit(t); }
+            rest-play(i) => { root.break-play(i); }
+            rest-unlock(i) => { root.break-unlock(i); }
+            next-tree => { root.rest-tree(); }
+            pat-rock => { root.break-pat(); }
+            breath-toggle => { root.rest-breath(); }
+            album-open => { root.album-open(); }
+            album-turn(d) => { root.album-turn(d); }
+            album-close => { root.album-close(); }
             quiet: root.wabi-quiet;
             theme-locked: root.theme-locked;
             dark: root.appearance-dark;
@@ -645,8 +746,8 @@ export component MainWindow inherits Window {
             sakura: root.sakura;
             petals: root.petals;
             texture-frame: root.texture-frame;
-            open-dashboard => { root.wabi-open-dashboard(); }
-            open-timer => { root.wabi-open-timer(); }
+            open-dashboard => { root.show-break = false; root.rest-menu-open = false; root.wabi-open-dashboard(); }
+            open-timer => { root.show-break = false; root.rest-menu-open = false; root.wabi-open-timer(); }
             toggle-theme => { root.appearance-toggle-dark(); }
             open-menu => { root.menu-open = !root.menu-open; }
             toggle-quiet => { root.wabi-toggle-quiet(); }
@@ -677,6 +778,26 @@ export component MainWindow inherits Window {
             width: parent.width;
             height: parent.height;
             petals: root.petals;
+        }
+
+        // Stage 20: the open game (production's portal, z-index 500, over every surface)
+        if root.show-break && root.games.open >= 0: BreakGames {
+            width: parent.width;
+            height: parent.height;
+            d: root.games;
+            close => { root.game-close(); }
+            wordle-key(k) => { root.wordle-key(k); }
+            wordle-hard => { root.wordle-hard(); }
+            geodle-edited(t) => { root.geodle-edited(t); }
+            geodle-toggle => { root.geodle-toggle(); }
+            geodle-pick(n) => { root.geodle-pick(n); }
+            geodle-submit => { root.geodle-submit(); }
+            flaggle-edited(t) => { root.flaggle-edited(t); }
+            flaggle-toggle => { root.flaggle-toggle(); }
+            flaggle-pick(n) => { root.flaggle-pick(n); }
+            flaggle-submit => { root.flaggle-submit(); }
+            durak-card(i) => { root.durak-card(i); }
+            durak-act(a) => { root.durak-act(a); }
         }
 
         // The menu (`.topbar-menu` / `.wabi-toolbar-menu`) and the Theme / Style panel.

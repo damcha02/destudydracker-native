@@ -5,6 +5,7 @@
 //! `docs/stage12_5-architecture-freeze.md` section 5, section 13).
 
 pub mod academic_port;
+pub mod break_room_port;
 pub mod migration;
 pub mod migration_academic;
 pub mod preferences_port;
