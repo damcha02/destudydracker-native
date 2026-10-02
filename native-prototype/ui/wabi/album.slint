@@ -542,6 +542,8 @@ export component WabiAlbum inherits Rectangle {
             }
             // the page-turn zones down the spread's outer edges
             if root.d.open: TouchArea {
+                // explicit: an element with a width but no x is centred in its parent (the spine)
+                x: 0px;
                 width: root.zone-w;
                 height: root.bh;
                 enabled: root.d.anim == 0;

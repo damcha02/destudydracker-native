@@ -138,7 +138,7 @@ component RestCard inherits Rectangle {
             font-size: 22.5px;
             color: WS.ink;
             single-line: true;
-            input-type: number;
+            // plain text like production's <input>: `input-type: number` drops the ':' of MM:SS
             init => { self.focus(); self.select-all(); }
             accepted => { root.editing = false; root.edit(self.text); }
             key-pressed(event) => {

@@ -134,14 +134,19 @@ component StatChip inherits Rectangle {
     in property <string> icon;
     in property <string> glyph;
     in property <string> text;
+    // `.break-stats-chip.collection` (Full house) is green (#22c55e).
+    in property <color> tone: FN.ink-3;
     height: 26px;
     width: row.preferred-width + 24px;
     row := HorizontalLayout {
         x: 12px;
+        // Exactly the content width: left to fill the chip, the 24px surplus was shared out by
+        // stretch, which moved the label away from the emoji with Segoe UI Emoji metrics.
+        width: self.preferred-width;
         spacing: 4px;
         if root.icon != "": Text { text: root.icon; font-family: Emoji.family; font-size: 13.12px; vertical-alignment: center; }
-        if root.glyph != "": SansText { text: root.glyph; font-size: 9px; color: FN.ink-3; vertical-alignment: center; }
-        SansText { text: root.text; font-size: 13.12px; font-weight: 600; color: FN.ink-3; vertical-alignment: center; }
+        if root.glyph != "": SansText { text: root.glyph; font-family: Emoji.symbol != "" ? Emoji.symbol : FN.sans; font-size: 9px; color: root.tone; vertical-alignment: center; }
+        SansText { text: root.text; font-size: 13.12px; font-weight: 600; color: root.tone; vertical-alignment: center; }
     }
     DotLine { y: parent.height - 1px; width: parent.width; }
 }
@@ -280,6 +285,7 @@ export component FnBreakPage inherits Rectangle {
                         background: @linear-gradient(135deg, #f97316 0%, #ef4444 100%);
                         streak-row := HorizontalLayout {
                             x: 10px;
+                            width: self.preferred-width;
                             spacing: 4px;
                             Text { text: root.d.streak-icon; font-family: Emoji.family; font-size: 12.48px; vertical-alignment: center; }
                             SansText { text: root.d.streak; font-size: 12.48px; font-weight: 700; color: FN.ink-3; vertical-alignment: center; }
@@ -338,7 +344,7 @@ export component FnBreakPage inherits Rectangle {
                         spacing: 10px;
                         StatChip { icon: "\u{1F513}"; text: root.d.stats-unlocked; }
                         StatChip { glyph: "\u{25B6}"; text: root.d.stats-played; }
-                        if root.d.full-house: StatChip { icon: "\u{1F3C6}"; text: "Full house!"; }
+                        if root.d.full-house: StatChip { icon: "\u{1F3C6}"; text: "Full house!"; tone: #22c55e; }
                     }
                 }
                 Rectangle { height: 20px; }
@@ -406,7 +412,7 @@ export component FnBreakPage inherits Rectangle {
                         border-width: 1px;
                         border-color: FN.line;
                         border-radius: 2px;
-                        SansText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "\u{21BB}"; font-size: 16px; color: FN.ink-3; }
+                        SansText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "\u{21BB}"; font-family: Emoji.symbol != "" ? Emoji.symbol : FN.sans; font-size: 16px; color: FN.ink-3; }
                         TouchArea { mouse-cursor: pointer; clicked => { root.next-stretch(); } }
                         accessible-role: button;
                         accessible-label: "Another stretch idea";

@@ -107,7 +107,13 @@ unsafe extern "system" fn platform_window_proc(
             0
         }
         other => {
-            let taskbar_created = TRAY.with(|t| t.borrow().as_ref().map(|t| t.taskbar_created));
+            // `try_borrow`: Win32 delivers some messages re-entrantly (e.g. WM_DESTROY from inside
+            // a `DestroyWindow` call), and a panic here could not unwind out of this callback.
+            let taskbar_created = TRAY.with(|t| {
+                t.try_borrow()
+                    .ok()
+                    .and_then(|t| t.as_ref().map(|t| t.taskbar_created))
+            });
             if Some(other) == taskbar_created && other != 0 {
                 // Explorer restarted: its notification area forgot our icon; add it again.
                 TRAY.with(|t| {
@@ -373,17 +379,18 @@ pub fn show_balloon(title: &str, body: &str) -> bool {
 
 impl Drop for PlatformHost {
     fn drop(&mut self) {
-        TRAY.with(|t| {
-            if let Some(inner) = t.borrow_mut().take() {
-                let data = notify_data(&inner, 0);
-                // SAFETY: removing our own icon, then releasing the icon and window we created.
-                unsafe {
-                    Shell_NotifyIconW(NIM_DELETE, &data);
-                    DestroyIcon(inner.icon);
-                    DestroyWindow(inner.hwnd);
-                }
-            }
-        });
+        // Take the state out and release the borrow *before* calling into Win32: DestroyWindow
+        // sends WM_DESTROY/WM_NCDESTROY synchronously to `platform_window_proc`, which reads TRAY.
+        let Some(inner) = TRAY.with(|t| t.borrow_mut().take()) else {
+            return;
+        };
+        let data = notify_data(&inner, 0);
+        // SAFETY: removing our own icon, then releasing the icon and window we created.
+        unsafe {
+            Shell_NotifyIconW(NIM_DELETE, &data);
+            DestroyIcon(inner.icon);
+            DestroyWindow(inner.hwnd);
+        }
     }
 }
 
@@ -520,4 +527,88 @@ pub fn prefers_reduced_motion() -> bool {
         )
     };
     ok != 0 && enabled == 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A message window driven by the real `platform_window_proc`, with TRAY state pointing at it
+    /// (no tray icon is added to the shell).
+    fn install_test_tray(class: &str) -> HWND {
+        let class_name = wide(class);
+        // SAFETY: as in `PlatformHost::create`.
+        let hwnd = unsafe {
+            let hinstance = GetModuleHandleW(std::ptr::null());
+            let wc = WNDCLASSW {
+                style: 0,
+                lpfnWndProc: Some(platform_window_proc),
+                cbClsExtra: 0,
+                cbWndExtra: 0,
+                hInstance: hinstance,
+                hIcon: std::ptr::null_mut(),
+                hCursor: std::ptr::null_mut(),
+                hbrBackground: std::ptr::null_mut(),
+                lpszMenuName: std::ptr::null(),
+                lpszClassName: class_name.as_ptr(),
+            };
+            RegisterClassW(&wc);
+            CreateWindowExW(
+                0,
+                class_name.as_ptr(),
+                class_name.as_ptr(),
+                0,
+                0,
+                0,
+                0,
+                0,
+                HWND_MESSAGE,
+                std::ptr::null_mut(),
+                hinstance,
+                std::ptr::null(),
+            )
+        };
+        assert!(!hwnd.is_null());
+        let icon = icon_from_rgba(&tray_icon_rgba(TimerPhase::Idle)).expect("icon");
+        TRAY.with(|t| {
+            *t.borrow_mut() = Some(TrayInner {
+                hwnd,
+                icon,
+                phase: TimerPhase::Idle,
+                tooltip: String::new(),
+                taskbar_created: 0,
+                tray_visible: false,
+            })
+        });
+        hwnd
+    }
+
+    /// Stage 20 Windows pass: dropping the host used to hold TRAY mutably borrowed across
+    /// DestroyWindow, whose synchronous WM_DESTROY re-entered `platform_window_proc` and panicked
+    /// in a non-unwinding callback - every normal exit aborted (0xC0000409).
+    #[test]
+    fn dropping_the_host_destroys_its_window_without_reentrancy_panic() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::IsWindow;
+        let hwnd = install_test_tray("st-test-win-host-drop");
+        drop(PlatformHost {
+            _not_send: std::marker::PhantomData,
+        });
+        // SAFETY: plain query on a (now destroyed) handle.
+        assert_eq!(unsafe { IsWindow(hwnd) }, 0);
+        assert!(TRAY.with(|t| t.borrow().is_none()));
+    }
+
+    #[test]
+    fn a_message_delivered_while_the_tray_state_is_borrowed_does_not_panic() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::SendMessageW;
+        let hwnd = install_test_tray("st-test-win-host-reentry");
+        TRAY.with(|t| {
+            let _held = t.borrow_mut();
+            // SAFETY: synchronous message to our own window on this thread.
+            unsafe { SendMessageW(hwnd, WM_APP + 77, 0, 0) };
+        });
+        drop(PlatformHost {
+            _not_send: std::marker::PhantomData,
+        });
+    }
 }

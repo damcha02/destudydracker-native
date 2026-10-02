@@ -124,6 +124,9 @@ fn apply_platform_fonts(window: &MainWindow) {
 
 pub fn install(window: &MainWindow, model: Rc<RefCell<AppModel>>, store_path: &Path) {
     Emoji::get(window).set_family(emoji_family().into());
+    if cfg!(windows) {
+        Emoji::get(window).set_symbol("Segoe UI Symbol".into());
+    }
     apply_platform_fonts(window);
     let started = Instant::now();
     let controller = BreakRoomController::load(

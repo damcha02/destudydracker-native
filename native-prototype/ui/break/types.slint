@@ -6,6 +6,10 @@
 // from picking a monochrome symbol face first. Rust sets the family at startup.
 export global Emoji {
     in-out property <string> family: "Segoe UI Emoji";
+    // Monochrome symbol face for text-presentation glyphs such as U+25B6, which Chromium draws
+    // from Segoe UI Symbol on Windows; plain fallback there lands on the colour emoji face.
+    // Empty = the surrounding text family (Linux).
+    in-out property <string> symbol: "";
 }
 
 // One game card (`studyBreakGames` entry in its current state).

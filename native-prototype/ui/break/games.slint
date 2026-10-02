@@ -32,7 +32,7 @@ component CloseButton inherits Rectangle {
     height: 30px;
     border-radius: 10px;
     background: touch.has-hover ? Game.t.hover-14 : transparent;
-    Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "✕"; font-family: FN.sans; font-size: root.size; color: touch.has-hover ? Game.t.text : Game.t.muted; }
+    Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "✕"; font-family: Emoji.symbol != "" ? Emoji.symbol : FN.sans; font-size: root.size; color: touch.has-hover ? Game.t.text : Game.t.muted; }
     touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
     accessible-role: button;
     accessible-label: "Close";
@@ -146,7 +146,8 @@ component WordleKey inherits Rectangle {
         horizontal-alignment: center;
         vertical-alignment: center;
         text: root.k.label;
-        font-family: FN.sans;
+        // Arial has no U+232B; Chromium draws it from Segoe UI Symbol.
+        font-family: root.k.label == "⌫" && Emoji.symbol != "" ? Emoji.symbol : FN.sans;
         font-size: root.k.wide ? 11.52px : 12.48px;
         font-weight: 900;
         color: root.k.state >= 2 ? #ffffff : #1f2933;
@@ -158,6 +159,7 @@ component WordleKey inherits Rectangle {
 
 component WordleModal inherits Rectangle {
     in property <WordleData> d;
+    private property <length> head-extra: max(0px, head.preferred-height - head-one.preferred-height);
     callback close();
     callback key(string);
     callback hard();
@@ -177,11 +179,14 @@ component WordleModal inherits Rectangle {
         pad: 22px;
         radius: 24px;
         fill: Game.t.wordle-bg;
-        content-h: 681px;
+        content-h: 681px + root.head-extra;
         Rectangle {
             Kicker { x: 0px; y: 0px; text: "DAILY WORDLE"; font-size: 12px; font-weight: 800; letter-spacing: 1.92px; }
-            Heading { x: 0px; y: 20px; text: "Find the 5-letter word"; font-size: 35.2px; letter-spacing: -1.056px; }
-            Text { x: 0px; y: 67px; text: root.d.counts; font-family: FN.sans; font-size: 12px; color: Game.t.muted; }
+            // Wraps beside the hard-mode pill when the platform serif is wide (Georgia on Windows), as
+            // production's flex header does; everything below moves down by the extra lines.
+            head := Heading { x: 0px; y: 20px; width: parent.width - hard.width - 12px; wrap: word-wrap; text: "Find the 5-letter word"; font-size: 35.2px; letter-spacing: -1.056px; }
+            head-one := Heading { visible: false; text: "Find"; font-size: 35.2px; letter-spacing: -1.056px; }
+            Text { x: 0px; y: 67px + root.head-extra; text: root.d.counts; font-family: FN.sans; font-size: 12px; color: Game.t.muted; }
             // hard-mode pill (production disables it during a puzzle: opacity .72)
             hard := Rectangle {
                 private property <length> badge-w: max(30px, on.preferred-width + 12px);
@@ -215,12 +220,12 @@ component WordleModal inherits Rectangle {
             // board: six rows of five 56 px tiles, 7 px apart, centred
             for tile[i] in root.d.tiles: WordleTile {
                 x: (parent.width - 5 * 56px - 4 * 7px) / 2 + mod(i, 5) * 63px;
-                y: 104px + floor(i / 5) * 63px;
+                y: 104px + root.head-extra + floor(i / 5) * 63px;
                 tile: tile;
             }
             Text {
                 x: 0px;
-                y: 493px;
+                y: 493px + root.head-extra;
                 width: parent.width;
                 height: 24px;
                 horizontal-alignment: center;
@@ -233,7 +238,7 @@ component WordleModal inherits Rectangle {
             }
             // keyboard rows: 10, 9 and Enter + 7 + ⌫
             for krow[row] in [root.d.keys0, root.d.keys1, root.d.keys2]: HorizontalLayout {
-                y: 535px + row * 51px;
+                y: 535px + root.head-extra + row * 51px;
                 height: 44px;
                 alignment: center;
                 spacing: 5px;
@@ -319,7 +324,7 @@ component CountryCombo inherits Rectangle {
             height: 34px;
             border-radius: 10px;
             background: drop.has-hover ? #edf2ff : transparent;
-            Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "▾"; font-family: FN.sans; font-size: 16px; color: #495057; }
+            Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "▾"; font-family: Emoji.symbol != "" ? Emoji.symbol : FN.sans; font-size: 16px; color: #495057; }
             drop := TouchArea { mouse-cursor: pointer; clicked => { root.toggle(); } }
             accessible-role: button;
             accessible-label: "Show countries";
@@ -736,8 +741,9 @@ component DurakModal inherits Rectangle {
             // head: hint, trump, close
             Text { x: 0px; y: 0px; text: "HINT"; font-family: FN.sans; font-size: 9.6px; font-weight: 900; letter-spacing: 1.15px; color: Game.t.muted; }
             Text { x: 0px; y: 13px; width: parent.width - 100px; text: root.d.hint; font-family: FN.sans; font-size: 12.48px; color: Game.t.text; }
-            Text { x: parent.width - 23.5px - 12px - 39.9px; y: 0px; width: 39.9px; horizontal-alignment: center; text: "TRUMP"; font-family: FN.sans; font-size: 9.6px; font-weight: 900; letter-spacing: 1.15px; color: Game.t.muted; }
-            Text { x: parent.width - 23.5px - 12px - 39.9px; y: 13px; width: 39.9px; horizontal-alignment: center; text: root.d.trump; font-family: FN.sans; font-size: 28.8px; color: Game.t.text; }
+            // the trump column is as wide as its label (39.9px with Liberation Sans; wider with Arial)
+            trump-label := Text { x: parent.width - 23.5px - 12px - self.width; y: 0px; width: max(39.9px, self.preferred-width); horizontal-alignment: center; text: "TRUMP"; font-family: FN.sans; font-size: 9.6px; font-weight: 900; letter-spacing: 1.15px; color: Game.t.muted; }
+            Text { x: trump-label.x; y: 13px; width: trump-label.width; horizontal-alignment: center; text: root.d.trump; font-family: FN.sans; font-size: 28.8px; color: Game.t.text; }
             CloseButton { x: parent.width - self.width; y: 0px; width: 23.5px; height: 28px; size: 19.2px; clicked => { root.close(); } }
             // CPU hand (backs only)
             Text { x: 0px; y: 41.8px; text: "CPU (" + root.d.cpu-cards + ")"; font-family: FN.sans; font-size: 11.2px; font-weight: 700; color: Game.t.muted; }

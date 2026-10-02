@@ -206,5 +206,8 @@ pub fn after_timer_activity() {
 /// Explicit end of the process: removes the tray icon and closes the message window *before*
 /// the event loop's owner returns, so no icon outlives the process.
 pub fn shutdown() {
-    RUNTIME.with(|r| drop(r.borrow_mut().take()));
+    // Released outside the borrow: dropping the host destroys its window, which re-enters the
+    // window procedure synchronously.
+    let runtime = RUNTIME.with(|r| r.borrow_mut().take());
+    drop(runtime);
 }
