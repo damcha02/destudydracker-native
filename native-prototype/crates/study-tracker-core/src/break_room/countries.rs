@@ -1,6 +1,6 @@
 //! Production's country table (`desktop/src/lib/countries.ts`, "objective fields from
-//! mledoze/countries plus samayo/country-json"), shared by Geodle and Flaggle (Travle adds its own
-//! border graph in Stage 21). Extracted verbatim, in production order, by
+//! mledoze/countries plus samayo/country-json"), shared by Geodle, Flaggle and Travle (which adds its
+//! border graph, `travle.rs`). Extracted verbatim, in production order, by
 //! `scripts/stage20-extract-data.mjs`; parsed once, on first use, never at startup.
 
 use std::sync::OnceLock;

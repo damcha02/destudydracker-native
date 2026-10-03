@@ -464,7 +464,21 @@ fn rest_timer_and_breathing_follow_elapsed_time() {
 }
 
 #[test]
-fn travle_and_skribbl_are_unlockable_playable_entries_without_a_game() {
+fn skribbl_is_an_unlockable_playable_entry_without_a_game() {
+    let mut h = Harness::new();
+    unlocked(&mut h, GameId::DailySkribbl);
+    assert_eq!(h.controller.ui.open_game, Some(GameId::DailySkribbl));
+    assert_eq!(h.controller.card_status(GameId::DailySkribbl), "Daily");
+}
+
+// ------------------------------------------------------------------ travle (Stage 21)
+
+fn travle(h: &Harness) -> &study_tracker_core::break_room::travle::TravlePuzzle {
+    &h.controller.record().state.travle
+}
+
+#[test]
+fn travle_through_the_controller_writes_only_on_real_changes() {
     let mut h = Harness::new();
     unlocked(&mut h, GameId::Travle);
     assert_eq!(h.controller.ui.open_game, Some(GameId::Travle));
@@ -474,7 +488,188 @@ fn travle_and_skribbl_are_unlockable_playable_entries_without_a_game() {
         .state
         .played_games_all_time
         .contains(&"Travle".to_string()));
-    assert_eq!(h.controller.card_status(GameId::DailySkribbl), "Daily");
+    // today's production puzzle for this profile's salt
+    let salt = travle(&h).seed_salt.clone();
+    let daily = study_tracker_core::break_room::travle::puzzle_for_date("2026-09-30", &salt);
+    assert_eq!(travle(&h).start, daily.start.name());
+    assert_eq!(travle(&h).target, daily.target.name());
+    let writes = h.controller.writes();
+    // typing, picking, the dropdown, clearing and zooming are view state: no writes
+    h.controller.travle_set_draft("ger");
+    assert!(h.controller.ui.travle_dropdown);
+    h.controller.travle_toggle_dropdown();
+    h.controller.travle_select("Atlantis");
+    h.controller.travle_zoom(true);
+    h.controller.travle_zoom(true);
+    assert_eq!(h.controller.ui.travle_zoom, MapZoom(1.7));
+    h.controller.travle_clear();
+    assert!(h.controller.ui.travle_dropdown && h.controller.ui.travle_draft.is_empty());
+    assert_eq!(h.controller.writes(), writes);
+    // not a country: message, dropdown open, nothing saved
+    h.controller.travle_set_draft("Atlantis");
+    h.controller.travle_submit(&CLOCK);
+    assert_eq!(
+        h.controller.ui.travle_message,
+        "Select a country from the list."
+    );
+    assert!(h.controller.ui.travle_dropdown);
+    // the start again: nothing saved, the draft stays
+    let start = travle(&h).start.clone();
+    h.controller.travle_set_draft(&start);
+    h.controller.travle_submit(&CLOCK);
+    assert_eq!(
+        h.controller.ui.travle_message,
+        "That country is already in your route."
+    );
+    assert_eq!(h.controller.ui.travle_draft, start);
+    assert_eq!(
+        h.controller.writes(),
+        writes,
+        "rejected guesses never persist"
+    );
+    // the shortest route, one guess at a time: one write per accepted guess
+    let inner: Vec<String> = daily.shortest_path[1..daily.shortest_path.len() - 1]
+        .iter()
+        .map(|id| id.name().to_string())
+        .collect();
+    for (i, country) in inner.iter().enumerate() {
+        h.controller.travle_set_draft(&country.to_lowercase());
+        h.controller.travle_submit(&CLOCK);
+        assert_eq!(h.controller.writes(), writes + i as u64 + 1);
+        assert!(h.controller.ui.travle_draft.is_empty() && !h.controller.ui.travle_dropdown);
+    }
+    assert!(travle(&h).won && travle(&h).completed);
+    assert!(h
+        .controller
+        .ui
+        .travle_message
+        .starts_with("Route complete: "));
+    assert_eq!(h.controller.card_status(GameId::Travle), "Solved");
+    // finished: further submits are ignored and save nothing
+    let done = h.controller.writes();
+    h.controller.travle_set_draft("France");
+    h.controller.travle_submit(&CLOCK);
+    assert_eq!(h.controller.writes(), done);
+    // a restart keeps the finished puzzle (normalization keeps today's), writing nothing
+    let before = travle(&h).clone();
+    h.restart();
+    assert_eq!(*travle(&h), before);
+    assert_eq!(h.controller.writes(), 0);
+    assert_eq!(h.controller.card_status(GameId::Travle), "Solved");
+}
+
+#[test]
+fn travle_mid_game_survives_a_restart_and_reopening_keeps_view_state() {
+    let mut h = Harness::new();
+    unlocked(&mut h, GameId::Travle);
+    let first = study_tracker_core::break_room::travle::Routes::new(
+        &travle(&h).start,
+        &travle(&h).target,
+        &[],
+    )
+    .shortest()[1]
+        .name()
+        .to_string();
+    h.controller.travle_set_draft(&first);
+    h.controller.travle_submit(&CLOCK);
+    h.controller.travle_zoom(true);
+    h.controller.travle_set_draft("Pol");
+    h.controller.close_game();
+    // reopening the same day: the puzzle is today's, so `initTravlePuzzle` keeps the draft and zoom
+    assert!(h.controller.play(GameId::Travle, at(13, 0), &CLOCK));
+    assert_eq!(h.controller.ui.travle_draft, "Pol");
+    assert_eq!(h.controller.ui.travle_zoom, MapZoom(1.35));
+    let saved = travle(&h).clone();
+    assert_eq!(saved.guesses, [first]);
+    h.restart();
+    assert_eq!(*travle(&h), saved, "mid-game state reloads as stored");
+    assert_eq!(h.controller.card_status(GameId::Travle), "");
+}
+
+#[test]
+fn travle_rolls_over_at_local_midnight_without_polling_or_double_counting() {
+    let mut h = Harness::new();
+    unlocked(&mut h, GameId::Travle);
+    let yesterday = travle(&h).clone();
+    let unlocks = h.controller.record().state.total_unlocks;
+    // a stored lost puzzle from yesterday
+    h.controller.close_game();
+    let tomorrow = CivilDate::parse_iso("2026-10-01").unwrap();
+    // the existing day-change path (sync with the new date), not a Travle timer
+    h.controller.sync(&h.academic, h.revision, tomorrow, &CLOCK);
+    assert_eq!(
+        *travle(&h),
+        yesterday,
+        "the old puzzle stays stored until it is opened"
+    );
+    assert_eq!(
+        h.controller.card_status(GameId::Travle),
+        "",
+        "but it is not today's"
+    );
+    assert!(
+        !h.controller.progression().is_unlocked(GameId::Travle),
+        "unlocks are per day"
+    );
+    assert_eq!(
+        h.controller.record().state.total_unlocks,
+        unlocks,
+        "nothing counted twice"
+    );
+    // a restart on the new day: load normalization draws the new day's puzzle, without a write
+    let saved = Rc::clone(&h.saved);
+    let c = BreakRoomController::load(
+        Box::new(MemoryBreakRoomPort { saved }),
+        Rng::seeded(5),
+        tomorrow,
+    );
+    let t = &c.record().state.travle;
+    assert_eq!(t.active_date, "2026-10-01");
+    assert_eq!(
+        t.seed_salt, yesterday.seed_salt,
+        "the profile's salt is kept"
+    );
+    assert!(t.guesses.is_empty() && !t.completed);
+    let daily = study_tracker_core::break_room::travle::puzzle_for_date("2026-10-01", &t.seed_salt);
+    assert_eq!(
+        (t.start.as_str(), t.target.as_str()),
+        (daily.start.name(), daily.target.name())
+    );
+    assert_eq!(c.writes(), 0);
+}
+
+#[test]
+fn travle_open_play_counts_for_explorer_and_full_house_exactly_once() {
+    let mut h = Harness::new();
+    // 300 minutes: six tokens
+    h.add(vec![session("long", SessionKind::Study, 7, 300)]);
+    h.sync();
+    for game in [
+        GameId::DailyDurak,
+        GameId::Wordle,
+        GameId::Travle,
+        GameId::Flaggle,
+        GameId::DailySkribbl,
+        GameId::Geodle,
+    ] {
+        assert!(h.controller.unlock(game, &CLOCK));
+        assert!(h.controller.play(game, at(12, 0), &CLOCK));
+        h.controller.close_game();
+    }
+    let earned = |h: &Harness, id: &str| {
+        h.controller
+            .achievements()
+            .iter()
+            .any(|a| a.id == id && a.earned)
+    };
+    assert!(earned(&h, "explorer") && earned(&h, "full-house") && earned(&h, "perfectionist"));
+    let counts = h.controller.record().state.badge_counts.clone();
+    // playing Travle again and guessing never re-counts the day's badges
+    assert!(h.controller.play(GameId::Travle, at(13, 0), &CLOCK));
+    h.controller.travle_set_draft("Atlantis");
+    h.controller.travle_submit(&CLOCK);
+    h.sync();
+    assert_eq!(h.controller.record().state.badge_counts, counts);
 }
 
 #[test]

@@ -20,6 +20,7 @@ use super::daily::js_utc_day_number;
 use super::durak::DurakPuzzle;
 use super::flaggle::FlagglePuzzle;
 use super::geodle::GeodlePuzzle;
+use super::travle::TravlePuzzle;
 use super::wordle::WordlePuzzle;
 use crate::dashboard::civil::{CivilDate, LocalClock};
 use crate::timer::WallTimestamp;
@@ -33,20 +34,6 @@ pub const MINUTES_PER_TOKEN: u64 = 45;
 pub struct PlayedBreak {
     pub name: String,
     pub played_at: Option<WallTimestamp>,
-}
-
-/// `TravlePuzzleState`, kept as stored: the route game itself (and its load-time normalization,
-/// which needs the border graph) is Stage 21.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct TravlePuzzle {
-    pub seed_salt: String,
-    pub active_date: String,
-    pub puzzle_id: String,
-    pub start: String,
-    pub target: String,
-    pub guesses: Vec<String>,
-    pub completed: bool,
-    pub won: bool,
 }
 
 /// Every persisted Break Room field production has (`achievementBoard`, a layout for an

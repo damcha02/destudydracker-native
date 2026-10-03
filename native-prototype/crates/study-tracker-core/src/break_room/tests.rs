@@ -63,7 +63,7 @@ fn the_catalog_is_productions_six_games_in_order() {
         Some(GameId::DailySkribbl)
     );
     assert_eq!(GameId::from_name("daily skribbl"), None);
-    assert_eq!(GameId::Travle.info().availability, Availability::MapStage21);
+    assert_eq!(GameId::Travle.info().availability, Availability::Local);
     assert_eq!(
         GameId::DailySkribbl.info().availability,
         Availability::NetworkStage22
@@ -72,7 +72,7 @@ fn the_catalog_is_productions_six_games_in_order() {
         .iter()
         .filter(|g| g.availability == Availability::Local)
         .count();
-    assert_eq!(local, 4);
+    assert_eq!(local, 5);
 }
 
 #[test]

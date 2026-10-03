@@ -32,6 +32,7 @@ mod sakura_controller;
 mod session_service;
 mod synthetic_dataset;
 mod timer_controller;
+mod travle_map;
 mod wabi_view;
 
 use app_model::{format_clock, AppCommand, AppModel, TimerStatus};
@@ -184,12 +185,15 @@ fn run() -> Result<(), StartupError> {
     apply_model_to_window(&window, &model.borrow(), Instant::now());
     refresh_dashboard(&window, &model.borrow(), &mut dashboard.borrow_mut());
     dashboard_report_if_requested(&dashboard.borrow());
-    let map = map_adapter::new_controller(map_level_from_env());
-    map_adapter::apply_all(&window, &mut map.borrow_mut());
-    map_adapter::bind(&window, &map);
+    // The Stage 11 map lab (a diagnostic surface) builds its data set only once it is shown
+    // (Stage 21: no map geometry is parsed at startup).
     let _bench_timer = std::env::var("STUDY_NATIVE_MAP_BENCH")
         .ok()
-        .map(|spec| map_adapter::start_bench(&window, &map, &spec));
+        .and_then(|spec| {
+            let map = map_adapter::ensure(&window, true)?;
+            Some(map_adapter::start_bench(&window, &map, &spec))
+        });
+    map_adapter::ensure(&window, false);
     bind_model_callbacks(
         &window,
         Rc::clone(&model),
@@ -203,6 +207,7 @@ fn run() -> Result<(), StartupError> {
     let _theme_stress = app_appearance::start_theme_stress();
     let _input_script = install_input_script(&window);
     let _break_stress = app_break_room::start_stress(&window);
+    let _travle_stress = app_break_games::start_travle_stress(&window);
     let _diagnostics = install_diagnostics(&window);
 
     log::info!("first window created; entering the event loop");
@@ -639,7 +644,7 @@ fn maybe_import_production_backup(
 }
 
 /// `STUDY_NATIVE_MAP_LEVEL=0..10` selects the initial map stress level (see `StressLevel::ALL`).
-fn map_level_from_env() -> map::dataset::StressLevel {
+pub fn map_level_from_env() -> map::dataset::StressLevel {
     std::env::var("STUDY_NATIVE_MAP_LEVEL")
         .ok()
         .and_then(|v| v.parse().ok())

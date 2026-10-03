@@ -331,11 +331,13 @@ use study_tracker_core::break_room::countries::filter_countries;
 use study_tracker_core::break_room::durak::{attack_on_top, Card, DurakView, Phase, Side};
 use study_tracker_core::break_room::flaggle::PreviewRequest;
 use study_tracker_core::break_room::geodle::{self, ClueState};
+use study_tracker_core::break_room::travle::{self, display_route, map_roles, CountryId};
 use study_tracker_core::break_room::wordle::{self, LetterState, MAX_GUESSES, WORD_LENGTH};
 
+use crate::travle_map::{self, Rgba};
 use crate::{
     CountryOption, DCard, DCol, DurakData, FlagRow, FlaggleData, GamesData, GeoClue, GeoRow,
-    GeodleData, WKey, WTile, WordleData,
+    GeodleData, TravleData, TravleShape, WKey, WTile, WordleData,
 };
 
 fn model<T: Clone + 'static>(v: Vec<T>) -> ModelRc<T> {
@@ -672,6 +674,125 @@ pub fn durak_data(c: &BreakRoomController) -> DurakData {
     }
 }
 
+fn steps(route_len: usize) -> String {
+    format!("{} steps", route_len.saturating_sub(1))
+}
+
+/// The Travle modal's text and view state (`App.tsx`'s `travle*` constants and JSX strings).
+pub fn travle_data(c: &BreakRoomController) -> TravleData {
+    let p = &c.record().state.travle;
+    let routes = p.routes();
+    let shortest = routes.shortest();
+    let solved = routes.solved();
+    let left = p.guesses_left();
+    let names = |route: &[CountryId]| {
+        route
+            .iter()
+            .map(|id| id.name())
+            .collect::<Vec<_>>()
+            .join(" -> ")
+    };
+    let find = travle::find_travle_country;
+    let mut focus: Vec<CountryId> = p.route().iter().filter_map(|n| find(n)).collect();
+    focus.extend(find(&p.target));
+    let vb = travle_map::view_box(&focus, c.ui.travle_zoom.0);
+    let line = travle_map::route_commands(&travle_map::route_points(&display_route(p)));
+    TravleData {
+        header: ss(format!(
+            "{} connected countries \u{b7} {left} step{} left",
+            travle::country_count(),
+            if left == 1 { "" } else { "s" }
+        )),
+        start: ss(p.start.as_str()),
+        target: ss(p.target.as_str()),
+        map_label: ss(format!("Map route from {} to {}", p.start, p.target)),
+        vb_x: vb[0] as f32,
+        vb_y: vb[1] as f32,
+        vb_w: vb[2] as f32,
+        vb_h: vb[3] as f32,
+        line: ss(line),
+        route: model(p.route().into_iter().map(ss).collect()),
+        show_target: !p.won,
+        current: ss(p.current()),
+        guessed: ss(format!(
+            "{}/{} COUNTRIES GUESSED",
+            p.guesses.len(),
+            travle::MAX_GUESSES
+        )),
+        completed: p.completed,
+        won: p.won,
+        draft: ss(c.ui.travle_draft.as_str()),
+        dropdown: c.ui.travle_dropdown,
+        options: model(
+            travle::filter_travle_countries(&c.ui.travle_draft)
+                .into_iter()
+                .take(80)
+                .map(|co| CountryOption {
+                    name: ss(co.name),
+                    detail: ss(co.region),
+                    flag: Default::default(),
+                })
+                .collect(),
+        ),
+        status: ss(if c.ui.travle_message.is_empty() {
+            format!("Enter countries to connect {} to {}.", p.start, p.target)
+        } else {
+            c.ui.travle_message.clone()
+        }),
+        shortest: ss(if shortest.is_empty() {
+            "Hidden".to_string()
+        } else {
+            steps(shortest.len())
+        }),
+        result_route: ss(names(if p.won { &solved } else { &shortest })),
+        used: ss(format!("{}/{}", p.guesses.len(), travle::MAX_GUESSES)),
+        shortest_steps: ss(steps(shortest.len())),
+        third_label: ss(if p.won { "SOLVED ROUTE" } else { "YOUR ROUTE" }),
+        third_value: ss(if p.won {
+            steps(solved.len())
+        } else {
+            format!("{} guesses", p.guesses.len())
+        }),
+    }
+}
+
+fn color(c: Rgba) -> slint::Color {
+    slint::Color::from_argb_u8(c.3, c.0, c.1, c.2)
+}
+
+thread_local! {
+    /// The 195 map paths as Slint strings, made once (the geometry never changes).
+    static TRAVLE_COMMANDS: Vec<SharedString> =
+        travle_map::countries().iter().map(|c| ss(c.commands())).collect();
+}
+
+/// Every map country in production's draw order with its current style (a plain country is the
+/// sea's colour; drawing it still matters, because it covers the graticule and the strokes of
+/// earlier countries exactly as production's SVG does).
+pub fn travle_shapes(c: &BreakRoomController) -> Vec<TravleShape> {
+    let roles = map_roles(&c.record().state.travle);
+    TRAVLE_COMMANDS.with(|commands| {
+        travle_map::countries()
+            .iter()
+            .zip(commands)
+            .map(|(country, commands)| {
+                let role = country
+                    .id
+                    .and_then(|id| roles.iter().find(|(r, _)| *r == id))
+                    .map(|(_, role)| *role)
+                    .unwrap_or_default();
+                let st = travle_map::style(role, country.is_marker());
+                TravleShape {
+                    commands: commands.clone(),
+                    fill: color(st.fill),
+                    stroke: color(st.stroke),
+                    width: st.width,
+                }
+            })
+            .collect()
+    })
+}
+
 /// The open game's screen (only the open one is built).
 pub fn games_data(c: &BreakRoomController) -> GamesData {
     let Some(game) = c.ui.open_game else {
@@ -689,7 +810,11 @@ pub fn games_data(c: &BreakRoomController) -> GamesData {
         GameId::Geodle => d.geodle = geodle_data(c),
         GameId::Flaggle => d.flaggle = flaggle_data(c),
         GameId::DailyDurak => d.durak = durak_data(c),
-        GameId::Travle | GameId::DailySkribbl => {}
+        GameId::Travle => {
+            d.travle = travle_data(c);
+            d.travle_shapes = model(travle_shapes(c));
+        }
+        GameId::DailySkribbl => {}
     }
     d
 }

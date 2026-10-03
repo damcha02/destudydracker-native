@@ -10,6 +10,11 @@
 //   full      300 minutes today, all six unlocked and played (Full House + Perfectionist)
 //   empty     no sessions at all, nothing earned (empty album)
 //
+// Stage 21: [--travle fresh|mid|won|lost] stores today's Travle puzzle (salt "fixture-travle-salt",
+// start/target from production's travle.ts) with no guesses, a three-guess route in progress
+// (route, route, off route), the shortest route guessed (won) or seven off-route guesses (lost).
+// Without it the stored puzzle is stale and production draws today's on open, as before.
+//
 // The daily puzzles use fixed seed salts and production's own answer functions (desktop/src/lib,
 // copied read-only to a temp dir and run with Node's type stripping), so both apps load the same
 // "today" puzzle and keep the stored guesses.
@@ -27,13 +32,14 @@ if (!variant || !basePath || !outPath || !today) throw new Error("usage: gen-bre
 const desktop = join(here, "..", "..", "..", "desktop");
 
 const lib = mkdtempSync(join(tmpdir(), "st20-fixlib-"));
-for (const f of ["wordle.ts", "wordleWords.ts", "geodle.ts", "countries.ts"]) {
+for (const f of ["wordle.ts", "wordleWords.ts", "geodle.ts", "countries.ts", "travle.ts", "countryBorders.ts"]) {
   cpSync(join(desktop, "src/lib", f), join(lib, f));
   const p = join(lib, f);
   writeFileSync(p, readFileSync(p, "utf8").replace(/from "\.\/([A-Za-z]+)"/g, 'from "./$1.ts"'));
 }
 const wordle = await import(pathToFileURL(join(lib, "wordle.ts")).href);
 const geodle = await import(pathToFileURL(join(lib, "geodle.ts")).href);
+const travle = await import(pathToFileURL(join(lib, "travle.ts")).href);
 rmSync(lib, { recursive: true, force: true });
 
 const backup = JSON.parse(readFileSync(basePath, "utf8"));
@@ -72,6 +78,17 @@ s.geodlePuzzle = puzzle(geodleSalt, { answer: geodle.getGeodleAnswerForDate(toda
 s.flagglePuzzle = puzzle(flaggleSalt, { answer: geodle.getGeodleAnswerForDate(today, flaggleSalt) });
 // Travle's start/target need the Stage 21 border graph; a stale day makes production regenerate it.
 s.travlePuzzle = { seedSalt: travleSalt, activeDate: "", puzzleId: "", start: "", target: "", guesses: [], completed: false, won: false };
+const travleState = opt("--travle");
+if (travleState) {
+  const p = travle.getTravlePuzzleForDate(today, travleSalt);
+  const inner = p.shortestPath.slice(1, -1);
+  const states = (guesses) => travle.getTravleGuessStates(p.start, p.target, guesses);
+  const offRoute = travle.filterTravleCountries("").map((c) => c.name).filter((n) => n !== p.start && n !== p.target && states([n])[n] === "miss");
+  const guesses = { fresh: [], mid: [inner[0], inner[1], offRoute[0]], won: inner, lost: offRoute.slice(0, 7) }[travleState];
+  if (!guesses) throw new Error(`unknown --travle ${travleState}`);
+  const won = travle.isTravleRouteSolved(p.start, p.target, guesses);
+  s.travlePuzzle = { seedSalt: travleSalt, activeDate: today, puzzleId: travle.getTravlePuzzleId(today, travleSalt), start: p.start, target: p.target, guesses, completed: won || guesses.length >= travle.TRAVLE_MAX_GUESSES, won };
+}
 
 if (variant === "early") s.petRockPats = 3;
 if (variant === "unlocked" || variant === "full") {
@@ -96,4 +113,4 @@ if (variant === "unlocked" || variant === "full") {
 }
 backup.preferences = backup.preferences ?? {};
 writeFileSync(outPath, JSON.stringify(backup, null, 2));
-console.log(`${variant}: today ${today}, ${todaySessions.reduce((a, x) => a + x[2], 0)} min today, wordle=${s.wordlePuzzle.answer} geodle=${s.geodlePuzzle.answer} flaggle=${s.flagglePuzzle.answer} -> ${outPath}`);
+console.log(`${variant}${travleState ? `+travle-${travleState}` : ""}: travle=${JSON.stringify(s.travlePuzzle.guesses.length ? s.travlePuzzle : s.travlePuzzle.start || "stale")} today ${today}, ${todaySessions.reduce((a, x) => a + x[2], 0)} min today, wordle=${s.wordlePuzzle.answer} geodle=${s.geodlePuzzle.answer} flaggle=${s.flagglePuzzle.answer} -> ${outPath}`);

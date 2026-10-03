@@ -9,7 +9,12 @@
 /// `hashString`: FNV-1a (32-bit) over the string's UTF-16 code units, exactly as JavaScript's
 /// `charCodeAt` walks it, with `Math.imul` wrapping.
 pub fn hash_string(value: &str) -> u32 {
-    let mut hash: u32 = 2_166_136_261;
+    hash_extend(2_166_136_261, value)
+}
+
+/// Continues an FNV-1a hash over more UTF-16 code units: `hash_extend(hash_string(a), b)` is
+/// `hash_string(a + b)`.
+pub fn hash_extend(mut hash: u32, value: &str) -> u32 {
     for unit in value.encode_utf16() {
         hash ^= u32::from(unit);
         hash = hash.wrapping_mul(16_777_619);
@@ -87,15 +92,23 @@ pub fn puzzle_id(date: &str, seed_salt: &str) -> String {
 /// The answer index production picks for `date`: it maps every item to
 /// `hashString("<salt>:<key>:<index>")`, sorts by that (a stable sort, so ties keep list order),
 /// and takes position `daysSinceFirstPuzzle(date) % len`. Selecting the n-th smallest
-/// `(hash, index)` pair is the same order without sorting the whole list.
+/// `(hash, index)` pair is the same order without sorting the whole list; the shared
+/// `"<salt>:"` prefix is hashed once (FNV-1a is sequential), so no key string is built.
 pub fn daily_index<'a>(
     keys: impl ExactSizeIterator<Item = &'a str>,
     seed_salt: &str,
     date: &str,
 ) -> usize {
+    let prefix = hash_extend(hash_string(seed_salt), ":");
+    let mut digits = String::new();
     let mut keyed: Vec<(u32, usize)> = keys
         .enumerate()
-        .map(|(index, key)| (hash_string(&format!("{seed_salt}:{key}:{index}")), index))
+        .map(|(index, key)| {
+            use std::fmt::Write as _;
+            digits.clear();
+            let _ = write!(digits, ":{index}");
+            (hash_extend(hash_extend(prefix, key), &digits), index)
+        })
         .collect();
     assert!(!keyed.is_empty(), "a daily game needs at least one answer");
     let nth = (days_since_first_puzzle(date) % keyed.len() as u64) as usize;

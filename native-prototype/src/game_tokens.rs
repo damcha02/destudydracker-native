@@ -164,6 +164,10 @@ pub fn tokens(b: Base) -> GameTokens {
         durak_undefended_bg: mix_oklch(b.muted, 0.08, Some(hex(0xffffff))),
         travle_card_bg: mix_oklch(b.surface, 0.84, None),
         travle_route_bg: mix_oklch(b.accent, 0.10, None),
+        travle_map_border: mix_oklch(b.border, 0.82, Some(hex(0x8b7b60))),
+        travle_won_bg: mix_oklch(b.surface, 0.90, Some(hex(0x1f2a21))),
+        travle_lost_bg: mix_oklch(b.surface, 0.90, Some(hex(0x2a1f24))),
+        travle_stat_bg: mix_oklch(b.surface, 0.82, None),
     }
 }
 

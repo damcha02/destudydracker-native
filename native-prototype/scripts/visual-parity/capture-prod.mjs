@@ -128,6 +128,26 @@ if (args.clicks) {
     await sleep(400);
   }
 }
+if (args.js) {
+  // Stage 21: "expr||expr" - evaluate each in order (e.g. click the Travle card's Play button).
+  for (const expr of args.js.split("||")) {
+    await send("Runtime.evaluate", { expression: expr });
+    await sleep(400);
+  }
+}
+if (args.typing) {
+  // Stage 21: "selector::text|text|..." - focus the field, type each text like a user (React sees
+  // real input events) and press Enter after each one.
+  const [sel, list] = args.typing.split("::");
+  for (const text of list.split("|")) {
+    await send("Runtime.evaluate", { expression: `document.querySelector(${JSON.stringify(sel)})?.focus()` });
+    await sleep(100);
+    await send("Input.insertText", { text });
+    await sleep(150);
+    for (const type of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, ...(type === "keyDown" ? { text: "\r" } : {}) });
+    await sleep(250);
+  }
+}
 if (args.settle) await sleep(Number(args.settle));
 if (args["anim-time"] !== undefined) {
   // Freeze every running animation (CSS keyframes included) at one deterministic time so a

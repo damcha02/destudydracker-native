@@ -27,7 +27,8 @@ use serde_json::{Map, Value};
 use study_tracker_core::break_room::durak::{DurakPuzzle, StoredEntry};
 use study_tracker_core::break_room::flaggle::{FlaggleGuess, FlagglePuzzle};
 use study_tracker_core::break_room::geodle::GeodlePuzzle;
-use study_tracker_core::break_room::state::{BreakRoomState, PlayedBreak, TravlePuzzle};
+use study_tracker_core::break_room::state::{BreakRoomState, PlayedBreak};
+use study_tracker_core::break_room::travle::TravlePuzzle;
 use study_tracker_core::break_room::wordle::WordlePuzzle;
 use study_tracker_core::dashboard::civil::to_iso_utc_string;
 
@@ -712,6 +713,25 @@ mod tests {
             record.unknown.is_empty(),
             "only the 21 keys are taken from AppState"
         );
+    }
+
+    /// Production's `normalizeTravlePuzzle` (run by `scripts/stage21-goldens.mjs` through
+    /// `loadAppState`), on garbage shapes too: the parser plus the core normalization agree.
+    #[test]
+    fn travle_load_normalization_matches_production_on_every_stored_shape() {
+        let f: Value = serde_json::from_str(include_str!(
+            "../../crates/study-tracker-core/tests/fixtures/break_room/travle.json"
+        ))
+        .unwrap();
+        for row in f["normalize"].as_array().unwrap() {
+            let name = row["name"].as_str().unwrap();
+            let stored = (row["stored"] != json!("__absent__")).then_some(&row["stored"]);
+            let got = parse_travle(stored).normalized("2026-10-02", || {
+                "11111111-2222-4333-8444-555555555555".into()
+            });
+            let want = parse_travle(Some(&row["loaded"]));
+            assert_eq!(got, want, "{name}");
+        }
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! Break Room / Rest (Stage 20): production v0.1.67's game catalog, unlock economy, pet rock,
+//! Break Room / Rest (Stage 20; Travle Stage 21): production v0.1.67's game catalog, unlock economy, pet rock,
 //! achievements and the local games' rules, as renderer-independent pure Rust.
 //!
 //! Nothing here reads the system clock, the timezone, a random source or the filesystem: dates
@@ -16,7 +16,10 @@ pub mod flaggle;
 pub mod geodle;
 pub mod rest;
 pub mod state;
+pub mod travle;
 pub mod wordle;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod travle_tests;

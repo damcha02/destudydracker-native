@@ -29,6 +29,26 @@ pub struct MapController {
 
 pub type SharedMap = Rc<RefCell<MapController>>;
 
+thread_local! {
+    static LAB: RefCell<Option<SharedMap>> = const { RefCell::new(None) };
+}
+
+/// The map lab, created (data set built, callbacks bound) the first time it is on screen or
+/// `force`d (the benchmark driver); `None` until then. Called on every surface change.
+pub fn ensure(window: &MainWindow, force: bool) -> Option<SharedMap> {
+    if let Some(map) = LAB.with(|lab| lab.borrow().clone()) {
+        return Some(map);
+    }
+    if !force && !window.get_show_map() {
+        return None;
+    }
+    let map = new_controller(crate::map_level_from_env());
+    apply_all(window, &mut map.borrow_mut());
+    bind(window, &map);
+    LAB.with(|lab| *lab.borrow_mut() = Some(Rc::clone(&map)));
+    Some(map)
+}
+
 pub fn new_controller(level: StressLevel) -> SharedMap {
     Rc::new(RefCell::new(MapController {
         model: MapModel::new(level),

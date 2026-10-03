@@ -27,6 +27,7 @@ use study_tracker_core::break_room::flaggle::PreviewRequest;
 use study_tracker_core::break_room::geodle::CountrySubmit;
 use study_tracker_core::break_room::rest::{Breathing, RestTimer};
 use study_tracker_core::break_room::state::Progression;
+use study_tracker_core::break_room::travle::TravleSubmit;
 use study_tracker_core::break_room::wordle::{WordleSubmit, WORD_LENGTH};
 use study_tracker_core::dashboard::civil::{CivilDate, LocalClock};
 use study_tracker_core::timer::WallTimestamp;
@@ -243,6 +244,12 @@ pub struct BreakUi {
     pub flaggle_draft: String,
     pub flaggle_message: String,
     pub flaggle_dropdown: bool,
+    pub travle_draft: String,
+    pub travle_message: String,
+    pub travle_dropdown: bool,
+    /// `travleMapZoom` (1 ..= 2.5): like the draft, it survives closing the modal and resets only
+    /// with a new puzzle.
+    pub travle_zoom: MapZoom,
     /// A game card mid unlock-celebration.
     pub celebrating: Option<GameId>,
     pub quote_index: usize,
@@ -256,6 +263,16 @@ pub struct BreakUi {
     /// Pats since launch (drives the bounce; one per click).
     pub rock_bounces: u64,
     pub rock_celebrating: bool,
+}
+
+/// Travle's map zoom factor (production's `useState(1)`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MapZoom(pub f64);
+
+impl Default for MapZoom {
+    fn default() -> Self {
+        Self(1.0)
+    }
 }
 
 /// Rasterizes flags for Flaggle (the app's resvg adapter; a stub in tests).
@@ -305,9 +322,8 @@ impl BreakRoomController {
             std::mem::take(&mut record.state.geodle).normalized(&iso, || rng.uuid());
         record.state.flaggle =
             std::mem::take(&mut record.state.flaggle).normalized(&iso, || rng.uuid());
-        if record.state.travle.seed_salt.is_empty() {
-            record.state.travle.seed_salt = rng.uuid();
-        }
+        record.state.travle =
+            std::mem::take(&mut record.state.travle).normalized(&iso, || rng.uuid());
         let ui = BreakUi {
             quote_index: rng.index(QUOTE_COUNT),
             stretch_index: rng.index(STRETCH_COUNT),
@@ -489,9 +505,17 @@ impl BreakRoomController {
                 let pick = rng.next_f64();
                 self.durak.open(&mut self.record.state.durak, &iso, pick);
             }
-            // Stage 21 / Stage 22: the card and the play log behave like production; the surface
-            // is the deferred shell (see the view).
-            GameId::Travle | GameId::DailySkribbl => {}
+            GameId::Travle => {
+                if self.record.state.travle.ensure_today(&iso, || rng.uuid()) {
+                    self.ui.travle_draft.clear();
+                    self.ui.travle_message.clear();
+                    self.ui.travle_dropdown = false;
+                    self.ui.travle_zoom = MapZoom::default();
+                }
+            }
+            // Stage 22: the card and the play log behave like production; the surface is the
+            // deferred shell (see the view).
+            GameId::DailySkribbl => {}
         }
         self.changed(clock);
         true
@@ -687,6 +711,74 @@ impl BreakRoomController {
 
     pub fn flaggle_preview(&self) -> PreviewRequest {
         self.record.state.flaggle.preview()
+    }
+
+    // ------------------------------------------------------------------ travle
+
+    /// Typing in the combo (`onChange`): the draft, the dropdown open, the message cleared.
+    pub fn travle_set_draft(&mut self, text: &str) {
+        self.ui.travle_draft = text.to_string();
+        self.ui.travle_dropdown = true;
+        self.ui.travle_message.clear();
+    }
+
+    /// `selectTravleCountry`.
+    pub fn travle_select(&mut self, name: &str) {
+        self.ui.travle_draft = name.to_string();
+        self.ui.travle_dropdown = false;
+        self.ui.travle_message.clear();
+    }
+
+    /// The ▾ button.
+    pub fn travle_toggle_dropdown(&mut self) {
+        self.ui.travle_dropdown = !self.ui.travle_dropdown;
+    }
+
+    /// The × button: empty draft, list open (the message stays, like production).
+    pub fn travle_clear(&mut self) {
+        self.ui.travle_draft.clear();
+        self.ui.travle_dropdown = true;
+    }
+
+    /// `submitTravleGuess` (Enter or Step). Persists only when a guess was added.
+    pub fn travle_submit(&mut self, clock: &dyn LocalClock) {
+        let result = self.record.state.travle.submit(&self.ui.travle_draft);
+        match result {
+            // the puzzle is finished: production returns before touching anything
+            TravleSubmit::Ignored => {}
+            TravleSubmit::NotACountry => {
+                self.ui.travle_message = result.message().to_string();
+                self.ui.travle_dropdown = true;
+            }
+            TravleSubmit::AlreadyInRoute => {
+                self.ui.travle_message = result.message().to_string();
+            }
+            TravleSubmit::Accepted { message } => {
+                self.ui.travle_message = message;
+                self.ui.travle_draft.clear();
+                self.ui.travle_dropdown = false;
+                self.changed(clock);
+            }
+        }
+    }
+
+    /// Diagnostics only (`STUDY_NATIVE_TRAVLE_STRESS=guess`): puts another day's puzzle in place
+    /// in memory, so many puzzles can be played through the real submit path.
+    pub fn stress_replace_travle(
+        &mut self,
+        puzzle: study_tracker_core::break_room::travle::TravlePuzzle,
+    ) {
+        self.record.state.travle = puzzle;
+    }
+
+    /// The map's + / − buttons (view state only; never persisted).
+    pub fn travle_zoom(&mut self, zoom_in: bool) {
+        let z = self.ui.travle_zoom.0;
+        self.ui.travle_zoom = MapZoom(if zoom_in {
+            crate::travle_map::zoom_in(z)
+        } else {
+            crate::travle_map::zoom_out(z)
+        });
     }
 
     // ------------------------------------------------------------------ durak

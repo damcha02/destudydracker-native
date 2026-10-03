@@ -24,7 +24,7 @@ import { FnBreakPage } from "break/fn-break.slint";
 import { BreakGames } from "break/games.slint";
 import { GamesData } from "break/types.slint";
 import { FnBreakData, BrCard, BrBadge, Emoji } from "break/types.slint";
-export { FnBreakData, BrCard, BrBadge, Emoji, WabiRestData, Game, GameTokens, GamesData, WordleData, WTile, WKey, GeodleData, GeoRow, GeoClue, CountryOption, FlaggleData, FlagRow, DurakData, DCard, DCol } from "break/types.slint";
+export { FnBreakData, BrCard, BrBadge, Emoji, WabiRestData, Game, GameTokens, GamesData, WordleData, WTile, WKey, GeodleData, GeoRow, GeoClue, CountryOption, FlaggleData, FlagRow, DurakData, DCard, DCol, TravleData, TravleShape } from "break/types.slint";
 import { WabiRestData } from "break/types.slint";
 import { AlbumData, AlbumRow, AlbumPageData } from "wabi/album.slint";
 export { AlbumData, AlbumRow, AlbumPageData } from "wabi/album.slint";
@@ -238,6 +238,12 @@ export component MainWindow inherits Window {
     callback flaggle-submit();
     callback durak-card(int);
     callback durak-act(string);
+    callback travle-edited(string);
+    callback travle-toggle();
+    callback travle-pick(string);
+    callback travle-submit();
+    callback travle-clear();
+    callback travle-zoom(bool);
     in property <WabiRestData> wabi-rest;
     in property <int> rest-room;
     in property <float> breath-ring: 60;
@@ -782,7 +788,10 @@ export component MainWindow inherits Window {
 
         // Stage 20: the open game (production's portal, z-index 500, over every surface)
         if root.show-break && root.games.open >= 0: BreakGames {
-            width: parent.width;
+            // Wabi-Sabi's `scrollbar-gutter: stable` keeps 10px at the right out of every fixed
+            // overlay (production's modals centre in the narrower box; the gutter stays undimmed)
+            x: 0px;
+            width: parent.width - (root.wabi ? 10px : 0px);
             height: parent.height;
             d: root.games;
             close => { root.game-close(); }
@@ -798,6 +807,12 @@ export component MainWindow inherits Window {
             flaggle-submit => { root.flaggle-submit(); }
             durak-card(i) => { root.durak-card(i); }
             durak-act(a) => { root.durak-act(a); }
+            travle-edited(t) => { root.travle-edited(t); }
+            travle-toggle => { root.travle-toggle(); }
+            travle-pick(n) => { root.travle-pick(n); }
+            travle-submit => { root.travle-submit(); }
+            travle-clear => { root.travle-clear(); }
+            travle-zoom(i) => { root.travle-zoom(i); }
         }
 
         // The menu (`.topbar-menu` / `.wabi-toolbar-menu`) and the Theme / Style panel.

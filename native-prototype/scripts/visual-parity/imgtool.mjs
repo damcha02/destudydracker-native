@@ -6,6 +6,9 @@
 //   pair  <a.png> <b.png> <out.png>                     production | native, unmodified
 //   diff  <a.png> <b.png>                               print whole-image mean abs difference
 //   tiles <a.png> <b.png> [n]                           mean abs difference per n x n tile grid
+//   shifts <a.png> <b.png> x y w h [band]                Stage 21: per horizontal band of the
+//                                                        region, the vertical offset of b against a
+//                                                        (-6..6 px) that matches best
 import { readFileSync, writeFileSync } from "node:fs";
 import { inflateSync, deflateSync } from "node:zlib";
 
@@ -141,5 +144,18 @@ if (cmd === "side") {
       row.push(diffImage(crop(a, x0, y0, x1 - x0, y1 - y0), crop(b, x0, y0, x1 - x0, y1 - y0)).mean.toFixed(1).padStart(5));
     }
     console.log(row.join(" "));
+  }
+}
+else if (cmd === "shifts") {
+  const a = decodePNG(pa), b = decodePNG(pb);
+  const [x, y, w, h, band = 20] = rest.map(Number);
+  for (let y0 = y; y0 < y + h; y0 += band) {
+    let best = [Infinity, 0];
+    for (let dy = -6; dy <= 6; dy++) {
+      const m = diffImage(crop(a, x, y0, w, band), crop(b, x, y0 + dy, w, band)).mean;
+      if (m < best[0] - 1e-9) best = [m, dy];
+    }
+    const same = diffImage(crop(a, x, y0, w, band), crop(b, x, y0, w, band)).mean;
+    console.log(`y ${String(y0).padStart(4)}  best dy ${String(best[1]).padStart(3)}  diff ${best[0].toFixed(2).padStart(6)}  (at 0: ${same.toFixed(2)})`);
   }
 }

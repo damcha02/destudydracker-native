@@ -92,12 +92,15 @@ export struct GameTokens {
     flaggle-row-bg: color, geodle-table-bg: color, geodle-rule: color, tooltip-bg: color,
     durak-rule: color, durak-selected-bg: color, durak-undefended-bg: color,
     travle-card-bg: color, travle-route-bg: color,
+    travle-map-border: color, travle-won-bg: color, travle-lost-bg: color, travle-stat-bg: color,
 }
 
 export global Game {
     // Field Notebook's button reset squares the games' buttons (keys, submits, Durak actions);
     // Wabi-Sabi keeps their CSS radii
     in-out property <bool> square-buttons: true;
+    // Wabi-Sabi's own input/heading rules (square inputs on white, unspaced headings)
+    in-out property <bool> wabi: false;
     in-out property <GameTokens> t: {
         surface: #24221e, surface-2: #2b2823, inset: #201e1a, border: #58503f, accent: #eee6d6, text: #eee6d6, muted: #aaa08d,
     };
@@ -165,6 +168,37 @@ export struct DurakData {
     can-defend: bool,
     can-slide: bool,
 }
+// One country of the Travle map (production order): its path in world units (0..1000 x 0..500)
+// and its resolved `.travle-map-country` style; `width` is the on-screen stroke width.
+export struct TravleShape { commands: string, fill: color, stroke: color, width: float }
+export struct TravleData {
+    header: string,
+    start: string,
+    target: string,
+    map-label: string,
+    // the auto-fitted viewBox (world units)
+    vb-x: float, vb-y: float, vb-w: float, vb-h: float,
+    // the route polyline (path commands, world units; "" = none)
+    line: string,
+    // the chips: the start, every guess; then the destination (dashed) while not won
+    route: [string],
+    show-target: bool,
+    current: string,
+    guessed: string,
+    completed: bool,
+    won: bool,
+    draft: string,
+    dropdown: bool,
+    options: [CountryOption],
+    status: string,
+    shortest: string,
+    // the result card
+    result-route: string,
+    used: string,
+    shortest-steps: string,
+    third-label: string,
+    third-value: string,
+}
 export struct GamesData {
     // -1 none, else the open game's index in `studyBreakGames`
     open: int,
@@ -172,5 +206,6 @@ export struct GamesData {
     geodle: GeodleData,
     flaggle: FlaggleData,
     durak: DurakData,
-    travle-header: string,
+    travle: TravleData,
+    travle-shapes: [TravleShape],
 }

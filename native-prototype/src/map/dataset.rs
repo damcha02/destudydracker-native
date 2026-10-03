@@ -1,10 +1,11 @@
-//! Map dataset: parsing of the copied production geometry plus deterministic stress generators.
+//! Map dataset: the production geometry plus deterministic stress generators.
+//!
+//! Since Stage 21 the World level is Travle's own map (`crate::travle_map`, one embedded copy of
+//! production's `travleMapData.ts`) joined with the core country table for names and continents;
+//! Stage 11's separate `world-countries.tsv` copy is gone.
 
 use super::{Bounds, GeometryStats, Point, Region, Ring, WORLD_HEIGHT, WORLD_WIDTH};
 use std::fmt::Write as _;
-
-/// The copied production data (see `scripts/extract-map-data.py`).
-const WORLD_TSV: &str = include_str!("../../assets/map/world-countries.tsv");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StressLevel {
@@ -74,6 +75,8 @@ pub struct MapDataset {
     pub regions: Vec<Region>,
 }
 
+/// A malformed row of the 9-column TSV format the map lab's tests feed `from_tsv`.
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MapError {
     BadLine { line: usize, reason: String },
@@ -98,12 +101,32 @@ impl MapDataset {
         }
     }
 
-    /// The bundled real dataset. Panics only if the bundled asset is corrupt (covered by a test).
+    /// The bundled real dataset (Travle's map). Panics only if the bundled asset is corrupt
+    /// (covered by a test).
     pub fn world() -> Self {
-        Self::from_tsv(WORLD_TSV).expect("bundled world-countries.tsv must parse")
+        let regions = crate::travle_map::countries()
+            .iter()
+            .map(|c| {
+                let fact = c.id.map(|id| id.country());
+                let continent = fact.map_or("", |f| f.continent);
+                Region::build(
+                    c.code.clone(),
+                    fact.map_or(c.code.as_str(), |f| f.name).to_string(),
+                    continent.to_string(),
+                    fact.map_or("", |f| f.region).to_string(),
+                    fact.map_or(0, |f| f.population),
+                    fact.map_or(0, |f| f.area_km2),
+                    parse_path(&c.path).expect("bundled travle-map.tsv paths must parse"),
+                    c.point,
+                    continent_tone(continent),
+                )
+            })
+            .collect();
+        Self { regions }
     }
 
     /// Parses `code, name, continent, region, population, area, point_x, point_y, path` rows.
+    #[cfg(test)]
     pub fn from_tsv(text: &str) -> Result<Self, MapError> {
         let mut regions = Vec::new();
         for (n, line) in text.lines().enumerate() {

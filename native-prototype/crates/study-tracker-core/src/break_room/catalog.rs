@@ -2,14 +2,12 @@
 //! in production's order, identified everywhere in production state by their display **name**
 //! (`unlockedGames`, `playedBreaks[].name`, `playedGamesAllTime` all hold names).
 
-/// Whether the native build can run the game itself yet (Stage 20 scope). The catalog, unlocking,
+/// Whether the native build can run the game itself (Travle became local in Stage 21). The catalog, unlocking,
 /// "played" logging and achievements treat all six alike, exactly like production.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Availability {
     /// Fully local; implemented natively.
     Local,
-    /// Travle: the border-route map game, migrated in Stage 21.
-    MapStage21,
     /// Daily Skribbl: theme, upload, gallery and votes all live on the social Worker (Stage 22).
     NetworkStage22,
 }
@@ -51,7 +49,7 @@ pub const GAMES: [GameInfo; 6] = [
         id: GameId::Travle,
         name: "Travle",
         desc: "Build a border route between countries",
-        availability: Availability::MapStage21,
+        availability: Availability::Local,
     },
     GameInfo {
         id: GameId::Flaggle,

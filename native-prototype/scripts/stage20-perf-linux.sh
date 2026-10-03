@@ -31,7 +31,8 @@ cpu=$(awk -v a=$t0 -v b=$t1 -v s=$s0 -v e=$s1 -v hz=$hz 'BEGIN{printf "%.2f", (b
 rss=$(awk '/VmRSS/{printf "%.1f", $2/1024}' /proc/$pid/status)
 anon=$(awk '/RssAnon/{printf "%.1f", $2/1024}' /proc/$pid/status)
 threads=$(awk '/Threads/{print $2}' /proc/$pid/status)
-frames=$(tail -n +$((lines0 + 1)) <(grep '^STATS' "$log") | sed -n 's/.* frames=\([0-9]*\).*/\1/p' | paste -sd+ | bc 2>/dev/null || echo 0)
+# (Stage 21: summed with awk; the earlier `paste | bc` printed 0 whenever bc was not installed)
+frames=$(tail -n +$((lines0 + 1)) <(grep '^STATS' "$log") | sed -n 's/.* frames=\([0-9]*\).*/\1/p' | awk '{s+=$1} END{print s+0}')
 extra=$(grep -E 'done|SNAPSHOT' "$log" | tr '\n' ' ' || true)
 kill $pid 2>/dev/null || true; wait $pid 2>/dev/null || true
 printf "%s\tcpu=%s%%\trss=%sMiB\tanon=%sMiB\tthreads=%s\tframes=%s\t%s\n" "$name" "$cpu" "$rss" "$anon" "$threads" "${frames:-0}" "$extra"

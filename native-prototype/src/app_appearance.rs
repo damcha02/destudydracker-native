@@ -176,6 +176,7 @@ pub fn apply_appearance(window: &MainWindow) {
     };
     crate::Game::get(window).set_t(crate::game_tokens::tokens(base));
     crate::Game::get(window).set_square_buttons(resolved.rendered != RenderedStyle::WabiSabi);
+    crate::Game::get(window).set_wabi(resolved.rendered == RenderedStyle::WabiSabi);
     crate::app_break_room::push(window);
     sync_sakura();
 }
@@ -485,7 +486,13 @@ fn bind_callbacks(window: &MainWindow) {
             refresh_wabi(&window, true);
         });
     }
-    window.on_surface_changed(sync_sakura);
+    let weak = window.as_weak();
+    window.on_surface_changed(move || {
+        sync_sakura();
+        if let Some(w) = weak.upgrade() {
+            crate::map_adapter::ensure(&w, false);
+        }
+    });
 }
 
 // --- Sakura ----------------------------------------------------------------------------------------

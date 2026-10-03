@@ -1,7 +1,8 @@
 //! Stage 11 map / geometry lab (presentation layer; nothing here belongs in `study-tracker-core`).
 //!
 //! ```text
-//! assets/map/world-countries.tsv  ->  dataset.rs (parse, stress generators)
+//! assets/map/travle-map.tsv (via crate::travle_map, shared with Travle)
+//!                                 ->  dataset.rs (World + stress generators)
 //!                                     viewport.rs (world <-> screen, zoom/pan)
 //!                                     hit.rs      (bbox filter + point-in-polygon)
 //!                                     mod.rs      (MapModel: hover/selection/drag + labels)

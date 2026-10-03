@@ -7,7 +7,7 @@
 // Closing: the backdrop and the ✕ close a game, like production (which binds no Escape here).
 import { FN } from "../fn/palette.slint";
 import { Game, GamesData, WordleData, WTile, WKey, GeodleData, GeoRow, GeoClue, CountryOption,
-         FlaggleData, FlagRow, DurakData, DCard, DCol, Emoji } from "types.slint";
+         FlaggleData, FlagRow, DurakData, DCard, DCol, Emoji, TravleData, TravleShape } from "types.slint";
 
 component Kicker inherits Text {
     font-family: FN.sans;
@@ -49,13 +49,17 @@ component Backdrop inherits Rectangle {
 // A radial glow from a point near the top-left corner (`radial-gradient(circle at 12% 0%, ...)`).
 component CornerGlow inherits Rectangle {
     in property <color> tint;
-    private property <length> r: 0.36 * sqrt((0.88 * root.width / 1px) * (0.88 * root.width / 1px) + (root.height / 1px) * (root.height / 1px)) * 1px;
+    // the gradient's stop as a fraction of the farthest-corner distance (`transparent 36%`)
+    in property <float> extent: 0.36;
+    private property <length> r: root.extent * sqrt((0.88 * root.width / 1px) * (0.88 * root.width / 1px) + (root.height / 1px) * (root.height / 1px)) * 1px;
     Rectangle {
         x: 0.12 * root.width - root.r;
         y: -root.r;
         width: 2 * root.r;
         height: 2 * root.r;
-        background: @radial-gradient(circle, root.tint 0%, transparent 100%);
+        // Slint's default radius is half the square's diagonal (r * sqrt 2); end the fade at r, the
+        // circle CSS describes, or the square's straight edges show as a hard seam
+        background: @radial-gradient(circle, root.tint 0%, transparent 70.7107%);
     }
 }
 
@@ -91,14 +95,22 @@ component Panel inherits Rectangle {
         drop-shadow-color: #0000006b;
         clip: true;
         if root.has-glow: CornerGlow { width: parent.width; height: parent.height; tint: root.glow; }
+        // `overflow-y: auto` clips at the padding box (inside the border), so overflowing content
+        // scrolls through the padding too, not just inside it
         Flickable {
-            x: 1px + root.pad;
-            y: 1px + root.pad;
-            width: parent.width - 2px - 2 * root.pad;
-            height: parent.height - 2px - 2 * root.pad;
-            viewport-height: root.content-h;
-            interactive: root.content-h > self.height;
-            @children
+            x: 1px;
+            y: 1px;
+            width: parent.width - 2px;
+            height: parent.height - 2px;
+            viewport-height: root.content-h + 2 * root.pad;
+            interactive: self.viewport-height > self.height;
+            Rectangle {
+                x: root.pad;
+                y: root.pad;
+                width: parent.width - 2 * root.pad;
+                height: root.content-h;
+                @children
+            }
         }
     }
 }
@@ -264,21 +276,37 @@ component CountryCombo inherits Rectangle {
     in property <string> placeholder;
     in property <bool> flags;
     in property <length> menu-h;
+    // Stage 21 (Travle): the field's own look and two-line rows (name over region). The defaults
+    // are Geodle/Flaggle's Stage 20 rendering, unchanged.
+    in property <length> field-h: 52px;
+    in property <brush> field-bg: Game.t.surface;
+    in property <length> field-border: 1px;
+    in property <color> field-border-color: Game.t.border;
+    in property <length> field-radius: 2px;
+    in property <color> ink: Game.t.text;
+    in property <color> hint-ink: Game.t.muted;
+    in property <bool> stacked;
+    in property <string> empty-text: "No countries found.";
+    // vertical nudge of the typed/placeholder text (Travle's 46px field measures 1px higher)
+    in property <length> text-dy: 0px;
     callback edited(string);
     callback toggle();
     callback pick(string);
     callback submit();
-    height: 52px;
+    // the × button (Geodle/Flaggle map it to `edited("")`)
+    callback cleared();
+    height: root.field-h;
     // typing replaces a TextInput's one-way `text` binding, so the controller's draft (cleared after
     // a guess, set by a pick) is pushed into the field explicitly whenever it changes
     changed draft => { if input.text != root.draft { input.text = root.draft; } }
     Rectangle {
-        border-width: 1px;
-        border-color: Game.t.border;
-        border-radius: 2px;
-        background: Game.t.surface;
+        border-width: root.field-border;
+        border-color: root.field-border-color;
+        border-radius: root.field-radius;
+        background: root.field-bg;
         input := TextInput {
-            x: 16px;
+            x: 15px + root.field-border;
+            y: root.text-dy;
             width: parent.width - 16px - 82px;
             height: parent.height;
             vertical-alignment: center;
@@ -288,7 +316,7 @@ component CountryCombo inherits Rectangle {
             font-family: FN.sans;
             font-size: 16px;
             font-weight: 800;
-            color: Game.t.text;
+            color: root.ink;
             edited => { root.edited(self.text); }
             accepted => { root.submit(); }
             changed has-focus => { if self.has-focus && !root.dropdown && root.enabled { root.toggle(); } }
@@ -296,30 +324,31 @@ component CountryCombo inherits Rectangle {
             accessible-label: root.placeholder;
         }
         if input.text == "": Text {
-            x: 16px;
+            x: input.x;
+            y: root.text-dy;
             height: parent.height;
             vertical-alignment: center;
             text: root.placeholder;
             font-family: FN.sans;
             font-size: 16px;
             font-weight: 800;
-            color: Game.t.muted;
+            color: root.hint-ink;
         }
         if root.draft != "": Rectangle {
             x: parent.width - 45px - 34px;
-            y: 9px;
+            y: (parent.height - 34px) / 2;
             width: 34px;
             height: 34px;
             border-radius: 10px;
             background: clear.has-hover ? #edf2ff : transparent;
             Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "×"; font-family: FN.sans; font-size: 21.6px; color: #495057; }
-            clear := TouchArea { clicked => { root.edited(""); input.focus(); } }
+            clear := TouchArea { clicked => { root.cleared(); input.focus(); } }
             accessible-role: button;
             accessible-label: "Clear country";
         }
         Rectangle {
             x: parent.width - 8px - 34px;
-            y: 9px;
+            y: (parent.height - 34px) / 2;
             width: 34px;
             height: 34px;
             border-radius: 10px;
@@ -349,9 +378,9 @@ component CountryCombo inherits Rectangle {
             viewport-height: list.preferred-height;
             list := VerticalLayout {
                 spacing: 2px;
-                if root.options.length == 0: Text { text: "No countries found."; font-family: FN.sans; font-size: 12.48px; color: Game.t.muted; }
+                if root.options.length == 0: Text { text: root.empty-text; font-family: FN.sans; font-size: 12.48px; color: Game.t.muted; }
                 for o in root.options: Rectangle {
-                    height: root.flags ? 74px : 39px;
+                    height: root.flags ? 74px : root.stacked ? 54px : 39px;
                     border-radius: 12px;
                     background: row.has-hover ? Game.t.hover-16 : transparent;
                     if root.flags: Rectangle {
@@ -366,7 +395,24 @@ component CountryCombo inherits Rectangle {
                         clip: true;
                         Image { width: parent.width; height: parent.height; image-fit: cover; source: o.flag; }
                     }
-                    Text {
+                    if root.stacked: Text {
+                        x: 12px;
+                        y: 10px;
+                        text: o.name;
+                        font-family: FN.sans;
+                        font-size: 16px;
+                        font-weight: 700;
+                        color: Game.t.text;
+                    }
+                    if root.stacked: Text {
+                        x: 12px;
+                        y: 30px;
+                        text: o.detail;
+                        font-family: FN.sans;
+                        font-size: 11.84px;
+                        color: Game.t.muted;
+                    }
+                    if !root.stacked: Text {
                         x: root.flags ? 12px + 78px + 14px : 12px;
                         height: parent.height;
                         vertical-alignment: center;
@@ -376,7 +422,7 @@ component CountryCombo inherits Rectangle {
                         font-weight: 700;
                         color: Game.t.text;
                     }
-                    if !root.flags: Text {
+                    if !root.flags && !root.stacked: Text {
                         x: parent.width - 12px - self.preferred-width;
                         height: parent.height;
                         vertical-alignment: center;
@@ -401,6 +447,7 @@ component SubmitButton inherits Rectangle {
     in property <length> radius;
     in property <bool> enabled: true;
     callback clicked();
+    out property <length> label-w: label.preferred-width;
     width: label.preferred-width + 44px;
     height: 52px;
     border-radius: root.radius;
@@ -526,6 +573,7 @@ component GeodleModal inherits Rectangle {
                 placeholder: "Country";
                 flags: false;
                 menu-h: 260px;
+                cleared => { root.edited(""); }
                 edited(t) => { root.edited(t); }
                 toggle => { root.toggle(); }
                 pick(n) => { root.pick(n); }
@@ -644,6 +692,7 @@ component FlaggleModal inherits Rectangle {
                 placeholder: "Choose a country";
                 flags: true;
                 menu-h: 310px;
+                cleared => { root.edited(""); }
                 edited(t) => { root.edited(t); }
                 toggle => { root.toggle(); }
                 pick(n) => { root.pick(n); }
@@ -880,44 +929,589 @@ component SkribblModal inherits Rectangle {
     accessible-label: "Daily Skribbl";
 }
 
-component TravleModal inherits Rectangle {
-    in property <string> header;
+// ------------------------------------------------------------------------------------- Travle
+// Production's `.travle-modal` (App.tsx portal + App.css `.travle-*`). The map is production's
+// inline SVG: a 1000x500 world drawn once in world units and moved/scaled as one layer to the
+// auto-fitted viewBox (Rust), so a guess or a zoom click restyles a few countries and changes
+// four numbers - nothing is re-parsed, nothing animates except CSS's 120 ms fill/stroke fade.
+// No hover, no hit testing, no pan: production's map has none.
+
+// `.travle-target-card > div`, `.travle-current-card`, `.travle-shortest`
+component TravleCard inherits Rectangle {
+    in property <bool> compact;
+    out property <length> pad-x: root.compact ? 12px : 14px;
+    out property <length> pad-y: root.compact ? 9px : 12px;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: Game.t.border;
+    background: Game.t.travle-card-bg;
+}
+
+component CardLabel inherits Text {
+    font-family: FN.sans;
+    font-size: 11.84px;
+    font-weight: 800;
+    letter-spacing: 0.9472px;
+    color: Game.t.muted;
+}
+
+component CardValue inherits Text {
+    font-family: FN.sans;
+    font-size: 16.8px;
+    font-weight: 700;
+    letter-spacing: Game.wabi ? 0.084px : 0px;
+    color: Game.t.text;
+    overflow: elide;
+}
+
+// A 1px dashed pill outline (`border: 1px dashed`), as Chromium draws it: ~3px dashes, ~3px gaps,
+// running along the straight edges and the round ends.
+component DashedPill inherits Rectangle {
+    in property <color> ink;
+    private property <length> r: root.height / 2;
+    private property <length> straight: max(0px, root.width - root.height);
+    private property <int> runs: max(1, floor(root.straight / 6px));
+    private property <length> step: root.straight / root.runs;
+    private property <int> arc-dashes: 8;
+    for i in root.runs: Rectangle { x: root.r + i * root.step + (root.step - 3px) / 2; y: 0px; width: 3px; height: 1px; background: root.ink; }
+    for i in root.runs: Rectangle { x: root.r + i * root.step + (root.step - 3px) / 2; y: root.height - 1px; width: 3px; height: 1px; background: root.ink; }
+    // each round end: dashes centred on the half circle, tangent to it
+    for i in root.arc-dashes * 2: Rectangle {
+        private property <bool> left: i < root.arc-dashes;
+        private property <angle> a: ((mod(i, root.arc-dashes) + 0.5) / root.arc-dashes) * 180deg + (self.left ? 90deg : -90deg);
+        private property <length> cx: self.left ? root.r : root.width - root.r;
+        x: self.cx + (root.r - 0.5px) * cos(self.a) - 1.5px;
+        y: root.r + (root.r - 0.5px) * sin(self.a) - 0.5px;
+        width: 3px;
+        height: 1px;
+        transform-rotation: self.a + 90deg;
+        background: root.ink;
+    }
+}
+
+// `.travle-route-node` / `.travle-route-target` (dashed, muted)
+component RouteChip inherits Rectangle {
+    in property <string> label;
+    in property <bool> dashed;
+    // the `→` after every node but the container's last child
+    in property <bool> arrow;
+    in property <bool> compact;
+    private property <length> pad-x: root.compact ? 9px : 10px;
+    private property <length> pad-y: root.compact ? 6px : 7px;
+    // Chromium's `line-height: normal`: each font metric rounded to whole pixels
+    private property <length> line: round(t.font-metrics.ascent / 1px) * 1px + round(-t.font-metrics.descent / 1px) * 1px + round(0.0327 * t.font-size / 1px) * 1px;
+    width: t.preferred-width + 2 * root.pad-x + 2px;
+    height: root.line + 2 * root.pad-y + 2px;
+    border-radius: self.height / 2;
+    border-width: root.dashed ? 0px : 1px;
+    border-color: Game.t.border;
+    background: Game.t.surface;
+    t := Text {
+        x: 1px + root.pad-x;
+        // femtovg sets the glyphs ~1px lower than Chromium in the same line box (measured)
+        y: 1px + root.pad-y + (root.line - self.preferred-height) / 2 - 1px;
+        text: root.label;
+        font-family: FN.sans;
+        font-size: root.compact ? 11.52px : 12.48px;
+        font-weight: 900;
+        letter-spacing: Game.wabi ? 0.08px : 0px;
+        color: root.dashed ? Game.t.muted : Game.t.text;
+    }
+    // `right: -14px` from the padding box, on the text line
+    if root.arrow: Text {
+        x: parent.width - 1px + 14px - self.preferred-width;
+        y: t.y - 1px;
+        text: "→";
+        font-family: FN.sans;
+        font-size: t.font-size;
+        font-weight: 900;
+        color: Game.t.muted;
+    }
+    accessible-role: text;
+    accessible-label: root.label;
+}
+
+// `.travle-route`: up to nine chips (start + seven guesses + destination), wrapping like
+// `flex-wrap: wrap` - each chip goes on the current row if it fits, else starts the next one.
+component RouteChips inherits Rectangle {
+    in property <[string]> names;
+    in property <string> target;
+    in property <bool> show-target;
+    in property <bool> compact;
+    private property <length> gap: root.compact ? 6px : 8px;
+    private property <length> pad: root.compact ? 9px : 12px;
+    private property <length> avail: root.width - 2 * root.pad;
+    private property <int> n: min(9, root.names.length + (root.show-target ? 1 : 0));
+    private property <length> row-h: c0.height;
+    pure function label(i: int) -> string {
+        if i < root.names.length { return root.names[i]; }
+        return root.target;
+    }
+    // position of chip i after chip i-1 (x, width): same row if it fits
+    pure function fits(prev-x: length, prev-w: length, w: length) -> bool {
+        return prev-x + prev-w + root.gap + w <= root.avail;
+    }
+    private property <length> x1: root.fits(0px, c0.width, c1.width) ? c0.width + root.gap : 0px;
+    private property <int> r1: root.fits(0px, c0.width, c1.width) ? 0 : 1;
+    private property <length> x2: root.fits(root.x1, c1.width, c2.width) ? root.x1 + c1.width + root.gap : 0px;
+    private property <int> r2: root.fits(root.x1, c1.width, c2.width) ? root.r1 : root.r1 + 1;
+    private property <length> x3: root.fits(root.x2, c2.width, c3.width) ? root.x2 + c2.width + root.gap : 0px;
+    private property <int> r3: root.fits(root.x2, c2.width, c3.width) ? root.r2 : root.r2 + 1;
+    private property <length> x4: root.fits(root.x3, c3.width, c4.width) ? root.x3 + c3.width + root.gap : 0px;
+    private property <int> r4: root.fits(root.x3, c3.width, c4.width) ? root.r3 : root.r3 + 1;
+    private property <length> x5: root.fits(root.x4, c4.width, c5.width) ? root.x4 + c4.width + root.gap : 0px;
+    private property <int> r5: root.fits(root.x4, c4.width, c5.width) ? root.r4 : root.r4 + 1;
+    private property <length> x6: root.fits(root.x5, c5.width, c6.width) ? root.x5 + c5.width + root.gap : 0px;
+    private property <int> r6: root.fits(root.x5, c5.width, c6.width) ? root.r5 : root.r5 + 1;
+    private property <length> x7: root.fits(root.x6, c6.width, c7.width) ? root.x6 + c6.width + root.gap : 0px;
+    private property <int> r7: root.fits(root.x6, c6.width, c7.width) ? root.r6 : root.r6 + 1;
+    private property <length> x8: root.fits(root.x7, c7.width, c8.width) ? root.x7 + c7.width + root.gap : 0px;
+    private property <int> r8: root.fits(root.x7, c7.width, c8.width) ? root.r7 : root.r7 + 1;
+    private property <[int]> rows: [0, root.r1, root.r2, root.r3, root.r4, root.r5, root.r6, root.r7, root.r8];
+    private property <[length]> xs: [0px, root.x1, root.x2, root.x3, root.x4, root.x5, root.x6, root.x7, root.x8];
+    private property <[length]> ws: [c0.width, c1.width, c2.width, c3.width, c4.width, c5.width, c6.width, c7.width, c8.width];
+    out property <int> row-count: root.n == 0 ? 0 : root.rows[root.n - 1] + 1;
+    height: 2 * root.pad + root.row-count * root.row-h + max(0, root.row-count - 1) * root.gap;
+    border-radius: 16px;
+    background: Game.t.travle-route-bg;
+    c0 := RouteChip { visible: root.n > 0; compact: root.compact; label: root.label(0); dashed: root.names.length <= 0; arrow: 0 < root.names.length && 0 < root.n - 1; x: root.pad; y: root.pad; }
+    c1 := RouteChip { visible: root.n > 1; compact: root.compact; label: root.label(1); dashed: root.names.length <= 1; arrow: 1 < root.names.length && 1 < root.n - 1; x: root.pad + root.x1; y: root.pad + root.r1 * (root.row-h + root.gap); }
+    c2 := RouteChip { visible: root.n > 2; compact: root.compact; label: root.label(2); dashed: root.names.length <= 2; arrow: 2 < root.names.length && 2 < root.n - 1; x: root.pad + root.x2; y: root.pad + root.r2 * (root.row-h + root.gap); }
+    c3 := RouteChip { visible: root.n > 3; compact: root.compact; label: root.label(3); dashed: root.names.length <= 3; arrow: 3 < root.names.length && 3 < root.n - 1; x: root.pad + root.x3; y: root.pad + root.r3 * (root.row-h + root.gap); }
+    c4 := RouteChip { visible: root.n > 4; compact: root.compact; label: root.label(4); dashed: root.names.length <= 4; arrow: 4 < root.names.length && 4 < root.n - 1; x: root.pad + root.x4; y: root.pad + root.r4 * (root.row-h + root.gap); }
+    c5 := RouteChip { visible: root.n > 5; compact: root.compact; label: root.label(5); dashed: root.names.length <= 5; arrow: 5 < root.names.length && 5 < root.n - 1; x: root.pad + root.x5; y: root.pad + root.r5 * (root.row-h + root.gap); }
+    c6 := RouteChip { visible: root.n > 6; compact: root.compact; label: root.label(6); dashed: root.names.length <= 6; arrow: 6 < root.names.length && 6 < root.n - 1; x: root.pad + root.x6; y: root.pad + root.r6 * (root.row-h + root.gap); }
+    c7 := RouteChip { visible: root.n > 7; compact: root.compact; label: root.label(7); dashed: root.names.length <= 7; arrow: 7 < root.names.length && 7 < root.n - 1; x: root.pad + root.x7; y: root.pad + root.r7 * (root.row-h + root.gap); }
+    c8 := RouteChip { visible: root.n > 8; compact: root.compact; label: root.label(8); dashed: root.names.length <= 8; arrow: 8 < root.names.length && 8 < root.n - 1; x: root.pad + root.x8; y: root.pad + root.r8 * (root.row-h + root.gap); }
+    // the destination's dashed outline: one, over the last chip (only it can be dashed)
+    if root.show-target && root.n > 0: DashedPill {
+        x: root.pad + root.xs[root.n - 1];
+        y: root.pad + root.rows[root.n - 1] * (root.row-h + root.gap);
+        width: root.ws[root.n - 1];
+        height: root.row-h;
+        ink: Game.t.border;
+    }
+    accessible-role: list;
+    accessible-label: "Current Travle route";
+}
+
+component ZoomButton inherits Rectangle {
+    in property <string> label;
+    in property <string> name;
+    callback clicked();
+    background: touch.has-hover ? #f2df9f1c : transparent;
+    Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.label; font-family: FN.sans; font-size: 24px; font-weight: 900; color: touch.has-hover ? #e3d3ad : #a99d85; }
+    touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.name;
+    accessible-action-default => { root.clicked(); }
+}
+
+// `.travle-map-card` with its `<svg class="travle-map">` (xMidYMid meet onto the viewBox).
+component TravleMap inherits Rectangle {
+    in property <TravleData> d;
+    in property <[TravleShape]> shapes;
+    in property <length> svg-h;
+    callback zoom(bool);
+    height: root.svg-h + 2px;
+    border-radius: 18px;
+    border-width: 1px;
+    border-color: Game.t.travle-map-border;
+    background: #2f2d2a;
+    clip: true;
+    view := Rectangle {
+        x: 1px;
+        y: 1px;
+        width: parent.width - 2px;
+        height: root.svg-h;
+        clip: true;
+        // world -> screen: scale s about the viewBox, centred (`preserveAspectRatio` default)
+        private property <float> s: min(self.width / 1px / max(1, root.d.vb-w), self.height / 1px / max(1, root.d.vb-h));
+        private property <length> tx: (self.width - root.d.vb-w * self.s * 1px) / 2 - root.d.vb-x * self.s * 1px;
+        private property <length> ty: (self.height - root.d.vb-h * self.s * 1px) / 2 - root.d.vb-y * self.s * 1px;
+        // the 1000x500 world layer; Slint scales about its centre, so offset by the shrink
+        Rectangle {
+            x: view.tx - 500px * (1 - view.s);
+            y: view.ty - 250px * (1 - view.s);
+            width: 1000px;
+            height: 500px;
+            transform-scale: view.s;
+            // `.travle-map-water`
+            Rectangle { background: #302e2b; }
+            // `.travle-map-graticule` (drawn under the countries, which hide it on land)
+            Path {
+                width: 1000px;
+                height: 500px;
+                viewbox-width: 1000;
+                viewbox-height: 500;
+                commands: "M 0 125 L 1000 125 M 0 250 L 1000 250 M 0 375 L 1000 375 M 250 0 L 250 500 M 500 0 L 500 500 M 750 0 L 750 500";
+                stroke: #e8dcc70f;
+                stroke-width: 1px / view.s;
+            }
+            for c in root.shapes: Path {
+                width: 1000px;
+                height: 500px;
+                viewbox-width: 1000;
+                viewbox-height: 500;
+                commands: c.commands;
+                fill: c.fill;
+                stroke: c.stroke;
+                stroke-width: c.width * 1px / view.s;
+                animate fill, stroke { duration: 120ms; easing: ease; }
+            }
+            if root.d.line != "": Path {
+                width: 1000px;
+                height: 500px;
+                viewbox-width: 1000;
+                viewbox-height: 500;
+                commands: root.d.line;
+                stroke: #d8e98b;
+                stroke-width: 3px / view.s;
+                stroke-line-cap: round;
+                stroke-line-join: round;
+                opacity: 0.88;
+            }
+        }
+        accessible-role: image;
+        accessible-label: root.d.map-label;
+    }
+    // `.travle-map-controls`
+    Rectangle {
+        x: parent.width - 1px - 12px - self.width;
+        y: 1px + 12px;
+        width: 44px;
+        height: 76px;
+        border-radius: 14px;
+        border-width: 2px;
+        border-color: #8d8069;
+        background: #2f2d2ae0;
+        clip: true;
+        ZoomButton { x: 2px; y: 2px; width: 40px; height: 34px; label: "+"; name: "Zoom in"; clicked => { root.zoom(true); } }
+        Rectangle { x: 2px; y: 36px; width: 40px; height: 2px; background: #8d8069; }
+        ZoomButton { x: 2px; y: 38px; width: 40px; height: 36px; label: "−"; name: "Zoom out"; clicked => { root.zoom(false); } }
+        accessible-role: groupbox;
+        accessible-label: "Map zoom controls";
+    }
+    // `.travle-map-watermark`
+    Text {
+        x: 1px + 14px;
+        y: parent.height - 1px - 10px - self.preferred-height;
+        text: "travle";
+        font-family: FN.sans;
+        font-size: 28.8px;
+        font-weight: 900;
+        letter-spacing: -1.728px;
+        color: #e8dcc71f;
+        accessible-role: none;
+    }
+}
+
+// `.travle-result-legend` item
+component LegendDot inherits Rectangle {
+    in property <string> label;
+    in property <color> dot;
+    in property <bool> ring;
+    width: 11px + 7px + t.preferred-width;
+    height: t.preferred-height;
+    Rectangle { y: (parent.height - 11px) / 2; width: 11px; height: 11px; border-radius: 5.5px; background: root.dot; border-width: root.ring ? 1px : 0px; border-color: #e8dcc73d; }
+    t := Text { x: 18px; text: root.label; font-family: FN.sans; font-size: 12.48px; font-weight: 800; color: Game.t.muted; }
+}
+
+// `.travle-result-stats > div`
+component ResultStat inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <bool> compact;
+    private property <length> pad: root.compact ? 9px : 10px;
+    height: 2px + 2 * root.pad + 12px + 4px + 18px;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: Game.t.border;
+    background: Game.t.travle-stat-bg;
+    Text { x: 1px + root.pad; y: 1px + root.pad; width: parent.width - 2px - 2 * root.pad; text: root.label; overflow: elide; font-family: FN.sans; font-size: 11.52px; font-weight: 900; letter-spacing: 0.9216px; color: Game.t.muted; }
+    Text { x: 1px + root.pad; y: 1px + root.pad + 16px; width: parent.width - 2px - 2 * root.pad; text: root.value; overflow: elide; font-family: FN.sans; font-size: 16px; font-weight: 700; color: Game.t.text; }
+}
+
+// `.travle-result-card.won` / `.lost`
+component TravleResult inherits Rectangle {
+    in property <TravleData> d;
+    in property <bool> compact;
+    in property <length> heading-size;
     callback close();
+    private property <length> pad: root.compact ? 12px : 16px;
+    private property <length> gap: root.compact ? 9px : 12px;
+    private property <length> inner-w: root.width - 2px - 2 * root.pad;
+    private property <length> route-pad: root.compact ? 9px : 12px;
+    // `line-height: 1.45` (23.2px a line), which Slint's Text lacks: count the wrapped lines from the
+    // natural height and add the half-leading above the first
+    private property <int> route-lines: max(1, round(route-text.preferred-height / 18.4px));
+    private property <length> route-h: 2 * root.route-pad + 12px + 6px + root.route-lines * 23.2px;
+    private property <length> legend-y: stats.y + stats.height + root.gap;
+    height: 2px + 2 * root.pad + 12px + root.gap - 6px + head.preferred-height + root.gap + root.route-h + root.gap + stats.height + root.gap + 14px + root.gap + 46px;
+    border-radius: 22px;
+    border-width: 1px;
+    border-color: Game.t.border;
+    background: root.d.won ? Game.t.travle-won-bg : Game.t.travle-lost-bg;
+    clip: true;
+    CornerGlow { width: parent.width; height: parent.height; extent: 0.34; tint: root.d.won ? #b6d98338 : #d887a12e; }
+    // `box-shadow: inset 0 1px 0 rgba(255,255,255,.04)`
+    Rectangle { x: 1px; y: 1px; width: parent.width - 2px; height: 1px; background: #ffffff0a; }
+    kicker := Text { x: 1px + root.pad; y: 1px + root.pad; text: root.d.won ? "ARRIVED" : "ROUTE MISSED"; font-family: FN.sans; font-size: 11.52px; font-weight: 900; letter-spacing: 1.8432px; color: Game.t.muted; }
+    head := Text {
+        x: 1px + root.pad;
+        y: kicker.y + 12px + root.gap - 6px;
+        width: root.inner-w;
+        wrap: word-wrap;
+        text: root.d.won ? "Route complete" : "Better route found";
+        font-family: FN.serif;
+        font-size: root.heading-size;
+        font-weight: 700;
+        letter-spacing: Game.wabi ? 0px : -0.04 * root.heading-size;
+        color: Game.t.text;
+    }
+    route := Rectangle {
+        x: 1px + root.pad;
+        y: head.y + head.preferred-height + root.gap;
+        width: root.inner-w;
+        height: root.route-h;
+        border-radius: 14px;
+        background: #00000024;
+        Text { x: root.route-pad; y: root.route-pad; text: root.d.won ? "YOUR ROUTE" : "SHORTEST ROUTE"; font-family: FN.sans; font-size: 11.52px; font-weight: 900; letter-spacing: 0.9216px; color: Game.t.muted; }
+        route-text := Text {
+            x: root.route-pad;
+            y: root.route-pad + 18px + 2.4px;
+            width: parent.width - 2 * root.route-pad;
+            wrap: word-wrap;
+            text: root.d.result-route;
+            font-family: FN.sans;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: Game.wabi ? 0.08px : 0px;
+            color: Game.t.text;
+        }
+    }
+    stats := Rectangle {
+        x: 1px + root.pad;
+        y: route.y + route.height + root.gap;
+        width: root.inner-w;
+        height: s1.height;
+        private property <length> w: (self.width - 16px) / 3;
+        s1 := ResultStat { x: 0px; width: parent.w; compact: root.compact; label: "GUESSES USED"; value: root.d.used; }
+        ResultStat { x: parent.w + 8px; width: parent.w; compact: root.compact; label: "SHORTEST"; value: root.d.shortest-steps; }
+        ResultStat { x: 2 * (parent.w + 8px); width: parent.w; compact: root.compact; label: root.d.third-label; value: root.d.third-value; }
+    }
+    l1 := LegendDot { x: 1px + root.pad; y: root.legend-y; label: "Route"; dot: #b6d983; }
+    l2 := LegendDot { x: l1.x + l1.width + 10px; y: root.legend-y; label: "Useful"; dot: #e6d46f; }
+    LegendDot { x: l2.x + l2.width + 10px; y: root.legend-y; label: "Off route"; dot: #25231f; ring: true; }
+    // `.travle-result-close`
+    Rectangle {
+        x: 1px + root.pad;
+        y: root.legend-y + 14px + root.gap;
+        width: close-label.preferred-width + 38px;
+        height: 46px;
+        border-radius: 16px;
+        border-width: 1px;
+        border-color: Game.t.border;
+        background: close-touch.has-hover ? Game.t.hover-14 : transparent;
+        close-label := Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "Close"; font-family: FN.sans; font-size: 16px; font-weight: 900; color: Game.t.text; }
+        close-touch := TouchArea { mouse-cursor: pointer; clicked => { root.close(); } }
+        accessible-role: button;
+        accessible-label: "Close";
+        accessible-action-default => { root.close(); }
+    }
+    accessible-role: groupbox;
+    accessible-label: root.d.won ? "Route complete: " + root.d.result-route : "Route missed. Shortest route: " + root.d.result-route;
+}
+
+component TravleModal inherits Rectangle {
+    in property <TravleData> d;
+    in property <[TravleShape]> shapes;
+    callback close();
+    callback edited(string);
+    callback toggle();
+    callback pick(string);
+    callback submit();
+    callback cleared();
+    callback zoom(bool);
+    // `@media (max-height: 820px)`
+    private property <bool> compact: root.height <= 820px;
+    private property <length> gap: root.compact ? 9px : 12px;
+    // `clamp(1.45rem, 4vw, 2.25rem)` / `clamp(1.25rem, 3.4vw, 1.85rem)`
+    private property <length> h2-size: root.compact ? clamp(root.width * 0.034, 20px, 29.6px) : clamp(root.width * 0.04, 23.2px, 36px);
+    // `clamp(230px, 34vh, 320px)` / `clamp(190px, 30vh, 260px)`
+    private property <length> svg-h: root.compact ? clamp(root.height * 0.30, 190px, 260px) : clamp(root.height * 0.34, 230px, 320px);
+    private property <length> h3-size: root.compact ? clamp(root.width * 0.03, 19.2px, 26.4px) : clamp(root.width * 0.034, 21.6px, 32px);
+    private property <length> card-h: root.compact ? 58px : 64px;
+    private property <length> label-size: root.compact ? 11.2px : 12.48px;
+    // the head block (`.travle-head`): kicker + 4, heading + 4, then the counts line, whose line box
+    // is the 16px body strut (18.4px), not its own smaller font
+    // Chromium's `line-height: normal` = round(ascent) + round(descent) + round(line gap); Slint
+    // reports ascent/descent, the gap is the face's ratio (Arial/Liberation Sans 0.0327,
+    // Times/Liberation Serif 0.0425; Georgia on Windows has none - checked in the Windows pass)
+    pure function css-line(m: FontMetrics, size: length, gap: float) -> length {
+        return round(m.ascent / 1px) * 1px + round(-m.descent / 1px) * 1px + round(gap * size / 1px) * 1px;
+    }
+    private property <length> kicker-lh: root.css-line(kicker.font-metrics, root.label-size, 0.0327);
+    private property <int> h2-lines: max(1, round(h2.preferred-height / (1.149 * root.h2-size)));
+    private property <length> h2-lh: root.css-line(h2.font-metrics, root.h2-size, 0.0425) * root.h2-lines;
+    // the 16px body strut every block line box keeps
+    private property <length> strut-lh: root.css-line(strut.font-metrics, 16px, 0.0327);
+    private property <length> head-h: root.kicker-lh + 4px + root.h2-lh + 4px + root.strut-lh;
+    private property <length> map-y: root.head-h + root.gap + root.card-h + root.gap;
+    private property <length> route-y: root.map-y + root.svg-h + 2px + root.gap;
+    private property <length> current-y: root.route-y + chips.height + root.gap;
+    private property <length> lower-y: root.current-y + root.card-h + 18px + root.gap;
+    private property <length> status-h: max(24px, status.preferred-height);
+    private property <length> play-h: 46px + root.gap + root.status-h + root.gap + root.card-h;
+    // the open dropdown (`position: absolute` inside the scrolling modal) extends what scrolls
+    private property <length> menu-bottom: root.d.dropdown && !root.d.completed ? root.lower-y + 46px + 6px + min(310px, max(1, root.d.options.length) * 56px + 16px) : 0px;
+    private property <length> content-h: max(root.menu-bottom, root.lower-y + (root.d.completed ? result.height : root.play-h));
     Backdrop { close => { root.close(); } }
     Panel {
         panel-w: 880px;
-        pad: 18px;
+        pad: root.compact ? 14px : 18px;
         radius: 22px;
         fill: Game.t.travle-bg;
         glow: Game.t.accent-glow-24;
         has-glow: true;
-        content-h: 330px;
-        Rectangle {
-            Kicker { x: 0px; y: 0px; text: "DAILY TRAVLE"; }
-            Heading { x: 0px; y: 18px; text: "Build the border route"; font-size: 36px; letter-spacing: -1.44px; }
-            Text { x: 0px; y: 64px; text: root.header; font-family: FN.sans; font-size: 12.48px; color: Game.t.muted; }
+        content-h: root.content-h;
+        body := Rectangle {
+            // `.travle-head`
+            kicker := Text { x: 0px; y: (root.kicker-lh - self.preferred-height) / 2; text: "DAILY TRAVLE"; font-family: FN.sans; font-size: root.label-size; font-weight: 900; letter-spacing: 0.16 * root.label-size; color: Game.t.muted; }
+            h2 := Text {
+                x: 0px;
+                y: root.kicker-lh + 4px + (root.h2-lh - self.preferred-height) / 2;
+                width: parent.width - 40px;
+                wrap: word-wrap;
+                text: "Build the border route";
+                font-family: FN.serif;
+                font-size: root.h2-size;
+                font-weight: 700;
+                letter-spacing: Game.wabi ? 0px : -0.04 * root.h2-size;
+                color: Game.t.text;
+            }
+            strut := Text { visible: false; text: "x"; font-family: FN.sans; font-size: 16px; }
+            Text { x: 0px; y: root.kicker-lh + 4px + root.h2-lh + 4px + (root.strut-lh - self.preferred-height) / 2 + 1px; text: root.d.header; font-family: FN.sans; font-size: root.label-size; letter-spacing: Game.wabi ? 0.08px : 0px; color: Game.t.muted; }
             CloseButton { x: parent.width - self.width; y: 0px; clicked => { root.close(); } }
-            // the route map and its gameplay are the Stage 21 map migration: no fake game here
-            Rectangle {
-                y: 96px;
-                height: 230px;
-                border-radius: 18px;
-                border-width: 1px;
-                border-color: Game.t.border;
-                background: #2f2d2a;
-                Text {
-                    width: parent.width;
-                    height: parent.height;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    wrap: word-wrap;
-                    text: "The Travle route map is not part of this build yet.";
-                    font-family: FN.sans;
-                    font-size: 16px;
-                    font-weight: 800;
-                    color: #a99d85;
-                }
-                Text { x: 14px; y: parent.height - 10px - self.preferred-height; text: "travle"; font-family: FN.sans; font-size: 28.8px; font-weight: 900; letter-spacing: -1.7px; color: #e8dcc71f; }
+
+            // `.travle-target-card`
+            for card[i] in [{ label: "START", value: root.d.start }, { label: "DESTINATION", value: root.d.target }]: TravleCard {
+                compact: root.compact;
+                x: i * (parent.width + 10px) / 2;
+                y: root.head-h + root.gap;
+                width: (parent.width - 10px) / 2;
+                height: root.card-h;
+                CardLabel { x: 1px + parent.pad-x; y: 1px + parent.pad-y; text: card.label; }
+                CardValue { x: 1px + parent.pad-x; y: 1px + parent.pad-y + 18px; width: parent.width - 2px - 2 * parent.pad-x; text: card.value; }
+                accessible-role: text;
+                accessible-label: card.label + ": " + card.value;
+            }
+
+            TravleMap {
+                y: root.map-y;
+                width: parent.width;
+                svg-h: root.svg-h;
+                d: root.d;
+                shapes: root.shapes;
+                zoom(i) => { root.zoom(i); }
+            }
+
+            chips := RouteChips {
+                y: root.route-y;
+                width: parent.width;
+                compact: root.compact;
+                names: root.d.route;
+                target: root.d.target;
+                show-target: root.d.show-target;
+            }
+
+            // `.travle-current-card`
+            TravleCard {
+                compact: root.compact;
+                y: root.current-y;
+                height: root.card-h + 18px;
+                CardLabel { x: 1px + parent.pad-x; y: 1px + parent.pad-y; text: "LATEST GUESS"; }
+                CardValue { x: 1px + parent.pad-x; y: 1px + parent.pad-y + 18px; width: parent.width - 2px - 2 * parent.pad-x; text: root.d.current; }
+                CardLabel { x: 1px + parent.pad-x; y: 1px + parent.pad-y + 42px; text: root.d.guessed; }
+                accessible-role: text;
+                accessible-label: "Latest guess: " + root.d.current + ", " + root.d.guessed;
+            }
+
+            result := TravleResult {
+                visible: root.d.completed;
+                y: root.lower-y;
+                width: parent.width;
+                d: root.d;
+                compact: root.compact;
+                heading-size: root.h3-size;
+                close => { root.close(); }
+            }
+
+            // status and the shortest card before the combo, so its dropdown draws over them
+            status := Text {
+                visible: !root.d.completed;
+                y: root.lower-y + 46px + root.gap + (root.strut-lh - self.preferred-height) / 2;
+                width: parent.width;
+                height: root.status-h;
+                // the line sits at the top of the 24px min-height box
+                vertical-alignment: top;
+                wrap: word-wrap;
+                text: root.d.status;
+                font-family: FN.sans;
+                font-size: 16px;
+                font-weight: 800;
+                letter-spacing: Game.wabi ? 0.08px : 0px;
+                color: Game.t.muted;
+                accessible-role: text;
+            }
+            if !root.d.completed: TravleCard {
+                compact: root.compact;
+                y: root.lower-y + 46px + root.gap + root.status-h + root.gap;
+                height: root.card-h;
+                CardLabel { x: 1px + parent.pad-x; y: 1px + parent.pad-y; text: "SHORTEST ROUTE"; }
+                CardValue { x: 1px + parent.pad-x; y: 1px + parent.pad-y + 18px; text: root.d.shortest; }
+                accessible-role: text;
+                accessible-label: "Shortest route: " + root.d.shortest;
+            }
+            if !root.d.completed: CountryCombo {
+                x: 0px;
+                y: root.lower-y;
+                width: parent.width - step.width - 8px;
+                field-h: 46px;
+                field-bg: Game.wabi ? #ffffff : Game.t.surface;
+                field-border: Game.wabi ? 2px : 1px;
+                field-border-color: Game.wabi ? Game.t.input-border : Game.t.border;
+                field-radius: Game.wabi ? 0px : 2px;
+                // `.travle-combo input { color: #1f2933 }` in every style (dark on FN dark, as shipped)
+                ink: #1f2933;
+                hint-ink: #757575;
+                stacked: true;
+                text-dy: -1px;
+                empty-text: "No connected countries found.";
+                draft: root.d.draft;
+                dropdown: root.d.dropdown;
+                options: root.d.options;
+                enabled: true;
+                placeholder: "Enter a country";
+                flags: false;
+                menu-h: 310px;
+                edited(t) => { root.edited(t); }
+                toggle => { root.toggle(); }
+                pick(n) => { root.pick(n); }
+                submit => { root.submit(); }
+                cleared => { root.cleared(); }
+            }
+            step := SubmitButton {
+                visible: !root.d.completed;
+                x: parent.width - self.width;
+                y: root.lower-y;
+                height: 46px;
+                width: self.label-w + 36px;
+                text: "STEP";
+                fill: @linear-gradient(135deg, #90d7a5 0%, #d5f5df 100%);
+                ink: #12331e;
+                radius: 16px;
+                clicked => { root.submit(); }
             }
         }
     }
@@ -940,6 +1534,12 @@ export component BreakGames inherits Rectangle {
     callback flaggle-submit();
     callback durak-card(int);
     callback durak-act(string);
+    callback travle-edited(string);
+    callback travle-toggle();
+    callback travle-pick(string);
+    callback travle-submit();
+    callback travle-clear();
+    callback travle-zoom(bool);
     if root.d.open == 0: DurakModal { width: parent.width; height: parent.height; d: root.d.durak; close => { root.close(); } card(i) => { root.durak-card(i); } act(a) => { root.durak-act(a); } }
     if root.d.open == 1: wordle := WordleModal {
         width: parent.width;
@@ -950,7 +1550,19 @@ export component BreakGames inherits Rectangle {
         hard => { root.wordle-hard(); }
         init => { self.focus(); }
     }
-    if root.d.open == 2: TravleModal { width: parent.width; height: parent.height; header: root.d.travle-header; close => { root.close(); } }
+    if root.d.open == 2: TravleModal {
+        width: parent.width;
+        height: parent.height;
+        d: root.d.travle;
+        shapes: root.d.travle-shapes;
+        close => { root.close(); }
+        edited(t) => { root.travle-edited(t); }
+        toggle => { root.travle-toggle(); }
+        pick(n) => { root.travle-pick(n); }
+        submit => { root.travle-submit(); }
+        cleared => { root.travle-clear(); }
+        zoom(i) => { root.travle-zoom(i); }
+    }
     if root.d.open == 3: FlaggleModal {
         width: parent.width;
         height: parent.height;
