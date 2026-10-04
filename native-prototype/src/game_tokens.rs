@@ -106,6 +106,15 @@ pub struct Base {
     pub accent: Color,
     pub text: Color,
     pub muted: Color,
+    /// Stage 22a (Daily Skribbl): `--accent-strong`, `--accent-soft`, `--accent-line`, `--danger`.
+    pub accent_strong: Color,
+    pub accent_soft: Color,
+    pub accent_line: Color,
+    pub danger: Color,
+}
+
+fn hexa(v: u32, a: u8) -> Color {
+    Color::from_argb_u8(a, (v >> 16) as u8, (v >> 8) as u8, v as u8)
 }
 
 /// Wabi-Sabi's own modal variables (production, measured).
@@ -119,6 +128,10 @@ pub fn wabi_base(dark: bool) -> Base {
             accent: hex(0x7fa077),
             text: hex(0xece7d8),
             muted: hex(0xa39d89),
+            accent_strong: hex(0x97b78f),
+            accent_soft: hexa(0x7fa077, 0x1f),
+            accent_line: hexa(0x7fa077, 0x57),
+            danger: hex(0xd97a5e),
         }
     } else {
         Base {
@@ -129,6 +142,10 @@ pub fn wabi_base(dark: bool) -> Base {
             accent: hex(0x4f6b4a),
             text: hex(0x1c1d19),
             muted: hex(0x6f7268),
+            accent_strong: hex(0x374d33),
+            accent_soft: hexa(0x4f6b4a, 0x1a),
+            accent_line: hexa(0x4f6b4a, 0x52),
+            danger: hex(0xb0472e),
         }
     }
 }
@@ -168,6 +185,21 @@ pub fn tokens(b: Base) -> GameTokens {
         travle_won_bg: mix_oklch(b.surface, 0.90, Some(hex(0x1f2a21))),
         travle_lost_bg: mix_oklch(b.surface, 0.90, Some(hex(0x2a1f24))),
         travle_stat_bg: mix_oklch(b.surface, 0.82, None),
+        accent_strong: b.accent_strong,
+        accent_soft: b.accent_soft,
+        accent_line: b.accent_line,
+        danger: b.danger,
+        danger_12: mix_oklch(b.danger, 0.12, None),
+        danger_45: mix_oklch(b.danger, 0.45, None),
+        accent_8: mix_oklch(b.accent, 0.08, None),
+        surface_85: mix_oklch(b.surface, 0.85, None),
+        surface_92: mix_oklch(b.surface, 0.92, None),
+        surface_96: mix_oklch(b.surface, 0.96, None),
+        amber_18: mix_oklch(hex(0xf9a825), 0.18, None),
+        green_18: mix_oklch(hex(0x43a047), 0.18, None),
+        red_18: mix_oklch(hex(0xe53935), 0.18, None),
+        black_72: mix_oklch(black, 0.72, None),
+        white_18: mix_oklch(hex(0xffffff), 0.18, None),
     }
 }
 
@@ -190,8 +222,15 @@ mod tests {
             accent: hex(0xeee6d6),
             text: hex(0xeee6d6),
             muted: hex(0xaaa08d),
+            accent_strong: hex(0xfff7e8),
+            accent_soft: hexa(0xeee6d6, 0x14),
+            accent_line: hexa(0xeee6d6, 0x52),
+            danger: hex(0xc47a4d),
         };
         let t = tokens(fn_dark);
+        // Skribbl's theme card: production computes oklch(0.926912 0.0230387 84.4921 / 0.08)
+        assert_eq!(t.accent_8.alpha(), 20);
+        assert_eq!(rgb(t.accent_8), rgb(hex(0xeee6d6)));
         let want = from_oklch(0.293_133, 0.008_853, 84.492, 1.0);
         let (a, b) = (rgb(t.wordle_bg), rgb(want));
         assert!(

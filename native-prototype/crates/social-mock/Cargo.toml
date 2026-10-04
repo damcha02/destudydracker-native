@@ -1,0 +1,11 @@
+[package]
+name = "social-mock"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Stage 22a: a deterministic, synthetic, loopback-only stand-in for the Social Worker (tests and local captures only; never linked into the app)."
+
+[dependencies]
+study-tracker-core = { path = "../study-tracker-core" }
+serde_json = "1"
+png = "0.18"

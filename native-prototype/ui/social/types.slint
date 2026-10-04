@@ -1,0 +1,110 @@
+// Stage 22a: the Social / Circle view data. Rust (`src/app_social.rs`) prepares every string,
+// number and picture; nothing here decides anything.
+
+// `ArenaAvatar`: a letter (6 styles), an icon or a photo.
+export struct SAvatar {
+    text: string,
+    // 0 classic, 1 serif, 2 cursive, 3 graffiti, 4 pixel, 5 mono, 6 icon, 7 photo
+    kind: int,
+    hue: int,
+    photo: image,
+    has-photo: bool,
+    is-self: bool,
+    // Wabi-Sabi's round avatar: `linear-gradient(135deg, oklch(.67 .14 h), oklch(.52 .16 h+34))`
+    grad-a: color,
+    grad-b: color,
+}
+
+export struct SFriendRow {
+    id: string,
+    name: string,
+    code: string,
+    // "CODE · seen Oct 4, 11:40 AM"
+    detail: string,
+    avatar: SAvatar,
+    // seen within 45 minutes (Wabi: "sitting")
+    live: bool,
+}
+
+export struct SRequestRow {
+    id: string,
+    name: string,
+    code: string,
+    avatar: SAvatar,
+}
+
+export struct SBoardRow {
+    id: string,
+    rank: int,
+    name: string,
+    code: string,
+    hours: string,
+    sessions: string,
+    // the Field Notebook bar, 0..1
+    bar: float,
+    is-self: bool,
+    avatar: SAvatar,
+}
+
+export struct SStat {
+    value: string,
+    label: string,
+    icon: string,
+    // 0 plain, 1 daily (gold), 2 weekly (blue), 3 overall (green)
+    tone: int,
+}
+
+export struct SocialView {
+    // 0 Social unavailable in this configuration, 1 no account, 2 creating, 3 restoring, 4 active
+    state: int,
+    // 0 feed, 1 leaderboard, 2 friends, 3 squad, 4 profile
+    subtab: int,
+    incoming-count: int,
+    busy: bool,
+    // Friends
+    invite-link: string,
+    incoming: [SRequestRow],
+    outgoing: [SRequestRow],
+    friends: [SFriendRow],
+    // Leaderboard
+    scope: int,
+    period: int,
+    arena-title: string,
+    arena-subtitle: string,
+    last-synced: string,
+    col-label: string,
+    rows: [SBoardRow],
+    private-notice: bool,
+    // Profile
+    name: string,
+    code: string,
+    avatar: SAvatar,
+    name-editing: bool,
+    // 0 synced, 1 sync issue, 2 local only
+    sync-pill: int,
+    sync-error: string,
+    stats: [SStat],
+    private: bool,
+    auto-post: bool,
+    show-hours: bool,
+    // dialogs
+    name-prompt: bool,
+    confirm-new: bool,
+    viewing: bool,
+    v-id: string,
+    v-name: string,
+    v-code: string,
+    v-seen: string,
+    v-avatar: SAvatar,
+    v-badge: string,
+    v-can-request: bool,
+    // 0 loading, 1 stats, 2 hours hidden, 3 could not load
+    v-state: int,
+    v-stats: [SStat],
+    // state 3: why restoring the profile failed ("" while it is loading)
+    restore-error: string,
+    // Wabi-Sabi Circle
+    wabi-competitive: bool,
+    // friends seen within 48 hours, most recent first (`live`: "sitting")
+    attendance: [SFriendRow],
+}

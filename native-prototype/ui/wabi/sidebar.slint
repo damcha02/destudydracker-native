@@ -74,6 +74,18 @@ export component WabiSidebar inherits Rectangle {
     in property <int> rest-room;
     callback open-rest();
     callback pick-room(int);
+    // Stage 22a: the Circle item and its submenu (Feed / Standings when competitive / Friends /
+    // Squad / Profile + the competitive link); `circle-sub` is the Social subtab (0 feed,
+    // 1 leaderboard, 2 friends, 3 squad, 4 profile)
+    in property <bool> on-circle;
+    in property <bool> circle-menu-open;
+    in property <int> circle-sub;
+    in property <bool> circle-competitive;
+    in property <bool> circle-unread;
+    in property <bool> circle-requests;
+    callback open-circle();
+    callback pick-circle(int);
+    callback toggle-competitive();
     callback toggle-semester();
     callback toggle-course(int);
     callback open-dashboard();
@@ -264,7 +276,65 @@ export component WabiSidebar inherits Rectangle {
                 accessible-label: room;
             }
         }
-        NavItem { label: "Circle"; kanji: "仲間"; enabled: false; }
+        circle-item := NavItem {
+            label: "Circle";
+            kanji: "仲間";
+            active: root.on-circle && !root.quiet;
+            clicked => { root.open-circle(); }
+            // `.nav-badge` after the label (and the kanji when active)
+            if root.circle-unread: Rectangle {
+                x: root.on-circle && !root.quiet ? 104px : 70px;
+                y: (parent.height - 8px) / 2;
+                width: 8px;
+                height: 8px;
+                border-radius: 4px;
+                background: WS.sage;
+            }
+        }
+        if root.circle-menu-open && !root.quiet: VerticalLayout {
+            padding-left: 34px;
+            padding-right: 22px;
+            padding-top: 2px;
+            padding-bottom: 10px;
+            for sub in root.circle-competitive ? [0, 1, 2, 3, 4] : [0, 2, 3, 4]: sub-item := Rectangle {
+                private property <bool> selected: root.on-circle && root.circle-sub == sub;
+                private property <string> label: sub == 0 ? "Feed" : sub == 1 ? "Standings" : sub == 2 ? "Friends" : sub == 3 ? "Squad" : "Profile";
+                height: 26px;
+                if sub-item.selected: Text { x: -12px; y: 5px; height: 16px; vertical-alignment: center; text: "•"; font-family: WS.serif; font-size: 13px; color: WS.sage; }
+                sub-text := Text {
+                    x: sub-item.selected ? -1.4px : 0px;
+                    y: 5px;
+                    height: 16px;
+                    vertical-alignment: center;
+                    text: sub-item.label;
+                    font-family: WS.serif;
+                    font-size: 13px;
+                    font-weight: sub-item.selected ? 600 : 400;
+                    letter-spacing: 0.08px;
+                    color: sub-item.selected || sub-touch.has-hover ? WS.ink : WS.muted;
+                }
+                if sub == 2 && root.circle-requests: Rectangle {
+                    x: sub-text.x + sub-text.preferred-width + 4px;
+                    y: 6px;
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: WS.sage;
+                }
+                sub-touch := TouchArea { mouse-cursor: pointer; clicked => { root.pick-circle(sub); } }
+                accessible-role: tab;
+                accessible-label: sub-item.label;
+            }
+            // `.wabi-plan-link`
+            Rectangle {
+                height: 22px;
+                link-text := Text { x: 0px; y: 5px; height: 13px; text: root.circle-competitive ? "Competitive on · turn off" : "Turn on competitive"; font-family: WS.serif; font-size: 11px; letter-spacing: 0.44px; color: link-touch.has-hover ? WS.ink : WS.faint; }
+                Rectangle { x: 0px; y: 18px; width: link-text.preferred-width; height: 1px; background: WS.faint; }
+                link-touch := TouchArea { mouse-cursor: pointer; clicked => { root.toggle-competitive(); } }
+                accessible-role: button;
+                accessible-label: link-text.text;
+            }
+        }
     }
 
     // --- foot -------------------------------------------------------------------------------------

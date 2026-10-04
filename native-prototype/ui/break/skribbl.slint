@@ -1,0 +1,704 @@
+// Stage 22a: Daily Skribbl - production's `components/SkribblRoom.tsx` modal (`.skribbl-*` in
+// App.css), drawn from Rust-prepared data (`src/app_skribbl.rs`). Geometry and colours follow the
+// production boxes measured at 1520x980 in both styles; colours come from `Game` (the style's CSS
+// variables and their oklch mixes, `src/game_tokens.rs`).
+//
+// Nothing here ticks: the countdown text is pushed by Rust once per second while drawing (and
+// only while the window is visible); the canvas image is pushed only when the drawing changed.
+// The only animation is the gallery refresh spinner, which exists only while a gallery request
+// is in flight (production's `skribbl-spin`).
+import { FN } from "../fn/palette.slint";
+import { Game, Emoji } from "types.slint";
+
+export struct SkribblRow {
+    id: string,
+    name: string,
+    alt: string,
+    score: string,
+    my-vote: int,
+    is-self: bool,
+    image: image,
+    // 0 loading, 1 ready, 2 failed
+    state: int,
+}
+
+export struct SkribblData {
+    configured: bool,
+    // 0 loading, 1 intro, 2 drawing, 3 submitting, 4 submitted
+    phase: int,
+    theme: string,
+    submitted: bool,
+    error: string,
+    // the own drawing's thumbnail: -1 none, 0 loading, 1 ready, 2 failed
+    own-state: int,
+    own: image,
+    tool: int,
+    color: color,
+    // palette index of the current colour, -1 for a custom colour
+    color-index: int,
+    brush: int,
+    submitting: bool,
+    undo-depth: int,
+    gallery: [SkribblRow],
+    gallery-count: string,
+    gallery-loading: bool,
+    has-more: bool,
+    has-winner: bool,
+    winner-name: string,
+    winner-score: string,
+    lightbox: bool,
+    lightbox-ready: bool,
+    lightbox-image: image,
+    lightbox-alt: string,
+}
+
+global SkribblPalette {
+    out property <[color]> colors: [
+        #000000, #37474f, #795548, #6d4c41, #d84315, #e53935, #d81b60, #8e24aa, #5e35b1,
+        #3949ab, #1e88e5, #039be5, #00acc1, #00897b, #43a047, #7cb342, #c0ca33, #fdd835,
+        #ffb300, #fb8c00, #ffffff,
+    ];
+    out property <[int]> sizes: [3, 6, 10, 16, 26];
+}
+
+component STxt inherits Text {
+    font-family: FN.sans;
+    color: Game.t.text;
+    letter-spacing: Game.wabi ? 0.08px : 0px;
+}
+
+// `.skribbl-start-btn` / `.skribbl-submit-btn`: accent fill, white bold text, radius 12, 10x22.
+component AccentButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: label.preferred-width + 44px;
+    height: 38px;
+    border-radius: 12px;
+    background: touch.has-hover && root.enabled ? Game.t.accent-strong : Game.t.accent;
+    opacity: root.enabled ? 1 : 0.6;
+    label := Text { text: root.text; font-family: FN.sans; font-size: 16px; font-weight: 700; color: #ffffff; vertical-alignment: center; horizontal-alignment: center; width: parent.width; height: parent.height; }
+    touch := TouchArea { enabled: root.enabled; mouse-cursor: root.enabled ? pointer : default; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+}
+
+// `.skribbl-tool-btn`
+component ToolButton inherits Rectangle {
+    in property <string> icon;
+    in property <string> text;
+    in property <bool> active;
+    in property <bool> enabled: true;
+    callback clicked();
+    private property <length> icon-w: root.icon == "" ? 0px : icon-t.preferred-width + 4px;
+    width: root.icon-w + label.preferred-width + 22px;
+    height: 29px;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: root.active || (touch.has-hover && root.enabled) ? Game.t.accent-line : Game.t.border;
+    background: root.active ? Game.t.accent-soft : transparent;
+    opacity: root.enabled ? 1 : 0.5;
+    icon-t := Text { x: 11px; height: parent.height; vertical-alignment: center; text: root.icon; font-family: Emoji.family; font-size: 13.44px; visible: root.icon != ""; }
+    label := Text { x: 11px + root.icon-w; height: parent.height; vertical-alignment: center; text: root.text; font-family: FN.sans; font-size: 13.44px; color: root.active ? Game.t.accent-strong : Game.t.text; }
+    touch := TouchArea { enabled: root.enabled; mouse-cursor: root.enabled ? pointer : default; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-checked: root.active;
+    accessible-enabled: root.enabled;
+}
+
+// `.skribbl-size-btn`: a 30px circle with a dot of the brush size
+component SizeButton inherits Rectangle {
+    in property <int> size;
+    in property <bool> active;
+    callback clicked();
+    width: 30px;
+    height: 30px;
+    // the 2px `box-shadow: 0 0 0 2px var(--accent-soft)` ring of the active size
+    if root.active: Rectangle { x: -2px; y: -2px; width: 34px; height: 34px; border-radius: 17px; background: Game.t.accent-soft; }
+    Rectangle {
+        border-radius: 15px;
+        border-width: 1px;
+        border-color: root.active ? Game.t.accent : Game.t.border;
+        background: Game.t.surface;
+        Rectangle { width: root.size * 1px; height: root.size * 1px; border-radius: root.size * 0.5px; background: Game.t.text; }
+    }
+    TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: "Brush size " + root.size;
+    accessible-checked: root.active;
+}
+
+// `.skribbl-color-btn`: 26px, radius 8, 2px border in the surface colour, an outline when active
+component Swatch inherits Rectangle {
+    in property <color> swatch;
+    in property <bool> active;
+    in property <string> label;
+    callback clicked();
+    width: 26px;
+    height: 26px;
+    if root.active: Rectangle { x: -3px; y: -3px; width: 32px; height: 32px; border-radius: 11px; border-width: 2px; border-color: Game.t.accent; }
+    Rectangle { border-radius: 8px; border-width: 2px; border-color: Game.t.surface; background: root.swatch; }
+    TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-checked: root.active;
+}
+
+// `.skribbl-vote-btn`
+component VoteButton inherits Rectangle {
+    in property <string> glyph;
+    in property <bool> active;
+    in property <bool> up;
+    in property <bool> enabled: true;
+    in property <string> label;
+    callback clicked();
+    width: 35px;
+    height: 23.2px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: root.active ? (root.up ? #43a047 : #e53935) : (touch.has-hover && root.enabled ? Game.t.accent-line : Game.t.border);
+    background: root.active ? (root.up ? Game.t.green-18 : Game.t.red-18) : transparent;
+    opacity: root.enabled ? 1 : 0.4;
+    Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.glyph; font-family: Emoji.family; font-size: 15.2px; }
+    touch := TouchArea { enabled: root.enabled; mouse-cursor: root.enabled ? pointer : default; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-checked: root.active;
+    accessible-enabled: root.enabled;
+}
+
+// A drawing that is still loading or could not be loaded (production: the broken-image box)
+component Picture inherits Rectangle {
+    in property <image> source;
+    in property <int> state;
+    in property <string> alt;
+    background: #ffffff;
+    clip: true;
+    if root.state == 1: Image { width: parent.width; height: parent.height; source: root.source; image-fit: cover; }
+    if root.state == 2: Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; wrap: word-wrap; text: root.alt; font-family: FN.sans; font-size: 12px; color: #757575; }
+    accessible-role: image;
+    accessible-label: root.alt;
+}
+
+// `.skribbl-drawing-card`
+component DrawingCard inherits Rectangle {
+    in property <SkribblRow> entry;
+    callback vote(int);
+    callback expand();
+    private property <length> img-w: root.width - 18px;
+    private property <length> img-h: root.img-w * 2 / 3;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: Game.t.border;
+    background: Game.t.surface-96;
+    // the thumbnail button (production's inline image leaves 4.4px above and 12.9px below it)
+    Picture {
+        x: 9px;
+        y: 13.4px;
+        width: root.img-w;
+        height: root.img-h;
+        border-radius: 10px;
+        source: root.entry.image;
+        state: root.entry.state;
+        alt: root.entry.alt;
+        TouchArea { mouse-cursor: pointer; clicked => { root.expand(); } }
+    }
+    Rectangle {
+        x: 9px;
+        y: 9px + root.img-h + 17.3px + 6px;
+        width: root.img-w;
+        height: 23.2px;
+        // clipped: a right-to-left name must not spill out of the card when elided
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width - 106px;
+            height: parent.height;
+            clip: true;
+            STxt {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: left;
+                vertical-alignment: center;
+                text: root.entry.is-self ? "You" : root.entry.name;
+                font-size: 13.44px;
+                font-weight: 700;
+                overflow: elide;
+            }
+        }
+        HorizontalLayout {
+            x: parent.width - self.preferred-width;
+            y: 0px;
+            spacing: 4px;
+            VoteButton { glyph: "👍"; up: true; active: root.entry.my-vote == 1; enabled: !root.entry.is-self; label: "Upvote"; clicked => { root.vote(1); } }
+            STxt { width: 24px; height: 23.2px; horizontal-alignment: center; vertical-alignment: center; text: root.entry.score; font-size: 13.76px; font-weight: 800; }
+            VoteButton { glyph: "👎"; up: false; active: root.entry.my-vote == -1; enabled: !root.entry.is-self; label: "Downvote"; clicked => { root.vote(-1); } }
+        }
+    }
+    accessible-role: groupbox;
+    accessible-label: "Drawing by " + (root.entry.is-self ? "you" : root.entry.name) + ", score " + root.entry.score;
+}
+
+// `.skribbl-empty` / `.skribbl-gallery-empty`
+component EmptyNote inherits Rectangle {
+    in property <string> text;
+    in property <bool> dashed;
+    in property <length> pad: 28px;
+    in property <length> size: 16px;
+    height: t.preferred-height + 2 * root.pad;
+    border-radius: root.dashed ? 14px : 0px;
+    border-width: root.dashed ? 1px : 0px;
+    border-color: Game.t.border;
+    t := STxt { x: 16px; width: parent.width - 32px; horizontal-alignment: center; vertical-alignment: center; height: parent.height; wrap: word-wrap; text: root.text; font-size: root.size; color: Game.t.muted; }
+}
+
+// `.skribbl-intro-note`: centred text, at most 42ch (373.7px) wide
+component IntroNote inherits Rectangle {
+    in property <string> text;
+    in property <bool> centered: true;
+    private property <length> w: min(373.7px, root.width);
+    height: n.preferred-height;
+    n := STxt {
+        x: root.centered ? (parent.width - root.w) / 2 : 0px;
+        width: root.w;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+        text: root.text;
+        font-size: 16px;
+        color: Game.t.muted;
+    }
+}
+
+component SectionHead inherits Rectangle {
+    in property <string> title;
+    in property <string> count;
+    in property <bool> refresh;
+    in property <bool> loading;
+    callback refreshed();
+    height: 24.4px;
+    h := Text { x: 0px; y: 3px; text: root.title; font-family: FN.serif; font-size: 18.4px; font-weight: 700; color: Game.t.text; }
+    if root.count != "": STxt { x: h.preferred-width + 10px; y: 6px; text: root.count; font-size: 12.48px; color: Game.t.muted; }
+    if root.refresh: Rectangle {
+        x: parent.width - 28.6px;
+        width: 28.6px;
+        height: 24.4px;
+        border-radius: Game.wabi ? 0px : 2px;
+        border-width: 1px;
+        border-color: Game.t.border;
+        background: touch.has-hover && !root.loading ? Game.t.surface : Game.t.surface-2;
+        opacity: root.loading ? 0.5 : 1;
+        spin := Text {
+            width: parent.width;
+            height: parent.height;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            text: "↻";
+            font-family: FN.sans;
+            font-size: 14.4px;
+            color: Game.t.muted;
+            // production's 0.8s linear spin, only while the gallery is loading
+            transform-rotation: root.loading ? 360deg * mod(animation-tick() / 1ms, 800) / 800 : 0deg;
+        }
+        touch := TouchArea { enabled: !root.loading; mouse-cursor: root.loading ? not-allowed : pointer; clicked => { root.refreshed(); } }
+        accessible-role: button;
+        accessible-label: "Refresh gallery";
+        accessible-enabled: !root.loading;
+    }
+}
+
+// The custom colour (production's `<input type="color">`): the browser opens the platform's
+// colour dialog; native shows a small hex field (documented difference).
+component CustomColor inherits Rectangle {
+    in property <color> current;
+    in property <bool> active;
+    callback picked(string);
+    in-out property <bool> open;
+    width: 26px;
+    height: 26px;
+    if root.active: Rectangle { x: -3px; y: -3px; width: 32px; height: 32px; border-radius: 11px; border-width: 2px; border-color: Game.t.accent; }
+    Rectangle {
+        border-radius: 8px;
+        border-width: 2px;
+        border-color: Game.t.border;
+        clip: true;
+        Rectangle { x: 2px; y: 2px; width: parent.width - 4px; height: parent.height - 4px; background: root.current; }
+    }
+    TouchArea { mouse-cursor: pointer; clicked => { root.open = !root.open; } }
+    accessible-role: button;
+    accessible-label: "Custom color";
+}
+
+export component SkribblModal inherits Rectangle {
+    in property <SkribblData> d;
+    in property <image> canvas;
+    in property <string> timer: "3:00";
+    in property <bool> timer-low;
+    callback close();
+    callback retry();
+    callback start-drawing();
+    callback tool(int);
+    callback size(int);
+    callback pick-color(int);
+    callback custom-color(string);
+    callback undo();
+    callback clear();
+    // kind: 0 down, 1 move, 2 up; x/y in the displayed canvas; w/h its displayed size
+    callback canvas-pointer(int, length, length, length, length);
+    callback submit();
+    callback refresh-gallery();
+    callback load-more();
+    callback vote(string, int);
+    callback expand(string);
+    callback collapse();
+
+    private property <length> panel-w: min(960px, root.width - 32px);
+    private property <length> inner-w: root.panel-w - 36px - 2px;
+    private property <length> max-h: root.height * 0.94;
+    private property <bool> custom-open: false;
+    // `repeat(auto-fill, minmax(150px, 1fr))` with a 10px gap
+    private property <int> cols: max(1, floor((root.inner-w + 10px) / 160px));
+    private property <length> card-w: (root.inner-w - (root.cols - 1) * 10px) / root.cols;
+    private property <length> card-h: 1px + 8px + (root.card-w - 18px) * 2 / 3 + 17.3px + 6px + 23.2px + 8px + 1px + 4.3px;
+    private property <int> rows: ceil(root.d.gallery.length / root.cols);
+
+    forward-focus: keys;
+    keys := FocusScope {
+        key-pressed(event) => {
+            // production binds Escape only to the lightbox
+            if event.text == Key.Escape && root.d.lightbox { root.collapse(); return accept; }
+            reject
+        }
+    }
+
+    // `.skribbl-overlay`: rgba(0,0,0,.58); a click outside the modal closes it
+    Rectangle {
+        background: #00000094;
+        TouchArea { clicked => { root.close(); } }
+    }
+
+    panel := Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.panel-w;
+        height: min(root.max-h, body.preferred-height + 2px);
+        border-radius: 22px;
+        border-width: 1px;
+        border-color: Game.t.border;
+        background: Game.t.surface;
+        drop-shadow-offset-y: 12px;
+        drop-shadow-blur: 48px;
+        drop-shadow-color: #0000006b;
+        clip: true;
+        TouchArea { }
+        // `radial-gradient(circle at 12% 0%, accent 20%, transparent 36%)`
+        Rectangle {
+            private property <length> r: 0.36 * sqrt((0.88 * parent.width / 1px) * (0.88 * parent.width / 1px) + (parent.height / 1px) * (parent.height / 1px)) * 1px;
+            x: 0.12 * parent.width - self.r;
+            y: -self.r;
+            width: 2 * self.r;
+            height: 2 * self.r;
+            background: @radial-gradient(circle, Game.t.accent-glow-20 0%, transparent 70.7107%);
+        }
+        Flickable {
+            x: 1px;
+            y: 1px;
+            width: parent.width - 2px;
+            height: parent.height - 2px;
+            viewport-height: body.preferred-height;
+            // wheel-only, like the browser: a press-and-drag must reach the drawing canvas (an
+            // interactive Flickable claims drags as scrolling once the content is taller)
+            interactive: false;
+            body := VerticalLayout {
+                padding: 18px;
+                spacing: 12px;
+                // ---- head
+                Rectangle {
+                    height: 56px;
+                    STxt { x: 0px; y: 0px; text: "DAILY SKRIBBL"; font-size: 12.48px; font-weight: 900; letter-spacing: 1.9968px; color: Game.t.muted; }
+                    Text { x: 0px; y: 18px; text: "Draw today's theme"; font-family: FN.serif; font-size: 33.6px; font-weight: 700; letter-spacing: Game.wabi ? 0px : -1.344px; color: Game.t.text; }
+                    Rectangle {
+                        x: parent.width - 27.6px;
+                        y: 0px;
+                        width: 27.6px;
+                        height: 30px;
+                        border-radius: 10px;
+                        background: close-touch.has-hover ? Game.t.hover-14 : transparent;
+                        Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "✕"; font-family: Emoji.symbol != "" ? Emoji.symbol : FN.sans; font-size: 16px; color: close-touch.has-hover ? Game.t.text : Game.t.muted; }
+                        close-touch := TouchArea { mouse-cursor: pointer; clicked => { root.close(); } }
+                        accessible-role: button;
+                        accessible-label: "Close Daily Skribbl";
+                    }
+                }
+                // ---- error (with production's "Try again", which reloads the theme)
+                if root.d.error != "": Rectangle {
+                    height: max(err.preferred-height, 30px) + 20px;
+                    border-radius: 12px;
+                    border-width: 1px;
+                    border-color: Game.t.danger-45;
+                    background: Game.t.danger-12;
+                    err := STxt { x: 12px; width: parent.width - 24px - try.width - 12px; height: parent.height; vertical-alignment: center; wrap: word-wrap; text: root.d.error; font-size: 14.4px; }
+                    try := Rectangle {
+                        x: parent.width - 12px - self.width;
+                        y: (parent.height - self.height) / 2;
+                        width: try-t.preferred-width + 28px;
+                        height: 29px;
+                        border-radius: 15px;
+                        border-width: 1px;
+                        border-color: Game.t.danger-45;
+                        background: try-touch.has-hover ? Game.t.danger-12 : transparent;
+                        try-t := STxt { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "Try again"; font-size: 13.6px; }
+                        try-touch := TouchArea { mouse-cursor: pointer; clicked => { root.retry(); } }
+                        accessible-role: button;
+                        accessible-label: "Try again";
+                    }
+                    accessible-role: text;
+                    accessible-label: root.d.error;
+                }
+                if !root.d.configured: EmptyNote { text: "Connect the Social tab once to enable Daily Skribbl, then come back and draw."; }
+                if root.d.configured && root.d.phase == 0: EmptyNote { text: "Loading today's theme…"; }
+                if root.d.configured && root.d.phase != 0: VerticalLayout {
+                    spacing: 14px;
+                    // ---- theme card
+                    Rectangle {
+                        height: 48px;
+                        border-radius: 14px;
+                        border-width: 1px;
+                        border-color: Game.t.border;
+                        background: Game.t.accent-8;
+                        lbl := STxt { x: 15px; y: 20px; text: "TODAY'S THEME"; font-size: 11.52px; font-weight: 800; letter-spacing: 1.6128px; color: Game.t.muted; }
+                        Text { x: 15px + lbl.preferred-width + 10px; y: 13px; width: parent.width - self.x - 15px; text: root.d.theme; font-family: FN.serif; font-size: 19.2px; font-weight: 700; letter-spacing: Game.wabi ? 0.08px : 0px; color: Game.t.text; overflow: elide; }
+                        accessible-role: text;
+                        accessible-label: "Today's theme: " + root.d.theme;
+                    }
+                    // ---- intro (fresh / already submitted)
+                    if root.d.phase == 1: VerticalLayout {
+                        padding-top: 12px;
+                        padding-bottom: 12px;
+                        spacing: 12px;
+                        IntroNote { text: root.d.submitted ? "You already submitted a drawing today. Vote on the gallery below." : "You have 3 minutes. Draw, then submit — everyone with the same theme will vote."; }
+                        if !root.d.submitted: HorizontalLayout { alignment: center; AccentButton { text: "Start Drawing"; clicked => { root.start-drawing(); } } }
+                        if root.d.submitted && root.d.own-state >= 0: HorizontalLayout {
+                            alignment: center;
+                            Picture { width: 240px; height: 160.7px; border-radius: 12px; border-width: 1px; border-color: Game.t.border; source: root.d.own; state: root.d.own-state; alt: "Your submitted drawing"; }
+                        }
+                    }
+                    // ---- drawing
+                    if root.d.phase == 2: VerticalLayout {
+                        spacing: 10px;
+                        // toolbar: three groups divided by a 1px rule (padding-right 10, margin-right 2)
+                        HorizontalLayout {
+                            height: 30px;
+                            spacing: 8px;
+                            alignment: start;
+                            HorizontalLayout {
+                                spacing: 6px;
+                                padding-right: 10px;
+                                ToolButton { y: 0.5px; icon: "✏️"; text: "Brush"; active: root.d.tool == 0; clicked => { root.tool(0); } }
+                                ToolButton { y: 0.5px; icon: "🪣"; text: "Fill"; active: root.d.tool == 1; clicked => { root.tool(1); } }
+                            }
+                            Rectangle { width: 1px; background: Game.t.border; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                padding-left: 0px;
+                                padding-right: 10px;
+                                for s in SkribblPalette.sizes: SizeButton { size: s; active: root.d.brush == s; clicked => { root.size(s); } }
+                            }
+                            Rectangle { width: 1px; background: Game.t.border; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                padding-right: 10px;
+                                ToolButton { y: 0.5px; text: "Undo"; enabled: root.d.undo-depth > 0; clicked => { root.undo(); } }
+                                ToolButton { y: 0.5px; text: "Clear"; clicked => { root.clear(); } }
+                            }
+                            Rectangle { width: 1px; background: Game.t.border; }
+                        }
+                        // colour row: 21 swatches and the custom colour, 8px apart
+                        HorizontalLayout {
+                            height: 26px;
+                            spacing: 8px;
+                            alignment: start;
+                            for c[i] in SkribblPalette.colors: Swatch { swatch: c; active: root.d.color-index == i; label: "Color " + i; clicked => { root.pick-color(i); } }
+                            CustomColor { current: root.d.color; active: root.d.color-index < 0; open <=> root.custom-open; }
+                        }
+                        if root.custom-open: Rectangle {
+                            height: 40px;
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: start;
+                                STxt { vertical-alignment: center; text: "Custom color (#rrggbb)"; font-size: 13.44px; color: Game.t.muted; }
+                                Rectangle {
+                                    width: 120px;
+                                    border-radius: 8px;
+                                    border-width: 1px;
+                                    border-color: Game.t.border;
+                                    background: Game.t.surface-2;
+                                    hex := TextInput {
+                                        x: 8px;
+                                        width: parent.width - 16px;
+                                        height: parent.height;
+                                        vertical-alignment: center;
+                                        single-line: true;
+                                        font-family: FN.mono;
+                                        font-size: 14px;
+                                        color: Game.t.text;
+                                        accepted => { root.custom-color(self.text); root.custom-open = false; }
+                                        accessible-role: text-input;
+                                        accessible-label: "Custom color";
+                                    }
+                                }
+                                ToolButton { y: 5px; text: "Use"; clicked => { root.custom-color(hex.text); root.custom-open = false; } }
+                            }
+                        }
+                        // the canvas (900x600 logical, shown at the modal's width)
+                        canvas-wrap := Rectangle {
+                            height: (self.width - 2px) * 2 / 3 + 2px;
+                            border-radius: 14px;
+                            border-width: 1px;
+                            border-color: Game.t.border;
+                            background: #ffffff;
+                            clip: true;
+                            canvas-area := Rectangle {
+                                x: 1px;
+                                y: 1px;
+                                width: parent.width - 2px;
+                                height: parent.height - 2px;
+                                Image { width: parent.width; height: parent.height; source: root.canvas; image-fit: fill; }
+                                draw := TouchArea {
+                                    mouse-cursor: crosshair;
+                                    pointer-event(e) => {
+                                        if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                                            root.canvas-pointer(0, self.mouse-x, self.mouse-y, self.width, self.height);
+                                        } else if e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel {
+                                            root.canvas-pointer(2, self.mouse-x, self.mouse-y, self.width, self.height);
+                                        }
+                                    }
+                                    moved => { root.canvas-pointer(1, self.mouse-x, self.mouse-y, self.width, self.height); }
+                                }
+                                accessible-role: image;
+                                accessible-label: "Drawing canvas for today's theme: " + root.d.theme + ". " + root.timer + " left.";
+                            }
+                            // `.skribbl-timer`
+                            Rectangle {
+                                x: parent.width - 10px - self.width;
+                                y: 10px;
+                                width: timer-t.preferred-width + 20px + 2px;
+                                height: 27px;
+                                border-radius: 13.5px;
+                                border-width: 1px;
+                                border-color: Game.t.border;
+                                background: Game.t.surface-85;
+                                timer-t := STxt { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.timer; font-size: 15.2px; font-weight: 800; color: root.timer-low ? #e53935 : Game.t.text; }
+                                accessible-role: text;
+                                accessible-label: "Time left " + root.timer;
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: center;
+                            AccentButton { text: root.d.submitting ? "Submitting…" : "Submit drawing"; enabled: !root.d.submitting; clicked => { root.submit(); } }
+                        }
+                    }
+                    if root.d.phase == 3: EmptyNote { text: "Submitting your drawing…"; }
+                    if root.d.phase == 4: VerticalLayout {
+                        padding-top: 12px;
+                        padding-bottom: 12px;
+                        spacing: 12px;
+                        IntroNote { text: "Submitted! Your drawing is live below. Vote on the gallery."; }
+                        if root.d.own-state >= 0: HorizontalLayout {
+                            alignment: center;
+                            Picture { width: 240px; height: 160.7px; border-radius: 12px; border-width: 1px; border-color: Game.t.border; source: root.d.own; state: root.d.own-state; alt: "Your submitted drawing"; }
+                        }
+                    }
+                    // ---- gallery (after submitting) or the note
+                    if root.d.submitted: VerticalLayout {
+                        padding-top: 4px;
+                        spacing: 10px;
+                        SectionHead { title: "Gallery"; count: root.d.gallery-count; refresh: true; loading: root.d.gallery-loading; refreshed => { root.refresh-gallery(); } }
+                        if root.d.gallery.length > 0: Rectangle {
+                            height: root.rows * (root.card-h + 10px) - 10px;
+                            for row[i] in root.d.gallery: DrawingCard {
+                                x: mod(i, root.cols) * (root.card-w + 10px);
+                                y: floor(i / root.cols) * (root.card-h + 10px);
+                                width: root.card-w;
+                                height: root.card-h;
+                                entry: row;
+                                vote(v) => { root.vote(row.id, v); }
+                                expand => { root.expand(row.id); }
+                            }
+                        }
+                        if root.d.gallery.length == 0: EmptyNote { text: "No drawings yet today — be the first."; dashed: true; pad: 18px; size: 14.4px; }
+                        if root.d.has-more: HorizontalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: more-t.preferred-width + 46px;
+                                height: 40px;
+                                border-radius: 12px;
+                                border-width: 1px;
+                                border-color: Game.t.accent-line;
+                                background: more-touch.has-hover ? Game.t.accent-soft : transparent;
+                                opacity: root.d.gallery-loading ? 0.6 : 1;
+                                more-t := STxt { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.d.gallery-loading ? "Loading…" : "Load more"; font-size: 16px; font-weight: 700; color: Game.t.accent-strong; }
+                                more-touch := TouchArea { enabled: !root.d.gallery-loading; mouse-cursor: pointer; clicked => { root.load-more(); } }
+                                accessible-role: button;
+                                accessible-label: "Load more";
+                            }
+                        }
+                    }
+                    if !root.d.submitted: IntroNote { centered: false; text: "The gallery unlocks after you submit your drawing today."; }
+                    // ---- yesterday's winner
+                    VerticalLayout {
+                        padding-top: 4px;
+                        spacing: 10px;
+                        SectionHead { title: "Yesterday's Winner"; }
+                        if root.d.has-winner: Rectangle {
+                            height: 63px;
+                            border-radius: 14px;
+                            border-width: 1px;
+                            border-color: Game.t.border;
+                            background: @linear-gradient(120deg, Game.t.amber-18 0%, Game.t.surface-92 100%);
+                            Text { x: 15px; y: 16.5px; text: "🏆"; font-family: Emoji.family; font-size: 25.6px; }
+                            Text { x: 59px; y: 13px; text: root.d.winner-name; font-family: FN.serif; font-size: 16.8px; font-weight: 700; letter-spacing: Game.wabi ? 0.08px : 0px; color: Game.t.text; }
+                            STxt { x: 59px; y: 35px; text: root.d.winner-score; font-size: 12.8px; color: Game.t.muted; }
+                            accessible-role: text;
+                            accessible-label: "Yesterday's winner: " + root.d.winner-name + ", " + root.d.winner-score;
+                        }
+                        if !root.d.has-winner: EmptyNote { text: "No winner yet — the first theme's winner appears tomorrow."; dashed: true; pad: 18px; size: 14.4px; }
+                    }
+                }
+            }
+        }
+    }
+
+    // `.skribbl-lightbox`: the expanded drawing; any click closes it
+    if root.d.lightbox: Rectangle {
+        background: Game.t.black-72;
+        TouchArea { mouse-cursor: pointer; clicked => { root.collapse(); } }
+        private property <length> frame-w: min(root.width * 0.94, (root.height * 0.90 - 20px) * 1.5 + 20px);
+        Rectangle {
+            width: frame-w;
+            height: (frame-w - 20px) * 2 / 3 + 20px;
+            border-radius: 22px;
+            border-width: 1px;
+            border-color: Game.t.white-18;
+            background: Game.t.surface-92;
+            Picture {
+                x: 10px;
+                y: 10px;
+                width: parent.width - 20px;
+                height: parent.height - 20px;
+                border-radius: 14px;
+                source: root.d.lightbox-image;
+                state: root.d.lightbox-ready ? 1 : 0;
+                alt: root.d.lightbox-alt;
+            }
+        }
+        accessible-role: groupbox;
+        accessible-label: root.d.lightbox-alt;
+    }
+
+    accessible-role: groupbox;
+    accessible-label: "Daily Skribbl";
+}

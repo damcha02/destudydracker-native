@@ -164,6 +164,21 @@ pub fn apply_appearance(window: &MainWindow) {
         crate::game_tokens::wabi_base(resolved.dark)
     } else {
         let t = FN::get(window).get_t();
+        // production's `--accent-strong` / `--danger` per Field Notebook scheme (probed)
+        let (accent_strong, danger) = match resolved.scheme {
+            study_tracker_core::appearance::ColorScheme::FieldNotebookLight => (
+                slint::Color::from_rgb_u8(0, 0, 0),
+                slint::Color::from_rgb_u8(0x9c, 0x5a, 0x34),
+            ),
+            study_tracker_core::appearance::ColorScheme::FieldNotebookSakura => (
+                slint::Color::from_rgb_u8(0xe6, 0x7a, 0x9e),
+                slint::Color::from_rgb_u8(0xc0, 0x50, 0x70),
+            ),
+            _ => (
+                slint::Color::from_rgb_u8(0xff, 0xf7, 0xe8),
+                slint::Color::from_rgb_u8(0xc4, 0x7a, 0x4d),
+            ),
+        };
         crate::game_tokens::Base {
             surface: t.surface,
             surface_2: t.surface_2,
@@ -172,11 +187,16 @@ pub fn apply_appearance(window: &MainWindow) {
             accent: t.accent,
             text: t.ink,
             muted: t.ink_3,
+            accent_strong,
+            accent_soft: t.accent_soft,
+            accent_line: t.accent_line,
+            danger,
         }
     };
     crate::Game::get(window).set_t(crate::game_tokens::tokens(base));
     crate::Game::get(window).set_square_buttons(resolved.rendered != RenderedStyle::WabiSabi);
     crate::Game::get(window).set_wabi(resolved.rendered == RenderedStyle::WabiSabi);
+    crate::SocialStyle::get(window).set_wabi(resolved.rendered == RenderedStyle::WabiSabi);
     crate::app_break_room::push(window);
     sync_sakura();
 }
@@ -491,6 +511,7 @@ fn bind_callbacks(window: &MainWindow) {
         sync_sakura();
         if let Some(w) = weak.upgrade() {
             crate::map_adapter::ensure(&w, false);
+            crate::app_social::surface_changed(&w);
         }
     });
 }

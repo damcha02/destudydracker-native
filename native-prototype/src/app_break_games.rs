@@ -41,7 +41,13 @@ pub fn push_games(window: &MainWindow) {
 /// A game was opened from a card (the controller already ran its `init*Puzzle`).
 pub fn opened(window: &MainWindow) {
     push_games(window);
+    // Stage 22a: Daily Skribbl is a network game with its own controller (src/app_skribbl.rs)
+    if window.get_games().open == SKRIBBL_INDEX && !crate::app_skribbl::is_open() {
+        crate::app_skribbl::open();
+    }
 }
+
+const SKRIBBL_INDEX: i32 = 4;
 
 fn game(window: &MainWindow, f: impl FnOnce(&mut BreakRoomController)) {
     with_controller(f);
@@ -67,6 +73,9 @@ pub fn install(window: &MainWindow) {
     let weak = window.as_weak();
     window.on_game_close(move || {
         if let Some(w) = weak.upgrade() {
+            if crate::app_skribbl::is_open() {
+                crate::app_skribbl::close();
+            }
             game(&w, BreakRoomController::close_game);
             push(&w);
         }

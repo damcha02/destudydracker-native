@@ -13,8 +13,11 @@ mod app_appearance;
 mod app_break_games;
 mod app_break_room;
 mod app_model;
+mod app_net;
 #[cfg(windows)]
 mod app_platform;
+mod app_skribbl;
+mod app_social;
 #[cfg(windows)]
 mod app_updater;
 mod appearance_view;
@@ -24,12 +27,18 @@ mod break_room_flags;
 mod break_room_view;
 mod dashboard_view;
 mod game_tokens;
+mod image_cache;
 mod map;
 mod map_adapter;
+mod net;
+mod net_jobs;
 mod persistence;
 mod platform;
 mod sakura_controller;
 mod session_service;
+mod skribbl_canvas;
+mod skribbl_controller;
+mod social_controller;
 mod synthetic_dataset;
 mod timer_controller;
 mod travle_map;
@@ -181,6 +190,11 @@ fn run() -> Result<(), StartupError> {
     );
     app_appearance::apply_env_overrides();
     // Stage 20: the Break Room (its own section of the same store file).
+    // Stage 22a: Social + Daily Skribbl. Configuring the network starts no thread and opens no
+    // connection; nothing is requested without an explicit account (see app_social.rs).
+    app_social::set_store_path(&store_path);
+    app_social::install(&window, Rc::clone(&model), &store_path, &app_paths.data_dir);
+    app_skribbl::install(&window);
     app_break_room::install(&window, Rc::clone(&model), &store_path);
     apply_model_to_window(&window, &model.borrow(), Instant::now());
     refresh_dashboard(&window, &model.borrow(), &mut dashboard.borrow_mut());
@@ -236,6 +250,12 @@ fn run() -> Result<(), StartupError> {
     }
     #[cfg(not(windows))]
     window.run()?;
+    app_skribbl::close();
+    app_social::shutdown();
+    app_net::shutdown();
+    if std::env::var_os("STUDY_NATIVE_NET_AUDIT").is_some() {
+        println!("NET {}", app_net::report());
+    }
     log::info!("event loop exited normally");
     Ok(())
 }
@@ -259,6 +279,7 @@ static TIMER_TICKS: AtomicU64 = AtomicU64::new(0);
 pub static SAKURA_FRAMES: AtomicU64 = AtomicU64::new(0);
 
 /// Diagnostic hooks (off by default; used by the Windows benchmark scripts):
+/// - `STUDY_NATIVE_INPUT` also takes `drag:x1,y1,x2,y2,steps` (Stage 22a Skribbl stress).
 /// - `STUDY_NATIVE_STARTUP_REPORT=1` prints `FIRST_FRAME <ms since main>` once, after the first rendered frame.
 /// - `STUDY_NATIVE_FRAME_STATS=1` prints `STATS <secs> frames=<n> ticks=<n>` every 10 s: frames actually rendered
 ///   and Rust timer-tick callbacks in that interval (shows how often the UI redraws / the model refreshes).
@@ -312,6 +333,30 @@ fn install_input_script(window: &MainWindow) -> Option<Timer> {
                     });
                     win.dispatch_event(WindowEvent::PointerReleased {
                         position,
+                        button: PointerEventButton::Left,
+                    });
+                }
+            }
+            // `drag:x1,y1,x2,y2,steps` (Stage 22a Skribbl stress): press, `steps` moves, release
+            "drag" => {
+                let v: Vec<f32> = arg.split(',').filter_map(|n| n.parse().ok()).collect();
+                if let [x1, y1, x2, y2, steps] = v[..] {
+                    let steps = steps.max(1.0) as u32;
+                    let at = |t: f32| {
+                        slint::LogicalPosition::new(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)
+                    };
+                    win.dispatch_event(WindowEvent::PointerMoved { position: at(0.0) });
+                    win.dispatch_event(WindowEvent::PointerPressed {
+                        position: at(0.0),
+                        button: PointerEventButton::Left,
+                    });
+                    for i in 1..=steps {
+                        win.dispatch_event(WindowEvent::PointerMoved {
+                            position: at(i as f32 / steps as f32),
+                        });
+                    }
+                    win.dispatch_event(WindowEvent::PointerReleased {
+                        position: at(1.0),
                         button: PointerEventButton::Left,
                     });
                 }
@@ -372,13 +417,16 @@ fn install_diagnostics(window: &MainWindow) -> Option<Timer> {
             SAKURA_FRAMES.load(Ordering::Relaxed),
         );
         println!(
-            "STATS {:.0} frames={} ticks={} sakura_ticks={} {} {}",
+            "STATS {:.0} frames={} ticks={} sakura_ticks={} {} {} {} {} {}",
             started.elapsed().as_secs_f64(),
             now.0 - last.0,
             now.1 - last.1,
             now.2 - last.2,
             app_appearance::sakura_report(),
             app_break_room::report(),
+            app_net::report(),
+            app_social::report(),
+            app_skribbl::report(),
         );
         last = now;
     });
@@ -898,6 +946,7 @@ fn refresh_dashboard(window: &MainWindow, model: &AppModel, dashboard: &mut Dash
     push_dashboard(window, dashboard, &clock);
     app_appearance::after_dashboard_refresh(window, model, dashboard);
     app_break_room::after_academic_change(window, model);
+    app_social::after_academic_change(window, model);
     if dashboard.stats().metrics != metrics_before {
         // One line per real metrics recomputation (never per Timer tick): the evidence the Stage 17 runtime
         // checks use for "no continuous recomputation" and "Timer completion refreshes the Dashboard".

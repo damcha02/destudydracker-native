@@ -7,4 +7,5 @@ pub mod academic;
 pub mod appearance;
 pub mod break_room;
 pub mod dashboard;
+pub mod social;
 pub mod timer;

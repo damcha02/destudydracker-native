@@ -340,3 +340,267 @@ it uses.
   upstream source repository into a scratch directory.
 - No real user data or credentials were read or used.
 - No native files changed except this document.
+
+---
+
+# STAGE 22a IMPLEMENTATION
+
+Network foundation, Daily Skribbl, Friends, Leaderboards and Profile on Linux. Uncommitted;
+Windows verification pending. Sections 1–14 above are the Stage 22 inventory, stop report and
+decision record and are unchanged.
+
+**Verdict: PASS WITH CONCERNS — PENDING WINDOWS VERIFICATION** (concerns in §22a.12).
+
+## 22a.1 Scope delivered
+
+| Area | Status |
+|---|---|
+| Transport (D7: `ureq` 3.4 + `rustls`, ring, webpki-roots) | Done. One lazily created worker thread, bounded queues, finite timeouts, no redirects, TLS validation never disabled, no async runtime |
+| Endpoint safety | Done. `SocialEndpoint::{Production, Test(loopback only)}`; override `STUDY_NATIVE_SOCIAL_ENDPOINT` accepts only `http://<loopback>:<port>`; credentials bound to an endpoint class; test builds refuse non-loopback connections at the transport |
+| Identity (D1) | Done. `NoIdentity` / `NewIdentity` / `ExistingIdentity`; a new identity only after an explicit confirmation; committed only after a successful bootstrap (rolled back otherwise) |
+| Credential boundary | Done with synthetic credentials only. `social-credentials.json` (0600, atomic), `DeviceSecret` with redacted `Debug` and zeroing `Drop`. The production backup import still *withholds* the `social` section. Real migration: Stage 24 |
+| Mock server + goldens | Done. `crates/social-mock` reproduces the 22a routes; `tests/fixtures/social/worker-goldens.jsonl` (73 responses) was recorded from the real Worker running offline; a conformance test replays them against the mock |
+| Daily Skribbl | Done. Europe/Zurich day, 900×600 canvas, brush (5 sizes) / fill / undo (14) / clear, 21-colour palette + hex field, deadline-based 3-minute countdown with one auto-submit at expiry, PNG export, one submission per day, gallery (16 per page, load more), voting, lightbox, yesterday's winner, nothing persisted locally |
+| Friends | Done. Send by tag (input upper-cased, validated), accept/decline, pending, friends with "seen", invite link copy |
+| Leaderboards | Done. Friends / World arenas × Daily / Weekly / Overall; private-profile notice; Squad arena shows a 22b notice |
+| Profile | Done. Name edit and default-name prompt, tag/invite copy, the six mini stats, sync console, the three toggles, player dialog for others |
+| FN UI | Done. "Study Circle" page with Feed/Squad 22b notices, tab unread dot, dialogs, banner |
+| Wabi UI | Done. Sidebar Circle item + submenu (Feed / Standings when competitive / Friends / Squad / Profile + competitive link, persisted as `preferences.wabiCircleCompetitive`), attendance chips, Friends, Standings podium, Profile |
+| Offline / errors / retry | Done (§22a.7) |
+| Deferred to 22b, shown honestly | Feed posts/polls/comments, Squads, Squad Arena, badges, avatar editor, verified sessions (D4), telemetry (D3) |
+
+## 22a.2 Architecture
+
+```
+Slint UI ──callbacks──▶ app_social / app_skribbl (UI-thread glue, timers, view building)
+                          │            ▲ replies via slint::invoke_from_event_loop
+                          ▼            │
+                 SocialController / SkribblController   (decisions; no I/O; headless-tested)
+                          │ Outgoing{token, request, cancel, post}
+                          ▼
+                 app_net ──▶ net::worker (1 thread "social-net", API queue 32, image queue 48)
+                                  └─▶ net::transport (ureq + rustls) ──▶ endpoint origin only
+core: study-tracker-core::social (ids, avatar, identity, time, profile, friends, leaderboard,
+      stats, limits) and break_room::skribbl (session state machine, Zurich day, flood fill)
+```
+
+- The worker is created at the first request. With no account it never exists.
+- Image bytes are decoded on the worker. The decoder checks the format signature, declared type and pixel/byte limits.
+- Image URLs pass `net::images::allow` (§13 policy). Credentials are never sent to images.
+- Replies are matched by token. Stale or cancelled replies change nothing.
+- Read-only refreshes (presence, status, the same leaderboard) are coalesced while an identical one is in flight.
+
+## 22a.3 Files
+
+- New core:
+  - `crates/study-tracker-core/src/social/*` (19 tests).
+  - `crates/study-tracker-core/src/break_room/skribbl/*` (17 tests).
+- New app modules:
+  - `src/net/{endpoint,http,transport,worker,device,multipart,images,social_api}.rs`, plus `social_api_tests.rs` and `mock_conformance_tests.rs`.
+  - `src/{app_net,app_social,app_skribbl,net_jobs,image_cache,skribbl_canvas,skribbl_controller,social_controller}.rs`, plus `*_tests.rs`.
+  - `src/persistence/{social_credentials,social_port}.rs`.
+- New UI:
+  - `ui/social/{types,fn-social,wabi-circle,dialogs}.slint`.
+  - `ui/break/skribbl.slint`.
+- New mock crate: `crates/social-mock`.
+- Fixtures and scripts:
+  - `tests/fixtures/social/`.
+  - `scripts/stage22-worker-goldens/`.
+  - `scripts/visual-parity/{social-capture-prod.sh,social-capture-native.sh,probe-box.js,open-skribbl.js}`.
+- Modified:
+  - `Cargo.toml`/`Cargo.lock` (ureq, getrandom, image, tiny-skia; dev: social-mock).
+  - `src/main.rs`: install/shutdown, STATS fields, `STUDY_NATIVE_NET_AUDIT`, and the input script's `drag:` step.
+  - `src/app_appearance.rs`, `src/app_break_games.rs`, `src/game_tokens.rs`, `src/persistence/mod.rs`.
+  - `ui/main.slint`, `ui/fn/{shell,page}.slint`, `ui/break/{fn-break,games,types}.slint`, `ui/wabi/{page,sidebar}.slint`.
+- Untouched:
+  - the Timer domain;
+  - `desktop/`;
+  - `cloudflare/` (still equal to faa48d7).
+
+## 22a.4 Production behaviour ported
+
+- Startup: presence, then the auto-sync if it is due. The hourly due check follows.
+- A sync runs 2 s after the session count changes, including at start when sessions exist.
+- A friend-status poll runs every 2 minutes, only while the Social tab is visible.
+- Subtab effects:
+  - Leaderboard: presence + sync.
+  - Feed, Squad and Profile: presence + status.
+- Default-name prompt (`/^Student [A-Z0-9]{0,4}$/`) when the tab opens.
+- Unread dot: set by every successful sync, cleared when the tab is opened. Production's quirk is kept: it also appears while Social is open.
+- Message banner lasts 3.2 s. In FN its text has production's low contrast (`var(--bg)` on surface-2).
+- Leaderboard limit 50; server date zone Europe/Zurich.
+
+## 22a.5 Deviations (deliberate, documented)
+
+| Production | Native 22a | Why |
+|---|---|---|
+| Interval-based Skribbl countdown | Deadline-based; one single-shot timer per displayed second, only while drawing and visible | Accurate after stalls; no idle wakeups |
+| Busy auto-submit retry loop | One auto-submit at expiry; a failed submit keeps the drawing and offers retry | No loop against a failing server |
+| WebP upload | PNG upload (RGB, max compression, ≤ 1.5 MiB checked locally) | Decision record: PNG accepted by the Worker |
+| Native colour picker | `#rrggbb` field | Slint has no colour picker |
+| Vote replies applied in arrival order | Matched by sequence; older replies ignored | Race safety |
+| Gallery card overflow from lazy images | Not replicated (cards keep their size) | Production layout bug |
+| Lightbox backdrop blur | Dim only | No backdrop blur in Slint/femtovg |
+| Account created by the Worker bootstrap on load | Created only on explicit confirm; local record only after bootstrap succeeds | D1 |
+| Name prompt only on tab open | Also right after creating an account while the tab is open | Same rule, applied at the moment the default name appears |
+| Duplicate refreshes sent on fast tab switching | Identical in-flight refreshes coalesced | Bounded queue under a slow server (§22a.9) |
+| Photo avatar URL normaliser (HTTPS only) | Also accepts `http://` *loopback* URLs | Lets the local mock serve photos; the image policy still binds every URL to the configured origin, and production's origin is HTTPS, so nothing changes against production |
+| Profile restore for a credential without a local record | Fetched via `/player-stats` self; on failure an error + "Try again" (and a retry when the tab is reopened) | Only reachable with dev/test credentials until Stage 24 |
+
+**Leaderboard semantics:**
+- Since Worker migration 0019, leaderboards count only verified minutes.
+- 22a syncs stats but does not send verified sessions (D4, 22b).
+- So native study time does not raise a user's rank until 22b. The UI is correct; the numbers are the server's.
+
+## 22a.6 Security review
+
+- **deviceSecret:**
+  - Exposed only to build request bodies, the two GET query strings production requires (`/skribbl/theme`, `/skribbl/leaderboard`), the multipart upload, and the credential file.
+  - Logs carry method + path (query stripped) + status + size + time only.
+  - `Debug` is redacted, the value is zeroed on drop, and it never enters a Slint model.
+  - A grep of all run logs, captures and STATS output found no synthetic secret. The only occurrences are the synthetic import fixtures, whose `social` section the importer withholds.
+- **Credential file:** 0600, written atomically, verified after a UI-created account.
+- **TLS:** rustls with webpki roots; no verifier overrides. Redirects off. Proxies from the environment only for non-loopback.
+- **Image URLs:**
+  - HTTPS on the configured origin under `/feed/image/`, `/profile/avatar/` or `/skribbl/drawing/`.
+  - Size caps: avatar 512 KiB, drawing 2 MiB.
+  - Signature + declared type checked; 4096 px / 64 MB decode limits.
+  - Rejected cases are covered by tests: userinfo, other hosts, look-alike hosts, other ports, other paths, `file:`, plain HTTP for production.
+- **Server data:**
+  - Bounded parsers: response cap 2 MiB, row caps, string caps.
+  - Display text strips control and bidi-override characters.
+  - The Worker stores any bytes as an image, so the client validates every image it shows.
+- **Isolation:**
+  - Every manual and capture run was inside `unshare -rn` (loopback only).
+  - Chromium ran with a resolver mapping every host except 127.0.0.1 to NOTFOUND.
+  - Tests use the in-process mock.
+  - No production endpoint was contacted.
+
+## 22a.7 Offline, errors, retry (verified in the real UI against the mock)
+
+| Situation | Result |
+|---|---|
+| No account, production endpoint, Social tab open | 0 requests, no worker thread, no origins (`net_worker=none net_origins=none`) |
+| Account, server refusing connections | App starts normally. Profile restore shows "Your profile could not be loaded … Everything else works as usual." + Try again. Stage 19–21 surfaces unaffected |
+| Sync failure | "Sync Issue" pill + server/offline message, local data kept |
+| Failed bootstrap | Credential and record rolled back to NoIdentity (test) |
+| Failed Skribbl submit | Drawing kept, retry offered (test) |
+| Closing Skribbl mid-request | All requests cancelled; late replies ignored (test) |
+
+## 22a.8 Visual parity (Linux, 1520×980, scale 1)
+
+Production capture: scratch build of `desktop/` with `VITE_SOCIAL_API_URL` set to the mock, headless Chromium, frozen 2026-10-04 12:00 Zurich. Native capture: `social-capture-native.sh`, same mock seed. Mean absolute difference per channel:
+
+| Screen | Diff | Screen | Diff |
+|---|---|---|---|
+| FN Friends | 1.97 | Wabi light Feed (attendance) | 0.93 |
+| FN Leaderboard | 2.62 | Wabi light Friends | 1.73 |
+| FN Profile | 0.98 | Wabi light Profile | 0.74 |
+| FN Feed (22b notice) | 4.69 | Wabi light Standings | 0.74 |
+| FN Squad (22b notice) | 7.43 | Wabi dark Feed / Friends / Profile / Standings | 1.10 / 1.91 / 0.84 / 0.82 |
+| Skribbl FN dark intro / drawing | 2.42 / 1.51 | Skribbl Wabi light intro / drawing | 2.44 / 1.53 |
+| Skribbl FN dark / light gallery | 5.78 / 4.20 | Skribbl Wabi light / dark gallery | 4.18 / 5.31 |
+
+**What remains in those diffs:**
+- Feed/Squad are intentionally different (22b notices).
+- The gallery diffs are mostly production's card-overflow bug.
+- Remaining: font metrics, and the FN score badge's rotated text, which looks the same as Stage 21 (not 22a).
+- Wabi sidebar items are ~1 px/item tighter than Linux Chromium. This predates 22a: Stage 19–21 were verified on Windows.
+
+**Also verified visually:** new-account confirmation, name prompt (FN + Wabi), banner, offline restore notice, NoIdentity in both styles, drawing with strokes/colour/size.
+
+## 22a.9 Performance (release, Linux, Xwayland at scale 1, loopback netns)
+
+| Metric | Stage 21 | Stage 22a |
+|---|---|---|
+| Stripped binary | 38,107,240 B | 46,635,240 B (+8.53 MB, +22.4%) |
+| First frame, median of 7 (no account) | 99.4 ms | 99.7 ms |
+| Idle RssAnon, no account (3 samples) | 25.06–25.10 MiB | 25.42–25.47 MiB (+0.35 MiB) |
+| Threads idle, no account | 8 | 8 |
+| Threads with an account | — | 9 (the one network worker) |
+| Idle CPU (21 s window) | 0 ticks | 0 ticks (no account), 0–2 ticks (account, Social open) |
+| Rendered frames on a static screen, 10 s windows | 0 | 0 (dashboard, FN Friends, Wabi Standings, NoIdentity) |
+
+**Binary growth by symbol attribution (unstripped Stage 21 vs 22a):**
+- Generated Slint code for the new screens: +2.36 MB, plus related generic code in `i_slint_core`/`core`/`alloc` (~+2.0 MB).
+- Unattributed: +1.8 MB.
+- Network/TLS: ~+1.2 MB (rustls 373 K, ring 114 K, ureq 112 K, http 57 K, ureq_proto 46 K, webpki 45 K).
+- Image decoders: ~+0.36 MB (image_webp 291 K, zune_jpeg 41 K, image 28 K).
+- App logic: ~+0.3 MB.
+
+The D7 transport-only measurement before the UI work was +2.42 MB.
+
+**Memory fix found by this measurement:**
+- The Skribbl canvas (900×600 RGBA, 2.06 MiB) used to be allocated at startup.
+- It is now created when drawing starts and dropped, with the window's copy, when the modal closes.
+- That cut the no-account idle cost from +2.5 MiB to +0.35 MiB.
+
+**Stress (release, mock latency 300 ms / 150 ms):**
+- **Social:**
+  - 320 rapid clicks across subtabs, scopes and periods.
+  - 122 requests sent (plus 1 avatar image), 318 duplicates coalesced; queue depth max 8 of 32; 0 failed; 0 refused; everything drained to 0 pending.
+  - Anon memory steady at ~28 MiB.
+  - Before coalescing, the same run filled the queue and ~293 refreshes were refused.
+- **Skribbl:**
+  - 300 strokes × 40 moves, undo every 25, clear every 100, then submit.
+  - Submit accepted, gallery loaded 7 thumbnails, 0 failed.
+  - Peak anon 42.7 MiB while drawing (canvas + 14 undo snapshots + window copy + thumbnails).
+- **Harness note:** an exhausted `STUDY_NATIVE_INPUT` script keeps requesting redraws (~17 fps). Stage 21's binary does the same. This is a diagnostics artifact, never active without that variable.
+
+**Bug found by stress:**
+- The Skribbl modal's Flickable became drag-interactive once the drawing view was taller than the modal.
+- It then swallowed every mouse drag, so the canvas received no pointer events.
+- It is now wheel-only (as in the browser) and drawing works.
+
+## 22a.10 Regressions (Stage 19–21)
+
+**Pixel-identical screens (Stage 21 vs 22a, mean diff 0.000):**
+- FN dashboard: dark, light, Sakura (petals frozen).
+- Wabi dashboard: light, dark.
+- FN Timer.
+- FN Break Room.
+- Wabi Rest.
+- Wordle, Travle, Durak (FN).
+- Geodle (Wabi).
+
+**Tests:**
+
+| Suite | Result |
+|---|---|
+| `study-tracker-core` | 210 passed, 1 ignored |
+| app | 324 passed, 1 ignored |
+
+The app suite includes 15 Social and 11 Skribbl end-to-end tests against the mock, golden parsing, mock conformance, endpoint/credential/image-policy tests, and all Stage 15–21 tests.
+
+## 22a.11 How to run against the mock (never production)
+
+```
+cargo build -p social-mock
+unshare -rn bash -c 'ip link set lo up
+  target/debug/social-mock --port 47811 --seed demo --write-credentials /tmp/st-dev &
+  STUDY_NATIVE_DATA_DIR=/tmp/st-dev STUDY_NATIVE_SOCIAL_ENDPOINT=http://127.0.0.1:47811 \
+    target/debug/study-tracker-native-prototype'
+```
+
+- Seeds: `demo`, `demo-submitted`, `self-only`, `empty`.
+- Omit `--write-credentials` to start without an account.
+- Diagnostics: `STUDY_NATIVE_FRAME_STATS=1` (net/social/skribbl fields), `STUDY_NATIVE_NET_AUDIT=1` (one `NET` line with contacted origins at exit), `STUDY_NATIVE_SOCIAL_SUBTAB`, `STUDY_NATIVE_SOCIAL_COMPETITIVE=1`.
+
+## 22a.12 Concerns and open items
+
+1. **Windows not verified:**
+   - Windows has not run the 22a code at all.
+   - Still to check there: rustls/ring on MSVC, `social-credentials.json` permissions (0600 is a Unix mode; Windows relies on the per-user profile ACL), fonts/metrics of the new screens, clipboard through the hidden TextInput, and visual parity against WebView2.
+2. **Binary size +22%:**
+   - Mostly generated UI code, not the network stack.
+   - Acceptable for now, but worth watching as 22b adds Feed and Squads.
+3. **Native study time does not move leaderboard ranks until 22b** (verified sessions); see §22a.5.
+4. **Profile restore in 22a only learns name, avatar and tag:**
+   - The server does not return the privacy toggles, so production defaults apply until changed.
+   - This path is only reachable with dev/test credentials before Stage 24.
+5. **Social pages use the existing pages' drag-scroll Flickables:**
+   - This matches Stage 19–21, but differs from browser behaviour (wheel only).
+   - Text selection by dragging inside those pages' inputs is therefore limited.
+6. **22b and Stage 24 boundaries:**
+   - 22b: Feed, Squads, badges, avatar editor, verified sessions, telemetry.
+   - Stage 24: credential migration from the Tauri app.

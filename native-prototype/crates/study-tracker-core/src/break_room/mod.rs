@@ -15,6 +15,7 @@ pub mod durak;
 pub mod flaggle;
 pub mod geodle;
 pub mod rest;
+pub mod skribbl;
 pub mod state;
 pub mod travle;
 pub mod wordle;

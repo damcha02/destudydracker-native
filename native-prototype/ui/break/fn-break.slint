@@ -185,6 +185,7 @@ export component FnBreakPage inherits Rectangle {
     callback toggle-theme();
     callback open-menu();
     callback picked-tab(int);
+    in property <bool> social-unread;
     callback play(int);
     callback unlock(int);
     callback add-water();
@@ -461,6 +462,7 @@ export component FnBreakPage inherits Rectangle {
         width: parent.width;
         content-x: root.tab-pad;
         active-tab: 4;
+        social-unread: root.social-unread;
         picked(i) => { root.picked-tab(i); }
     }
 }

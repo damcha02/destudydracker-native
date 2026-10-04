@@ -40,6 +40,16 @@ export component WabiPage inherits Rectangle {
     in property <bool> rock-bounce;
     callback open-rest();
     callback pick-room(int);
+    // Stage 22a: the Circle (drawn by main.slint's WabiCircle over the content area)
+    in property <bool> on-circle;
+    in property <bool> circle-menu-open;
+    in property <int> circle-sub;
+    in property <bool> circle-competitive;
+    in property <bool> circle-unread;
+    in property <bool> circle-requests;
+    callback open-circle();
+    callback pick-circle(int);
+    callback toggle-competitive();
     callback rest-toggle();
     callback rest-reset();
     callback rest-edit(string);
@@ -74,7 +84,7 @@ export component WabiPage inherits Rectangle {
 
     private property <length> gutter: 10px;
     private property <length> content-w: min(1386px, root.width - 298px);
-    private property <length> page-h: root.on-timer || root.on-rest ? root.height : 22px + dashboard.content-height;
+    private property <length> page-h: root.on-timer || root.on-rest || root.on-circle ? root.height : 22px + dashboard.content-height;
 
     background: WS.desk;
     clip: true;
@@ -85,10 +95,10 @@ export component WabiPage inherits Rectangle {
         height: parent.height;
         viewport-width: self.width;
         viewport-height: max(self.height, root.page-h);
-        interactive: !root.on-timer && !root.on-rest;
+        interactive: !root.on-timer && !root.on-rest && !root.on-circle;
 
         dashboard := WabiDashboard {
-            visible: !root.on-timer && !root.on-rest;
+            visible: !root.on-timer && !root.on-rest && !root.on-circle;
             x: 32px;
             y: 22px;
             width: root.content-w;
@@ -157,9 +167,18 @@ export component WabiPage inherits Rectangle {
         y: 0px;
         height: parent.height;
         d: root.sidebar;
-        on-dashboard: !root.on-timer && !root.on-rest;
-        on-timer: root.on-timer && !root.on-rest;
+        on-dashboard: !root.on-timer && !root.on-rest && !root.on-circle;
+        on-timer: root.on-timer && !root.on-rest && !root.on-circle;
         on-rest: root.on-rest;
+        on-circle: root.on-circle;
+        circle-menu-open: root.circle-menu-open;
+        circle-sub: root.circle-sub;
+        circle-competitive: root.circle-competitive;
+        circle-unread: root.circle-unread;
+        circle-requests: root.circle-requests;
+        open-circle => { root.open-circle(); }
+        pick-circle(i) => { root.pick-circle(i); }
+        toggle-competitive => { root.toggle-competitive(); }
         rest-menu-open: root.rest-menu-open;
         rest-room: root.rest-room;
         open-rest => { root.open-rest(); }
@@ -201,7 +220,7 @@ export component WabiPage inherits Rectangle {
     }
 
     // thin page scrollbar in the reserved gutter (native stand-in for WebView2's scrollbar)
-    if !root.on-timer && !root.on-rest && !root.quiet && root.page-h > root.height: Rectangle {
+    if !root.on-timer && !root.on-rest && !root.on-circle && !root.quiet && root.page-h > root.height: Rectangle {
         x: parent.width - root.gutter;
         width: root.gutter;
         height: parent.height;

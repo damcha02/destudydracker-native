@@ -1,0 +1,266 @@
+// Stage 22a: the Social dialogs and production's message banner, in both styles.
+// - "Set your name" (`help-modal`, opened on the Social tab while the name is still the default)
+// - the new-account confirmation (native only: production never needs it, see docs §D1)
+// - the player profile (`calendar-drawer-backdrop` + `arena-player-card`, 440px)
+// - `.message-banner` (bottom centre, 3.2 s, production's colours including its quirks)
+import { FN } from "../fn/palette.slint";
+import { WS } from "../wabi/palette.slint";
+import { MonoText, SerifText, SansText, HLine } from "../fn/parts.slint";
+import { Emoji } from "../break/types.slint";
+import { SocialView, SStat } from "types.slint";
+import { FnAvatar, SocialBlue } from "fn-social.slint";
+
+export global SocialStyle {
+    in-out property <bool> wabi: false;
+    out property <color> paper: SocialStyle.wabi ? WS.paper-1 : FN.surface;
+    out property <color> paper-2: SocialStyle.wabi ? WS.paper-2 : FN.surface-2;
+    out property <color> ink: SocialStyle.wabi ? WS.ink : FN.ink;
+    out property <color> muted: SocialStyle.wabi ? WS.muted : FN.ink-3;
+    out property <color> faint: SocialStyle.wabi ? WS.faint : FN.ink-4;
+    out property <color> line: SocialStyle.wabi ? WS.line : FN.line;
+    out property <color> accent: SocialStyle.wabi ? WS.sage : FN.ink;
+    out property <color> on-accent: SocialStyle.wabi ? WS.paper-1 : FN.desk;
+    out property <string> serif: SocialStyle.wabi ? WS.serif : FN.serif;
+    out property <string> sans: SocialStyle.wabi ? WS.sans : FN.sans;
+    out property <string> mono: SocialStyle.wabi ? WS.sans : FN.mono;
+}
+
+component DButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: t.preferred-width + 32px;
+    height: 36px;
+    border-width: 1px;
+    border-color: root.primary ? SocialStyle.accent : SocialStyle.line;
+    background: root.primary ? SocialStyle.accent : (touch.has-hover ? SocialStyle.paper-2 : transparent);
+    opacity: root.enabled ? 1 : 0.5;
+    t := Text {
+        width: parent.width;
+        height: parent.height;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.text;
+        font-family: root.primary ? SocialStyle.serif : SocialStyle.mono;
+        font-size: root.primary ? 13px : 11px;
+        letter-spacing: root.primary ? 0px : 0.66px;
+        color: root.primary ? SocialStyle.on-accent : SocialStyle.muted;
+    }
+    touch := TouchArea { enabled: root.enabled; mouse-cursor: root.enabled ? pointer : default; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+}
+
+// `.help-modal`: a 720px sheet over a dimmed backdrop
+component Sheet inherits Rectangle {
+    in property <string> eyebrow;
+    in property <string> title;
+    in property <string> text;
+    in property <length> extra-h;
+    callback dismiss();
+    Rectangle { background: #00000080; TouchArea { clicked => { root.dismiss(); } } }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(720px, parent.width - 32px);
+        height: 30px + 76px + body.preferred-height + 16px + root.extra-h + 30px;
+        border-width: 1px;
+        border-color: SocialStyle.line;
+        background: SocialStyle.paper;
+        TouchArea { }
+        MonoText { x: 31px; y: 31px; text: root.eyebrow; font-family: SocialStyle.mono; font-size: 10px; letter-spacing: 1.8px; color: SocialStyle.faint; }
+        Text { x: 31px; y: 51px; text: root.title; font-family: SocialStyle.sans; font-size: 24px; font-weight: 700; color: SocialStyle.ink; }
+        Rectangle { x: parent.width - 31px - 37px; y: 31px; width: 37px; height: 40px; border-width: 1px; border-color: SocialStyle.line;
+            MonoText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "X"; font-family: SocialStyle.mono; font-size: 11px; color: SocialStyle.muted; }
+            TouchArea { mouse-cursor: pointer; clicked => { root.dismiss(); } }
+            accessible-role: button;
+            accessible-label: "Close";
+        }
+        Rectangle { x: 31px; y: 94px; width: parent.width - 62px; height: 2px; background: SocialStyle.ink; }
+        body := Text { x: 31px; y: 112px; width: parent.width - 62px; wrap: word-wrap; text: root.text; font-family: SocialStyle.sans; font-size: 16px; color: SocialStyle.muted; }
+        Rectangle { x: 31px; y: 112px + body.preferred-height + 16px; width: parent.width - 62px; height: root.extra-h; @children }
+    }
+    accessible-role: groupbox;
+    accessible-label: root.title;
+}
+
+export component NamePrompt inherits Rectangle {
+    in-out property <string> draft;
+    callback dismiss();
+    callback save(string);
+    forward-focus: field;
+    Sheet {
+        eyebrow: "SOCIAL";
+        title: "Set your name";
+        text: "You are still using the default name. Pick a name so your friends know who you are.";
+        extra-h: 44px + 12px + 36px;
+        dismiss => { root.dismiss(); }
+        Rectangle {
+            height: 44px;
+            y: 0px;
+            border-width: 2px;
+            border-color: field.has-focus ? #7b9cff : SocialStyle.line;
+            border-radius: 4px;
+            background: SocialStyle.paper-2;
+            field := TextInput {
+                x: 12px;
+                width: parent.width - 24px;
+                height: parent.height;
+                vertical-alignment: center;
+                single-line: true;
+                text <=> root.draft;
+                font-family: SocialStyle.sans;
+                font-size: 16px;
+                color: SocialStyle.ink;
+                accepted => { if self.text != "" { root.save(self.text); } }
+                accessible-role: text-input;
+                accessible-label: "Your name";
+            }
+            if root.draft == "": Text { x: 12px; height: parent.height; vertical-alignment: center; text: "Your name"; font-family: SocialStyle.sans; font-size: 16px; color: SocialStyle.faint; }
+        }
+        HorizontalLayout {
+            y: 56px;
+            height: 36px;
+            alignment: end;
+            spacing: 14px;
+            DButton { text: "LATER"; clicked => { root.dismiss(); } }
+            DButton { text: "Save name"; primary: true; enabled: root.draft != ""; clicked => { root.save(root.draft); } }
+        }
+    }
+}
+
+export component NewAccountConfirm inherits Rectangle {
+    callback cancel();
+    callback confirm();
+    Sheet {
+        eyebrow: "SOCIAL ACCOUNT";
+        title: "Create a new Social account?";
+        text: "This creates a new account with a new player tag on the Study Tracker Social server. It is separate from any account you used before: friends and standings from another account do not carry over. Your name, avatar, privacy choices and daily study totals are shared with the server, as in Study Tracker's Social features.";
+        extra-h: 36px;
+        dismiss => { root.cancel(); }
+        HorizontalLayout {
+            height: 36px;
+            alignment: end;
+            spacing: 14px;
+            DButton { text: "CANCEL"; clicked => { root.cancel(); } }
+            DButton { text: "Create account"; primary: true; clicked => { root.confirm(); } }
+        }
+    }
+}
+
+component DStat inherits Rectangle {
+    in property <SStat> s;
+    height: 46px;
+    border-width: 1px;
+    border-color: SocialStyle.line;
+    background: SocialStyle.paper-2;
+    Text { x: 10px; y: 9px; width: 28px; height: 28px; horizontal-alignment: center; vertical-alignment: center; text: root.s.icon; font-family: Emoji.family; font-size: 16px; color: SocialStyle.muted; }
+    Text { x: 46px; y: 9.3px; text: root.s.value; font-family: SocialStyle.sans; font-size: 14.4px; font-weight: 700; color: SocialStyle.ink; }
+    Text { x: 46px; y: 25.7px; text: root.s.label; font-family: SocialStyle.sans; font-size: 9.92px; font-weight: 800; color: SocialStyle.muted; }
+    accessible-role: text;
+    accessible-label: root.s.label + ": " + root.s.value;
+}
+
+export component PlayerDialog inherits Rectangle {
+    in property <SocialView> v;
+    in property <bool> busy;
+    callback dismiss();
+    callback request(string);
+    private property <length> w: min(440px, root.width - 32px);
+    private property <length> body-h: root.v.v-state == 1 ? 100px : 60px;
+    forward-focus: keys;
+    keys := FocusScope { key-pressed(e) => { if e.text == Key.Escape { root.dismiss(); return accept; } reject } }
+    Rectangle { background: #00000080; TouchArea { clicked => { root.dismiss(); } } }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.w;
+        height: 21px + 92px + 16px + root.body-h + 21px;
+        border-width: 1px;
+        border-color: SocialStyle.line;
+        background: SocialStyle.paper;
+        TouchArea { }
+        FnAvatar { x: 21px; y: 21px; a: root.v.v-avatar; size: 56px; font: 18.56px; }
+        MonoText { x: 89px; y: 21px; text: root.v.v-code; font-family: SocialStyle.mono; font-size: 10px; letter-spacing: 1.8px; color: SocialStyle.faint; }
+        Text { x: 89px; y: 37px; width: parent.width - 89px - 60px; text: root.v.v-name; font-family: SocialStyle.serif; font-size: 18.72px; font-weight: 500; color: SocialStyle.ink; overflow: elide; }
+        Rectangle {
+            x: parent.width - 21px - 30px;
+            y: 33px;
+            width: 30px;
+            height: 30px;
+            border-width: 1px;
+            border-color: SocialStyle.line;
+            Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "×"; font-family: SocialStyle.sans; font-size: 16px; color: SocialStyle.muted; }
+            TouchArea { mouse-cursor: pointer; clicked => { root.dismiss(); } }
+            accessible-role: button;
+            accessible-label: "Close";
+        }
+        if root.v.v-seen != "": Text { x: 89px; y: 63px; text: "Seen " + root.v.v-seen; font-family: SocialStyle.sans; font-size: 13.12px; color: SocialStyle.muted; }
+        HorizontalLayout {
+            x: 89px;
+            y: 83px;
+            height: 30px;
+            spacing: 8px;
+            alignment: start;
+            Rectangle {
+                y: 5px;
+                height: 19px;
+                width: b.preferred-width + 14px;
+                border-width: 1px;
+                border-color: SocialStyle.line;
+                b := MonoText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.v.v-badge; font-family: SocialStyle.mono; font-size: 10px; letter-spacing: 0.8px; color: SocialStyle.muted; }
+            }
+            if root.v.v-can-request: DButton { height: 30px; text: "Send friend request"; primary: true; enabled: !root.busy; clicked => { root.request(root.v.v-code); } }
+        }
+        Rectangle {
+            x: 21px;
+            y: 21px + 92px + 16px;
+            width: parent.width - 42px;
+            height: root.body-h;
+            if root.v.v-state == 0: Text { width: parent.width; height: 46px; horizontal-alignment: center; vertical-alignment: center; text: "Loading stats..."; font-family: SocialStyle.sans; font-size: 14px; color: SocialStyle.muted; }
+            if root.v.v-state == 2: Text { width: parent.width; height: 46px; horizontal-alignment: center; vertical-alignment: center; wrap: word-wrap; text: "This friend has chosen not to share their study hours."; font-family: SocialStyle.sans; font-size: 14px; color: SocialStyle.muted; }
+            if root.v.v-state == 3: Text { width: parent.width; height: 46px; vertical-alignment: center; text: "Could not load stats."; font-family: SocialStyle.sans; font-size: 14px; color: FN.critical; }
+            if root.v.v-state == 1: Rectangle {
+                for s[i] in root.v.v-stats: DStat {
+                    x: mod(i, 2) * (parent.width / 2 + 4px);
+                    y: floor(i / 2) * 54px;
+                    width: parent.width / 2 - 4px;
+                    s: s;
+                }
+            }
+        }
+    }
+    accessible-role: groupbox;
+    accessible-label: root.v.v-name + "'s profile";
+}
+
+// `.message-banner`: production's own colours, including Field Notebook dark's low-contrast text
+// (`color: var(--bg)` on `--surface-2`), which the Field Notebook override leaves in place.
+export component MessageBanner inherits Rectangle {
+    in property <string> message;
+    private property <length> w: min(t.preferred-width + 36px + 2px, root.width - 32px);
+    Rectangle {
+        x: (root.width - self.width) / 2;
+        y: root.height - 24px - self.height;
+        width: root.w;
+        height: t.preferred-height + 32px + 2px;
+        border-width: SocialStyle.wabi ? 0px : 1px;
+        border-color: FN.line;
+        background: SocialStyle.wabi ? WS.ink : FN.surface-2;
+        t := Text {
+            x: 19px;
+            y: 17px;
+            width: parent.width - 38px;
+            wrap: word-wrap;
+            text: root.message;
+            font-family: SocialStyle.sans;
+            font-size: 16px;
+            font-weight: 700;
+            color: SocialStyle.wabi ? WS.desk : FN.desk;
+        }
+    }
+    accessible-role: text;
+    accessible-label: root.message;
+}

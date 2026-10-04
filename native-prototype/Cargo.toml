@@ -7,7 +7,7 @@ build = "build.rs"
 publish = false
 
 [workspace]
-members = ["crates/study-tracker-core"]
+members = ["crates/study-tracker-core", "crates/social-mock"]
 resolver = "2"
 
 [dependencies]
@@ -45,6 +45,10 @@ png = "0.18"
 # usvg/tiny-skia) is ALREADY linked by Slint for SVG images; no default features are requested, so
 # this adds no crate and no code beyond what Slint already compiles.
 resvg = { version = "0.47", default-features = false }
+ureq = { version = "3.4", default-features = false, features = ["rustls"] }
+getrandom = "0.3"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+tiny-skia = "0.12"
 
 [target.'cfg(windows)'.dependencies]
 # MessageBoxW fallback for fatal startup errors once the release build has no console (Stage 13,
@@ -73,6 +77,9 @@ windows = { version = "0.62", features = ["UI_Notifications", "Data_Xml_Dom", "F
 
 [build-dependencies]
 slint-build = "1.17.1"
+
+[dev-dependencies]
+social-mock = { path = "crates/social-mock" }
 
 [target.'cfg(windows)'.build-dependencies]
 # Embeds the application icon and version/identity resource (assets/branding/app.rc) into the

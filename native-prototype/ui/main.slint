@@ -28,6 +28,14 @@ export { FnBreakData, BrCard, BrBadge, Emoji, CssLine, WabiRestData, Game, GameT
 import { WabiRestData } from "break/types.slint";
 import { AlbumData, AlbumRow, AlbumPageData } from "wabi/album.slint";
 export { AlbumData, AlbumRow, AlbumPageData } from "wabi/album.slint";
+export { SkribblData, SkribblRow } from "break/skribbl.slint";
+import { SkribblModal, SkribblData } from "break/skribbl.slint";
+export { SocialView, SAvatar, SFriendRow, SRequestRow, SBoardRow, SStat } from "social/types.slint";
+import { SocialView } from "social/types.slint";
+import { FnSocialPage } from "social/fn-social.slint";
+import { WabiCircle } from "social/wabi-circle.slint";
+import { NamePrompt, NewAccountConfirm, PlayerDialog, MessageBanner, SocialStyle } from "social/dialogs.slint";
+export { SocialStyle } from "social/dialogs.slint";
 
 export { WS, WsTokens } from "wabi/palette.slint";
 export { WabiSidebarData, WabiDashData, WabiTimerData, WabiQuietData, WabiCourseItem, WabiTaskItem, WabiDeadlineRow, WabiPlannedRow, WabiModeCard, WabiQuietOther } from "wabi/types.slint";
@@ -173,6 +181,7 @@ export component MainWindow inherits Window {
     changed show-dashboard => { root.surface-changed(); }
     changed show-text-spike => { root.surface-changed(); }
     changed show-map => { root.surface-changed(); }
+    changed show-social => { root.surface-changed(); }
 
     callback toggle-timer();
     callback reset-timer();
@@ -220,6 +229,68 @@ export component MainWindow inherits Window {
     in-out property <bool> show-map: false;
     // Stage 20: the Break Room / Rest surface (takes precedence over Dashboard and Timer).
     in-out property <bool> show-break: false;
+    // Stage 22a: Daily Skribbl (src/app_skribbl.rs). The canvas and the countdown are separate
+    // properties so a stroke or a second never re-sends the rest of the modal.
+    in property <SkribblData> skribbl;
+    in property <image> skribbl-canvas;
+    in property <string> skribbl-timer: "3:00";
+    in property <bool> skribbl-low;
+    callback skribbl-retry();
+    callback skribbl-start();
+    callback skribbl-tool(int);
+    callback skribbl-size(int);
+    callback skribbl-color(int);
+    callback skribbl-custom-color(string);
+    callback skribbl-undo();
+    callback skribbl-clear();
+    callback skribbl-pointer(int, length, length, length, length);
+    callback skribbl-submit();
+    callback skribbl-refresh();
+    callback skribbl-more();
+    callback skribbl-vote(string, int);
+    callback skribbl-expand(string);
+    callback skribbl-collapse();
+    // Stage 22a: the Social surface ("Study Circle" / Wabi "Circle"), src/app_social.rs
+    in-out property <bool> show-social: false;
+    // the Wabi sidebar's Circle submenu
+    in-out property <bool> circle-menu-open: false;
+    in property <SocialView> social;
+    in property <bool> social-unread;
+    in-out property <string> social-code-draft;
+    in-out property <string> social-name-draft;
+    in-out property <string> social-prompt-draft;
+    // production's `.message-banner` (3.2 s)
+    in property <string> app-message;
+    callback social-opened();
+    callback social-subtab(int);
+    callback social-send-request(string);
+    callback social-respond(string, bool);
+    callback social-open-person(string);
+    callback social-close-person();
+    callback social-copy-code();
+    callback social-copy-invite();
+    callback social-refresh();
+    callback social-scope(int);
+    callback social-period(int);
+    callback social-edit-name();
+    callback social-save-name(string);
+    callback social-cancel-name();
+    callback social-toggle-private();
+    callback social-toggle-auto-post();
+    callback social-toggle-hours();
+    callback social-create-account();
+    callback social-confirm-account();
+    callback social-cancel-account();
+    callback social-dismiss-prompt();
+    callback social-save-prompt(string);
+    callback social-wabi-competitive(bool);
+    // the system clipboard through a hidden TextInput (Slint has no clipboard API of its own)
+    public function copy-to-clipboard(text: string) {
+        clipboard-helper.text = text;
+        clipboard-helper.select-all();
+        clipboard-helper.copy();
+        clipboard-helper.text = "";
+    }
     in property <FnBreakData> fn-break;
     in property <bool> rock-bounce;
     in property <bool> rock-celebrate;
@@ -327,7 +398,13 @@ export component MainWindow inherits Window {
             height: parent.height - 2 * root.shell-padding;
         }
 
-        if !root.show-dashboard && !root.show-map && !root.show-break: ScrollView {
+        clipboard-helper := TextInput {
+            visible: false;
+            width: 0px;
+            height: 0px;
+            enabled: false;
+        }
+        if !root.show-dashboard && !root.show-map && !root.show-break && !root.show-social: ScrollView {
             x: root.content-x;
             y: root.shell-padding;
             width: root.main-width;
@@ -606,7 +683,7 @@ export component MainWindow inherits Window {
             }
         }
 
-        if root.rail-width > 0px && !root.show-text-spike && !root.show-dashboard && !root.show-map && !root.show-break: Rectangle {
+        if root.rail-width > 0px && !root.show-text-spike && !root.show-dashboard && !root.show-map && !root.show-break && !root.show-social: Rectangle {
             x: root.content-x + root.main-width + 22px;
             y: root.shell-padding;
             width: root.rail-width;
@@ -667,7 +744,7 @@ export component MainWindow inherits Window {
         // Stage 17: the production Dashboard (Field Notebook style) covers the whole window. The
         // other surfaces below (Timer, Text spike, Map lab) are the not-yet-migrated Stage 4-14
         // screens and debug labs; the page's tab row switches between Dashboard and Timer.
-        if root.show-dashboard && !root.wabi && !root.show-break: FnDashboardPage {
+        if root.show-dashboard && !root.wabi && !root.show-break && !root.show-social: FnDashboardPage {
             x: 0px;
             y: 0px;
             width: parent.width;
@@ -683,11 +760,13 @@ export component MainWindow inherits Window {
             open-menu => { root.menu-open = !root.menu-open; }
             open-timer => { root.show-dashboard = false; root.show-text-spike = false; root.show-map = false; }
             open-break => { root.show-break = true; root.break-opened(); }
+            social-unread: root.social-unread;
+            open-social => { root.show-dashboard = false; root.show-social = true; root.social-opened(); root.surface-changed(); }
             start-focus => { root.show-dashboard = false; root.show-text-spike = false; root.show-map = false; root.fn-start-focus(); }
         }
 
         // Stage 20: the Field Notebook Break Room.
-        if root.show-break && !root.wabi: FnBreakPage {
+        if root.show-break && !root.wabi && !root.show-social: FnBreakPage {
             width: parent.width;
             height: parent.height;
             d: root.fn-break;
@@ -698,15 +777,53 @@ export component MainWindow inherits Window {
             pill-score: root.fn-data.pill-score;
             toggle-theme => { root.appearance-toggle-dark(); }
             open-menu => { root.menu-open = !root.menu-open; }
+            social-unread: root.social-unread;
             picked-tab(i) => {
                 if i == 0 { root.show-break = false; root.show-dashboard = true; root.surface-changed(); }
                 if i == 2 { root.show-break = false; root.show-dashboard = false; root.show-text-spike = false; root.show-map = false; root.surface-changed(); }
+                if i == 5 { root.show-break = false; root.show-dashboard = false; root.show-social = true; root.social-opened(); root.surface-changed(); }
             }
             play(i) => { root.break-play(i); }
             unlock(i) => { root.break-unlock(i); }
             add-water => { root.break-water(); }
             next-stretch => { root.break-stretch(); }
             pat-rock => { root.break-pat(); }
+        }
+
+        // Stage 22a: the Field Notebook Social page.
+        if root.show-social && !root.wabi: FnSocialPage {
+            width: parent.width;
+            height: parent.height;
+            v: root.social;
+            unread: root.social-unread;
+            pill-tone: root.fn-data.pill-tone;
+            pill-label: root.fn-data.pill-label;
+            pill-score: root.fn-data.pill-score;
+            code-draft <=> root.social-code-draft;
+            name-draft <=> root.social-name-draft;
+            toggle-theme => { root.appearance-toggle-dark(); }
+            open-menu => { root.menu-open = !root.menu-open; }
+            picked-tab(i) => {
+                if i == 0 { root.show-social = false; root.show-dashboard = true; root.surface-changed(); }
+                if i == 2 { root.show-social = false; root.show-dashboard = false; root.show-text-spike = false; root.show-map = false; root.surface-changed(); }
+                if i == 4 { root.show-social = false; root.show-break = true; root.break-opened(); root.surface-changed(); }
+            }
+            subtab(i) => { root.social-subtab(i); }
+            send-request(c) => { root.social-send-request(c); }
+            respond(id, a) => { root.social-respond(id, a); }
+            open-person(id) => { root.social-open-person(id); }
+            copy-code => { root.social-copy-code(); }
+            copy-invite => { root.social-copy-invite(); }
+            refresh => { root.social-refresh(); }
+            scope(i) => { root.social-scope(i); }
+            period(i) => { root.social-period(i); }
+            edit-name => { root.social-edit-name(); }
+            save-name(n) => { root.social-save-name(n); }
+            cancel-name => { root.social-cancel-name(); }
+            toggle-private => { root.social-toggle-private(); }
+            toggle-auto-post => { root.social-toggle-auto-post(); }
+            toggle-hours => { root.social-toggle-hours(); }
+            create-account => { root.social-create-account(); }
         }
 
         // Stage 19: the Wabi-Sabi style replaces the whole production surface (sidebar shell).
@@ -717,8 +834,24 @@ export component MainWindow inherits Window {
             dash: root.wabi-dash;
             timer: root.wabi-timer;
             quiet-data: root.wabi-quiet-data;
-            on-timer: !root.show-dashboard && !root.show-break;
-            on-rest: root.show-break;
+            on-timer: !root.show-dashboard && !root.show-break && !root.show-social;
+            on-rest: root.show-break && !root.show-social;
+            on-circle: root.show-social;
+            circle-menu-open: root.circle-menu-open;
+            circle-sub: root.social.subtab;
+            circle-competitive: root.social.wabi-competitive;
+            circle-unread: root.social-unread;
+            circle-requests: root.social.incoming-count > 0;
+            // "Already on Circle: toggle the submenu. Coming from elsewhere: open it."
+            open-circle => {
+                if root.show-social { root.circle-menu-open = !root.circle-menu-open; }
+                else { root.circle-menu-open = true; root.show-break = false; root.rest-menu-open = false; root.show-social = true; root.social-opened(); }
+            }
+            pick-circle(i) => {
+                if !root.show-social { root.show-break = false; root.rest-menu-open = false; root.show-social = true; root.social-opened(); }
+                root.social-subtab(i);
+            }
+            toggle-competitive => { root.social-wabi-competitive(!root.social.wabi-competitive); }
             rest-menu-open: root.rest-menu-open;
             rest: root.wabi-rest;
             rest-room: root.rest-room;
@@ -730,10 +863,10 @@ export component MainWindow inherits Window {
             rock-bounce: root.rock-bounce;
             // "Already on Rest: toggle the submenu. Coming from elsewhere: open it."
             open-rest => {
-                if root.show-break { root.rest-menu-open = !root.rest-menu-open; }
-                else { root.rest-menu-open = true; root.show-break = true; root.break-opened(); }
+                if root.show-break && !root.show-social { root.rest-menu-open = !root.rest-menu-open; }
+                else { root.show-social = false; root.rest-menu-open = true; root.show-break = true; root.break-opened(); }
             }
-            pick-room(i) => { root.rest-pick-room(i); }
+            pick-room(i) => { root.show-social = false; root.rest-pick-room(i); }
             rest-toggle => { root.rest-toggle(); }
             rest-reset => { root.rest-reset(); }
             rest-edit(t) => { root.rest-edit(t); }
@@ -752,8 +885,8 @@ export component MainWindow inherits Window {
             sakura: root.sakura;
             petals: root.petals;
             texture-frame: root.texture-frame;
-            open-dashboard => { root.show-break = false; root.rest-menu-open = false; root.wabi-open-dashboard(); }
-            open-timer => { root.show-break = false; root.rest-menu-open = false; root.wabi-open-timer(); }
+            open-dashboard => { root.show-break = false; root.show-social = false; root.rest-menu-open = false; root.wabi-open-dashboard(); }
+            open-timer => { root.show-break = false; root.show-social = false; root.rest-menu-open = false; root.wabi-open-timer(); }
             toggle-theme => { root.appearance-toggle-dark(); }
             open-menu => { root.menu-open = !root.menu-open; }
             toggle-quiet => { root.wabi-toggle-quiet(); }
@@ -771,6 +904,30 @@ export component MainWindow inherits Window {
             timer-log => { root.wabi-timer-log(); }
             timer-mode(m) => { if m >= 0 { root.select-mode(m); } }
             quiet-pick(i) => { root.wabi-quiet-pick(i); }
+        }
+
+        // Stage 22a: the Wabi-Sabi Circle, over WabiPage's content column (the sidebar stays live)
+        if root.wabi && root.show-social && root.production-surface && !root.wabi-quiet: WabiCircle {
+            x: 186px;
+            width: parent.width - 186px - 10px;
+            height: parent.height;
+            v: root.social;
+            code-draft <=> root.social-code-draft;
+            name-draft <=> root.social-name-draft;
+            send-request(c) => { root.social-send-request(c); }
+            respond(id, a) => { root.social-respond(id, a); }
+            open-person(id) => { root.social-open-person(id); }
+            copy-invite => { root.social-copy-invite(); }
+            refresh => { root.social-refresh(); }
+            scope(i) => { root.social-scope(i); }
+            period(i) => { root.social-period(i); }
+            edit-name => { root.social-edit-name(); }
+            save-name(n) => { root.social-save-name(n); }
+            cancel-name => { root.social-cancel-name(); }
+            toggle-private => { root.social-toggle-private(); }
+            toggle-auto-post => { root.social-toggle-auto-post(); }
+            toggle-hours => { root.social-toggle-hours(); }
+            create-account => { root.social-create-account(); }
         }
 
         // Field Notebook + Sakura: the texture and the petals lie over every production surface
@@ -814,6 +971,31 @@ export component MainWindow inherits Window {
             travle-clear => { root.travle-clear(); }
             travle-zoom(i) => { root.travle-zoom(i); }
         }
+        if root.show-break && root.games.open == 4: SkribblModal {
+            x: 0px;
+            width: parent.width - (root.wabi ? 10px : 0px);
+            height: parent.height;
+            d: root.skribbl;
+            canvas: root.skribbl-canvas;
+            timer: root.skribbl-timer;
+            timer-low: root.skribbl-low;
+            close => { root.game-close(); }
+            retry => { root.skribbl-retry(); }
+            start-drawing => { root.skribbl-start(); }
+            tool(i) => { root.skribbl-tool(i); }
+            size(i) => { root.skribbl-size(i); }
+            pick-color(i) => { root.skribbl-color(i); }
+            custom-color(t) => { root.skribbl-custom-color(t); }
+            undo => { root.skribbl-undo(); }
+            clear => { root.skribbl-clear(); }
+            canvas-pointer(k, x, y, w, h) => { root.skribbl-pointer(k, x, y, w, h); }
+            submit => { root.skribbl-submit(); }
+            refresh-gallery => { root.skribbl-refresh(); }
+            load-more => { root.skribbl-more(); }
+            vote(id, v) => { root.skribbl-vote(id, v); }
+            expand(id) => { root.skribbl-expand(id); }
+            collapse => { root.skribbl-collapse(); }
+        }
 
         // The menu (`.topbar-menu` / `.wabi-toolbar-menu`) and the Theme / Style panel.
         if root.menu-open: TouchArea {
@@ -840,6 +1022,34 @@ export component MainWindow inherits Window {
             pick(i) => { if root.panel-view == 1 { root.appearance-pick-style(i); } else { root.appearance-pick-palette(i); } }
             set-dark(d) => { root.appearance-set-dark(d); }
             close => { root.panel-view = -1; }
+        }
+
+        // Stage 22a: Social dialogs (over every surface) and production's message banner.
+        if root.show-social && root.social.name-prompt: NamePrompt {
+            width: parent.width;
+            height: parent.height;
+            draft <=> root.social-prompt-draft;
+            dismiss => { root.social-dismiss-prompt(); }
+            save(n) => { root.social-save-prompt(n); }
+        }
+        if root.social.confirm-new: NewAccountConfirm {
+            width: parent.width;
+            height: parent.height;
+            cancel => { root.social-cancel-account(); }
+            confirm => { root.social-confirm-account(); }
+        }
+        if root.show-social && root.social.viewing: PlayerDialog {
+            width: parent.width;
+            height: parent.height;
+            v: root.social;
+            busy: root.social.busy;
+            dismiss => { root.social-close-person(); }
+            request(code) => { root.social-send-request(code); }
+        }
+        if root.app-message != "": MessageBanner {
+            width: parent.width - (root.wabi ? 10px : 0px);
+            height: parent.height;
+            message: root.app-message;
         }
 
         // Stage 18: updater notice (production's "New update available." notice). Only exists

@@ -892,42 +892,7 @@ component DurakModal inherits Rectangle {
     accessible-label: "Daily Durak puzzle";
 }
 
-// ------------------------------------------------------------ Skribbl (Stage 22) / Travle (Stage 21)
-
-component SkribblModal inherits Rectangle {
-    callback close();
-    Backdrop { close => { root.close(); } }
-    Panel {
-        panel-w: 960px;
-        pad: 18px;
-        radius: 22px;
-        fill: Game.t.surface;
-        glow: Game.t.accent-glow-20;
-        has-glow: true;
-        content-h: 140px;
-        Rectangle {
-            Kicker { x: 0px; y: 0px; text: "DAILY SKRIBBL"; }
-            Heading { x: 0px; y: 18px; text: "Draw today's theme"; font-size: 33.6px; letter-spacing: -1.34px; }
-            CloseButton { x: parent.width - self.width; y: 0px; clicked => { root.close(); } }
-            // production with no social identity (`!socialConfigured`): theme, drawing, upload,
-            // gallery and votes all live on the social Worker, which arrives in Stage 22
-            Text {
-                y: 70px;
-                width: parent.width;
-                height: 70px;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-                wrap: word-wrap;
-                text: "Connect the Social tab once to enable Daily Skribbl, then come back and draw.";
-                font-family: FN.sans;
-                font-size: 16px;
-                color: Game.t.muted;
-            }
-        }
-    }
-    accessible-role: groupbox;
-    accessible-label: "Daily Skribbl";
-}
+// The Daily Skribbl modal lives in `skribbl.slint` (Stage 22a) and is drawn by the window.
 
 // ------------------------------------------------------------------------------------- Travle
 // Production's `.travle-modal` (App.tsx portal + App.css `.travle-*`). The map is production's
@@ -1580,7 +1545,6 @@ export component BreakGames inherits Rectangle {
         pick(n) => { root.flaggle-pick(n); }
         submit => { root.flaggle-submit(); }
     }
-    if root.d.open == 4: SkribblModal { width: parent.width; height: parent.height; close => { root.close(); } }
     if root.d.open == 5: GeodleModal {
         width: parent.width;
         height: parent.height;

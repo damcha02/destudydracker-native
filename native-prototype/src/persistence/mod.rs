@@ -9,6 +9,8 @@ pub mod break_room_port;
 pub mod migration;
 pub mod migration_academic;
 pub mod preferences_port;
+pub mod social_credentials;
+pub mod social_port;
 pub mod store;
 pub mod timer_port;
 

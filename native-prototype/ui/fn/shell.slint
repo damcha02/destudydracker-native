@@ -116,12 +116,14 @@ component FnTab inherits Rectangle {
     in property <image> icon;
     in property <bool> active;
     in property <bool> enabled: true;
+    // Stage 22a: production's `.nav-badge` after the label (unread Social activity)
+    in property <bool> dot;
     callback clicked();
 
     private property <color> fg: root.active ? FN.ink : FN.ink-4;
 
     height: 36px;
-    width: 1px + 18px + 17px + 8px + text.preferred-width + 18px + 1px;
+    width: 1px + 18px + 17px + 8px + text.preferred-width + (root.dot ? 20px : 0px) + 18px + 1px;
     background: root.active ? FN.surface : FN.paper-2;
     border-width: 1px;
     border-color: root.active ? FN.ink : FN.line;
@@ -146,6 +148,14 @@ component FnTab inherits Rectangle {
         font-weight: root.active ? 500 : 400;
         color: root.fg;
     }
+    if root.dot: Rectangle {
+        x: text.x + text.preferred-width + 12px;
+        y: 14px;
+        width: 8px;
+        height: 8px;
+        border-radius: 4px;
+        background: #8fb4ff;
+    }
     // Inactive tabs have no bottom border (the tab row's own rule shows through); square the
     // bottom corners of every tab like `border-radius: 3px 3px 0 0`.
     Rectangle { y: parent.height - 4px; height: 4px; x: 0px; width: parent.width; background: root.active ? FN.surface : FN.paper-2; }
@@ -160,11 +170,12 @@ component FnTab inherits Rectangle {
 }
 
 // `.tab-row`: full-bleed paper strip with the six primary tabs and the `?` page-help button.
-// Dashboard, Timer and (Stage 20) Break Room are migrated; the other four are drawn (production has them) but
+// Dashboard, Timer, (Stage 20) Break Room and (Stage 22a) Social are migrated; the other four are drawn (production has them) but
 // inert, with a "not migrated yet" tooltip string exposed to the host.
 export component FnTabRow inherits Rectangle {
     in property <length> content-x;
-    in property <int> active-tab;   // 0 dashboard, 2 timer
+    in property <int> active-tab;   // 0 dashboard, 2 timer, 4 break room, 5 social
+    in property <bool> social-unread;
     callback picked(int);
 
     height: 37px;
@@ -183,7 +194,7 @@ export component FnTabRow inherits Rectangle {
         FnTab { label: "Timer"; icon: @image-url("../../assets/dashboard/tab-timer.svg"); active: root.active-tab == 2; clicked => { root.picked(2); } }
         FnTab { label: "Vault"; icon: @image-url("../../assets/dashboard/tab-vault.svg"); active: root.active-tab == 3; enabled: false; }
         FnTab { label: "Break Room"; icon: @image-url("../../assets/dashboard/tab-break.svg"); active: root.active-tab == 4; clicked => { root.picked(4); } }
-        FnTab { label: "Social"; icon: @image-url("../../assets/dashboard/tab-social.svg"); active: root.active-tab == 5; enabled: false; }
+        FnTab { label: "Social"; icon: @image-url("../../assets/dashboard/tab-social.svg"); active: root.active-tab == 5; dot: root.social-unread; clicked => { root.picked(5); } }
     }
 
     // `.page-help-button.tab-help-button` (36x36 "?")
