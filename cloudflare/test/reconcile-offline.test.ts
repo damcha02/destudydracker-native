@@ -19,9 +19,10 @@ async function createUser(userId: string, deviceSecret: string, friendCode: stri
 
 /**
  * Starts, backdates, and finishes a verified session so it becomes a 'finished' anchor with a
- * known credited-minutes boundary. `lastHeartbeatMinutesAgo` must exceed 20 (the heartbeat+grace
- * window) so the credited end lands meaningfully before "now", leaving real room between the
- * returned `gapStart` and actual test-execution time for offline intervals to occupy.
+ * known credited-minutes boundary. `lastHeartbeatMinutesAgo` must exceed 120
+ * (VERIFIED_SESSION_NORMAL_CREDIT_GRACE_MS, the normal-credit grace window) so the credited end
+ * lands meaningfully before "now", leaving real room between the returned `gapStart` and actual
+ * test-execution time for offline intervals to occupy.
  */
 async function createFinishedAnchor(userId: string, deviceSecret: string, startedMinutesAgo: number, lastHeartbeatMinutesAgo: number) {
   const start = await request("/verified-session/start", { userId, deviceSecret });
@@ -56,10 +57,10 @@ describe("offline verified-session reconciliation", () => {
 
   it("credits a genuine offline gap into verified_daily_stats_offline, distinct from the live-verified table", async () => {
     await createUser("offline-user", "offline-secret", "BCDF-2345");
-    const { sessionId, creditedMinutes: liveCreditedMinutes, gapStart } = await createFinishedAnchor("offline-user", "offline-secret", 30, 25);
+    const { sessionId, creditedMinutes: liveCreditedMinutes, gapStart } = await createFinishedAnchor("offline-user", "offline-secret", 130, 125);
     expect(liveCreditedMinutes).toBeGreaterThan(0);
 
-    // 5 real minutes of room exist between gapStart and "now" here (25 - 20); stay well inside it.
+    // 5 real minutes of room exist between gapStart and "now" here (125 - 120); stay well inside it.
     const intervalEnd = new Date(gapStart + 3 * 60_000).toISOString();
     const response = await request("/verified-session/reconcile-offline", {
       userId: "offline-user",
@@ -85,8 +86,8 @@ describe("offline verified-session reconciliation", () => {
 
   it("truncates a claim that exceeds the plausibility cap and reports how much was cut", async () => {
     await createUser("cap-user", "cap-secret", "BCDG-2346");
-    // 15 real minutes of room (35 - 20) between gapStart and "now".
-    const { sessionId, gapStart } = await createFinishedAnchor("cap-user", "cap-secret", 40, 35);
+    // 15 real minutes of room (135 - 120) between gapStart and "now".
+    const { sessionId, gapStart } = await createFinishedAnchor("cap-user", "cap-secret", 140, 135);
 
     // A real single interval can never claim more than actual elapsed wall-clock time (it's
     // clamped to "now" server-side) — so simulate an implausible claim the way a buggy or
@@ -111,7 +112,7 @@ describe("offline verified-session reconciliation", () => {
 
   it("clamps claims to the server-known anchor — a client cannot claim time already covered by the live path", async () => {
     await createUser("clamp-user", "clamp-secret", "BCDH-2347");
-    const { sessionId, gapStart } = await createFinishedAnchor("clamp-user", "clamp-secret", 30, 25);
+    const { sessionId, gapStart } = await createFinishedAnchor("clamp-user", "clamp-secret", 130, 125);
 
     // Claim starting 20 minutes before the real gap start, i.e. reaching back into
     // already-live-credited time, but only 3 real minutes past the true gap start.
@@ -135,7 +136,7 @@ describe("offline verified-session reconciliation", () => {
 
   it("records a chainTipHash mismatch for audit without rejecting or blocking credit", async () => {
     await createUser("chain-user", "chain-secret", "BCDJ-2348");
-    const { sessionId, gapStart } = await createFinishedAnchor("chain-user", "chain-secret", 30, 25);
+    const { sessionId, gapStart } = await createFinishedAnchor("chain-user", "chain-secret", 130, 125);
 
     const response = await request("/verified-session/reconcile-offline", {
       userId: "chain-user",
@@ -156,7 +157,7 @@ describe("offline verified-session reconciliation", () => {
 
   it("verifies a chainTipHash that an honest client would actually compute over its raw, unclamped submission", async () => {
     await createUser("honest-chain-user", "honest-chain-secret", "BCDL-234N");
-    const { sessionId, gapStart } = await createFinishedAnchor("honest-chain-user", "honest-chain-secret", 30, 25);
+    const { sessionId, gapStart } = await createFinishedAnchor("honest-chain-user", "honest-chain-secret", 130, 125);
 
     // Mirrors desktop/src/lib/social.ts's hashOfflineIntervals exactly: sha256 over the raw
     // {startedAt, endedAt} pairs as sent, before the server applies any gap/now clamping.
@@ -183,7 +184,7 @@ describe("offline verified-session reconciliation", () => {
 
   it("a single capped claim alone does not flag the account, but combined with a second distinct signal it does", async () => {
     await createUser("flag-user", "flag-secret", "BCDK-2349");
-    const { sessionId, gapStart } = await createFinishedAnchor("flag-user", "flag-secret", 40, 35);
+    const { sessionId, gapStart } = await createFinishedAnchor("flag-user", "flag-secret", 140, 135);
 
     const oneInterval = { startedAt: new Date(gapStart).toISOString(), endedAt: new Date(gapStart + 14 * 60_000).toISOString() };
     const capped = await request("/verified-session/reconcile-offline", {
