@@ -12,6 +12,20 @@ export global Emoji {
     in-out property <string> symbol: "";
 }
 
+// Chromium's `line-height: normal`: round(ascent) + round(descent) + round(line gap), from the face
+// Slint actually resolved (Slint reports ascent/descent; the gap is the face's hhea ratio). Heavy
+// weights matter: on Windows, Arial at weight >= 800 resolves to Arial Black (17px line box at
+// 11.84px against Liberation Sans' 14px on Linux), in Chromium and in Slint alike.
+export global CssLine {
+    // FN.serif's line gap: Liberation Serif 0.0425 (Linux); Rust sets 0 for Georgia (Windows)
+    in-out property <float> serif-gap: 0.0425;
+    // Arial / Arial Black / Liberation Sans
+    out property <float> sans-gap: 0.0327;
+    public pure function normal(m: FontMetrics, size: length, gap: float) -> length {
+        return round(m.ascent / 1px) * 1px + round(-m.descent / 1px) * 1px + round(gap * size / 1px) * 1px;
+    }
+}
+
 // One game card (`studyBreakGames` entry in its current state).
 export struct BrCard {
     name: string,

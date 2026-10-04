@@ -4,6 +4,8 @@
 
 **PASS WITH CONCERNS — PENDING WINDOWS VERIFICATION** (Linux portable pass, uncommitted for review).
 
+**Windows VM verification (2026-10-04, §53): PASS WITH CONCERNS — WINDOWS FUNCTIONALLY VERIFIED.** The portable pass was committed and pushed as `6758a56`; the Windows fix (W21-1, heavy-weight line boxes) is left uncommitted on top for review. The Linux results below are unchanged.
+
 - Travle is a real game now: a pure-Rust domain in `study-tracker-core`, golden-tested against production's own code, plus a native map and modal in Field Notebook and Wabi-Sabi.
 - Concerns (none blocking): keyboard focus of buttons/dropdown rows (shared with Stage 20's combos); startup could not be timed cleanly in this session; the serif line-gap needs a Windows check; +0.86 MB stripped binary (+2.3 %). See §44.
 
@@ -449,3 +451,230 @@ Final run (Linux, 2026-10-03):
 | `git diff -- desktop` | empty |
 
 Stage 20's recorded counts (158 core / 238 app) were taken on Windows; Stage 21 adds 16 core Travle tests (golden, invariant and rule tests) and, in the app crate, 4 controller tests (replacing the placeholder test), 1 production-normalization port test and 6 `travle_map` tests.
+
+## 53. Windows VM verification
+
+Run 2026-10-04 on the Stage 20 VM. Labels as in Stage 20 §43: **A** = functional Windows result (closes the gate in a VM), **B** = VM diagnostic (software GL; regressions/leaks only), **C** = physical Windows required. Sections 1–52 above are the Linux pass and are kept unchanged.
+
+### 53.1 Checkpoint
+
+Preflight before any edit: branch `main`; `HEAD` = `origin/main` = **`6758a56`** ("native: implement stage 21 travle"); working tree clean; `git diff --check` clean; `git diff -- desktop` empty. The exact checkpoint was verified; `6758a56` was not amended and nothing was pushed.
+
+### 53.2 Environment
+
+| | |
+|---|---|
+| Machine | QEMU Q35 / EDK II VM, 8 vCPU, 8 GB (same VM as Stage 20) |
+| Windows | 11 Pro 25H2, build 26200.8037, timezone Pacific (fixtures `--tz -07:00`, `STUDY_NATIVE_NOW=2026-09-30T12:00:00-07:00`) |
+| Display | **Changed since Stage 20:** this pass ran in an **RDP session** (Microsoft Remote Display Adapter, 2512×1500 physical at **175 % / 168 DPI**, 1435×857 logical), not on the VirtIO console (1280×800, 100 %). Captures pin `SLINT_SCALE_FACTOR=1` and render in-process (`STUDY_NATIVE_SNAPSHOT`), so parity is unaffected; the live real-input pass ran at the real 175 %. |
+| GL | Mesa 26.2.3 llvmpipe (`opengl32.dll` + `libgallium_wgl.dll` beside `target/release/*.exe`, `GALLIUM_DRIVER=llvmpipe`), as in Stage 20 §43.1. Test-runtime only: ignored by `/target/`, not tracked (`git ls-files "*.dll"` empty), not packaged, not part of renderer selection. Every CPU/fps/startup number below is **B — WINDOWS VM, MESA LLVMPIPE, NOT PHYSICAL GPU PERFORMANCE**. |
+| Toolchain | rustc/cargo 1.99.0 MSVC, VS 2022 Build Tools, Node 24.19 |
+| Production reference | scratch `vite build` of a copy of `desktop/` + `design/` (+ `PRIVACY.md`, imported by `App.tsx`), headless Edge, throw-away profiles |
+
+### 53.3 Build and tests before any change (A)
+
+`cargo fmt --check` clean; `cargo check --workspace` **0 warnings** (the 56 Linux dead-code warnings are Windows-only code that is used here); `cargo test --workspace`: **core 174 passed / 1 ignored, app 249 passed / 1 ignored, 0 failed**; `cargo test -p study-tracker-core` 174 / 1 ignored; `cargo build --release` 0 warnings, **34,776,064 bytes**. The test build keeps the one pre-existing warning (`map/tests.rs` `region`).
+
+Counts against Stage 20 Windows (158 core + 238 app, 1 ignored): core +16 Travle tests and +1 ignored (`travle_timing_report`, a manual benchmark); app 238 → 249 = the Linux 240 + 9 Windows-only tests (3 `single_instance`, 4 `updater::http`, 2 W20-1 `win_host`). Stage 21's app delta is +11 (4 controller tests replacing the placeholder test, 1 port test, 6 `travle_map` tests), the same on both platforms.
+
+### 53.4 Bugs found and fixed
+
+| Id | Class | Symptom → cause | Fix | Verification |
+|---|---|---|---|---|
+| **W21-1** | Windows metrics (portable formula) | FN dark mid **3.66** /255: production's modal was 11 px taller (52→929 vs 57→923); Start/Destination/Shortest cards 67 vs 63 px, Latest guess 88 vs 81, result-card kicker/route label/stat tiles/legend each 3–5 px short, the status line 3 px high. **Cause:** on Windows, Arial at weight ≥ 800 resolves to **Arial Black** in Chromium (probed: `font: 850 11.84px Arial` → 43.17 × 17 px vs 700 → 38.59 × 14) and in Slint alike (same glyph widths), so the heavy labels' `line-height: normal` boxes are 17–18 px; Stage 21 hard-coded Liberation Sans' 12/14 px boxes (`card-h: 64px`, `+18px`, `+42px`, `12px`, `14px`). Separately, the heading used Liberation Serif's 0.0425 line gap; Georgia has none (36 px → 41 px line). | Line boxes computed from the resolved face: new `CssLine` global (`ui/break/types.slint`, `normal(font-metrics, size, gap)` = Chromium's rounding; `serif-gap` 0.0425 by default, **0 on Windows**, set next to Stage 20's `Emoji.symbol`). Card heights, value/third-line offsets, result-card kicker/route label/stat tiles/legend and the status line (`max(strut, own line)`) use it. With Liberation Sans/Serif the formulas give exactly the old constants (14/20/12/18/14 px, 64/58 px cards), so **Linux layout is unchanged by construction**. | FN dark mid 3.66 → **1.79**; geometry now equal to production within 1 px (cards 167–233, Latest guess 650–737, Shortest 844–910); status line on production's baseline; won card section by section within 1 px. All 16 pairs in §53.6. No UI geometry test harness exists (adding Slint's testing backend would be a new dependency), so the captures are the regression check, as for W20-2/W20-4. |
+
+Considered and **not** changed:
+- **Corrupt primary store is replaced (pre-existing, platform-independent, documented Stage 15 policy).** A `store.json` that no longer parses (my own BOM-prefixed rewrite during testing) loads as defaults and the next persist writes a fresh envelope without keeping the unreadable file. Stage 20's start-up salt fill makes that write happen without user action. Not Travle and not Windows-specific; recommended for the Stage 24 persistence hardening (quarantine the unreadable file before replacing it). Malformed **Travle** data inside a valid store is handled safely (§53.11).
+- Stale caret after a dropdown pick (shared Stage 20 `CountryCombo`, §53.8).
+
+### 53.5 Functional Travle verification (A)
+
+Synthetic profiles only (`gen-break-fixture.mjs full|unlocked --travle fresh|mid|won|lost`, throw-away `STUDY_NATIVE_DATA_DIR`). In-app `STUDY_NATIVE_INPUT` replay for scripted flows plus real `SendInput` (guarded: every click asserts the app owns the point, every key asserts the app is foreground).
+
+| Area | Result |
+|---|---|
+| Smoke: release exe, no console, one process, shell, FN Break Room, Wabi, Travle | PASS |
+| Locked state (`unlocked` fixture): card dimmed with Unlock, identical to production (page diff 1.94) | PASS |
+| Unlock: one token (`totalUnlocks` 12 → 13, Travle added once); a second click on the same spot does nothing; reopening in a new process consumes nothing | PASS |
+| Daily puzzle: Syria → Bhutan (`2026-09-30:9zwdlq`), 7 steps left | PASS |
+| Focus opens the list; typing filters (`irax` + Backspace → Iran, Iraq); mouse pick; Enter; STEP click; × clear | PASS (real input) |
+| Invalid (`Atlantis`, `Turkey`): rejected, draft kept, list reopens ("No connected countries found."), 0 writes | PASS |
+| Start country / duplicate (`Syria`, `iraq`): rejected, route unchanged, 0 writes | PASS |
+| Diacritics: `Türkiye` accepted and stored as UTF-8 `"Türkiye"`; no aliases (production) | PASS |
+| Feedback: "Iraq is on the route.", "Afghanistan is on the route."; route chips, map fills, polyline update | PASS |
+| Focus after submit stays in the field (next guess typed straight away) | PASS |
+| Zoom +/− (2 steps), Escape (no binding, as production), × close, reopen keeps draft / list / zoom (production quirk 9) | PASS (real input) |
+| Win (`China`): "Route complete", result card, Solved card status | PASS |
+| Loss (fixture `lost`): "Route missed" card | PASS (capture) |
+| Play log: every Play appends to `playedBreaks`, as production's `logPlayedBreak` | PASS (parity) |
+
+### 53.6 Visual parity (A for layout; numbers B / VM-LIMITED)
+
+`scripts/visual-parity/travle-pair.ps1` (new; the Windows twin of `travle-pair-linux.sh`): same fixture, frozen 2026-09-30 12:00 Pacific, `Math.random` / `BREAK_PICK` 0.25, 1520 × 980 at scale 1 unless noted; production in headless Edge, native in-process snapshot (llvmpipe). Mean abs per-channel difference /255, whole window, **after W21-1**:
+
+| # | Fixture | Windows | Linux (§27) | Class |
+|---|---|---|---|---|
+| 1 | FN dark — fresh | **1.67** | 1.22 | MATCH |
+| 2 | FN dark — mid (before W21-1: 3.66) | **1.79** | 1.30 | MATCH |
+| 3 | FN dark — won (modal scrolls) | **2.30** | 1.92 | CLOSE |
+| 3b | FN dark — lost | **2.24** | 1.85 | CLOSE |
+| — | FN light — mid | **2.23** | 1.64 | CLOSE |
+| 4 | Wabi light — fresh | **1.89** | 1.60 | MATCH |
+| 5 | Wabi dark — mid | **1.38** | 1.05 | MATCH |
+| 6 | Wabi light — won | **2.40** | 2.26 | CLOSE |
+| 6b | Wabi dark — lost | **1.83** | 1.54 | CLOSE |
+| 7 | FN dark + Sakura — mid | **2.33** | 1.88 | CLOSE |
+| 7b | Wabi light + Sakura — mid | **2.03** | 1.72 | CLOSE |
+| — | FN dark 1100 × 760 (compact) mid / won | **2.44 / 2.95** | 2.32 / 2.98 | CLOSE |
+| — | FN dark 1280 × 800 mid (VM baseline size) | **1.75** | — | MATCH |
+| — | FN dark scale 1.25 (emulated) mid | **2.16** | 2.78 | CLOSE |
+| — | Wabi light scale 1.25 (emulated) won | **3.09** | — | CLOSE (edge AA + 1 px) |
+
+Remaining differences: text/edge antialiasing (femtovg under llvmpipe vs Chromium), the combo field ≤ 1 px higher, the shell's score stamp (pre-existing, not Travle). No clipping, overlap, missing text, wrong colour or wrong state. Before W21-1 only FN dark mid was scored (3.66); the other rows were captured after the fix.
+
+### 53.7 Typography and glyphs (A)
+
+- **Georgia heading:** production's 36 px heading is a 41 px line (Georgia hhea line gap 0); native now matches (W21-1). The result-card 32 px heading uses Slint's natural height (~36.4 px) against production's 36 px — sub-pixel.
+- **Heavy sans labels:** Arial Black in both engines at weight ≥ 800 (W21-1).
+- **Glyphs:** ✕ (close), × (clear), ▾ (dropdown), +/− (zoom), the `→`/`->` route text, `ü` in Türkiye — all render, no tofu (Stage 20's `Emoji.symbol` = Segoe UI Symbol path reused). No emoji substitution.
+
+### 53.8 Input / keyboard (A)
+
+- Typing, Backspace, Delete, ←/→, Enter, Escape, mouse pick, × clear and STEP click work through real `SendInput`; the list stays anchored under the field across live resizes. Not separately exercised: a real-input ▾ click (the toggle ran through the stress hook) and the longest names in the rows (row text elides, Stage 20 combo).
+- **Shared Stage 20 combo behaviour, not changed:** after a mouse pick the field keeps focus but its caret stays where it was in the typed text (`ira|` → `Ira|q`), so an immediate ←/Delete edits mid-word. Production differs the other way: the option is a `<button>`, so focus leaves the field entirely after a pick. Geodle and Flaggle behave the same as Travle. Deferred with the Tab-stop item below.
+- **Tab stops (KNOWN SHARED LIMITATION — DEFERRED):** real Tab ×10 on Travle, Geodle and Flaggle gives the identical cycle window → text field → window; buttons and rows are pointer / UIA-action targets only. Travle introduces no new or worse focus regression.
+- IME: §53.18.
+
+### 53.9 Map rendering / hit testing (A)
+
+Production map in every capture: all 195 regions, graticule, water, start (teal) / target (pink) / route (green) fills, route polyline, markers, watermark and zoom controls inside the card's rounded clip; zoomed view equal to production. After 40 live resizes (window 1300 × 900 ↔ 2400 × 1440 physical at 175 %) the map returns to the right viewBox and the list rows hit-test at their drawn positions (Albania picked after the resizes). Production's map has no pointer handlers, so no map hit testing exists to verify (Stage 11's lab keeps its own).
+
+### 53.10 DPI / resize (A)
+
+- **100 %:** every capture pins scale 1 (1520 × 980, 1280 × 800, 1100 × 760): no clipping; compact layout at ≤ 820 px tall.
+- **175 % — real Windows scaling** (RDP session, 168 DPI): full live game played; modal, list, map, result card crisp and unclipped; at ~730 × 485 logical the modal scrolls like production.
+- **125 %:** **emulated only** (`SLINT_SCALE_FACTOR=1.25`, captures 2.16 / 3.09, no clipping). A real 125 % session was not available (the DPI of this RDP session is set by the client): **real 125 % → Stage 24 (C)**.
+- **Live resize** with the list open, mid-game: no crash, no stale geometry. `STUDY_NATIVE_TRAVLE_STRESS=resize:300` (3 sizes) settles to 0 frames, 0 writes.
+
+### 53.11 Persistence / restart (A)
+
+| Case | Result |
+|---|---|
+| A fresh → restart | same puzzle, no guess, 0 Travle writes |
+| B one guess (Iraq) → **forced kill** (`Stop-Process -Force`) → restart | `["Iraq"]` restored; no `.tmp` left; primary file intact |
+| C multiple guesses → restart | `[Iraq, Iran, Afghanistan]` restored |
+| D completed (won) → restart | `completed/won` kept, result card shown, no duplicate guess |
+| E malformed `travlePuzzle` (numeric salt, garbage date, non-array guesses, a string, `null`, non-string + 11 guesses, unknown start + wrong id + extra key) | no panic or error line; numeric/missing salt → new salt and today's puzzle; non-strings dropped before the 7-cap with `completed` kept (production quirk 6); unknown start + wrong id kept on load, replaced by today's puzzle (same salt) on open |
+| F store written by the real **Stage 20 build (`7f1f533`)** | Stage 21 loads it with no write; Play draws today's puzzle with the stored salt; the guess persists; the Stage 20 build reopens the Stage 21 store unchanged (rollback) |
+| G production-format backup import | every run above imports a production backup fixture (`imported-backups/` copy kept) |
+
+### 53.12 Date rollover (A)
+
+Won puzzle at 2026-09-30 23:59:30, relaunch at 2026-10-01 00:00:30 (clock hook, VM clock untouched): the stored puzzle stays until opened, the card no longer shows Solved, unlocks reset with the day (no token yet on the new day, so Unlock is unavailable), **no write at launch** (store hash unchanged over 25 s; frames 2 then 0), badge counters unchanged (`full-house 2, perfectionist 1, early-bird 3, speedrunner 2`). The new-day puzzle selection itself is covered by the controller test and the 705 golden dates.
+
+### 53.13 Economy / achievements (A)
+
+Study time → tokens → Travle unlock (exactly one) → play log → completion → evaluation: no duplicate badge across play, win, restart and day change (counters above unchanged); `travle_open_play_counts_for_explorer_and_full_house_exactly_once` passes on Windows. There is no Travle-specific achievement (§4).
+
+### 53.14 Static, hidden and minimized rendering (A)
+
+`scripts/stage21-perf.ps1` (new; stage20-perf methodology, `STUDY_NATIVE_FRAME_STATS` intervals wholly inside the window):
+
+| Scenario | Frames | Store written | CPU (B) |
+|---|---|---|---|
+| FN Break Room, Travle closed | 0 | no | 0.00 % |
+| FN Travle fresh / mid / won / lost; FN light mid | **0** each | no | 0.00–0.08 % |
+| Wabi light fresh / dark mid / light won | **0** each | no | 0.00 % |
+| FN + Sakura mid; Wabi + Sakura mid (animated by design) | 153 / 10 s, 77 Sakura ticks | no | ~250 % (llvmpipe) |
+| FN Travle mid + Timer **minimized**; Wabi + Sakura + Timer **minimized** | **0**, 0 Sakura ticks | no | 0.08–0.16 % |
+| FN Travle mid + Timer **tray**; Wabi + Sakura + Timer **tray** | **0**, 0 Sakura ticks | no | 0.00–0.16 % |
+
+After real interaction (typing, picks, guesses, zoom, resize) the live window returned to **0 frames** per 10 s. 22 live petals everywhere; one Sakura clock (`starts − stops = 1` after 400 lifecycle transitions).
+
+### 53.15 Stress and memory (B)
+
+Private WS / Private Bytes (MB). llvmpipe keeps render buffers in process memory, so these are not comparable with Linux anon or physical Windows. Perf-matrix runs used the real 175 % scaling (larger framebuffers than Stage 20's 100 %), so cross-stage comparisons use same-session A/Bs.
+
+| Point | Private WS / Bytes |
+|---|---|
+| Break Room, Travle closed (175 %) | 90.9 / 120.3 |
+| Travle FN fresh / mid / won / lost | 119.7 / 148.4 · 118.2 / 147.3 · 127.6 / 156.4 · 130.9 / 162.7 |
+| Travle Wabi fresh / mid | 136.3 / 171.3 · 142.3 / 178.4 |
+| Minimized / tray-hidden | 118.0 / 147.1 · 121.6 / 151.8 |
+| **500 open/close** (FN) | band 135–169 / 168–210, no trend, ends 150.7 / 187.3; **writes 2 → 2**, threads 25 → 19 |
+| 500 open/close (Wabi dark) | band 115–140 / 157–172, ends 125.4 / 171.7; writes 2 → 2 |
+| type ×500 | band 150–178 / 180–212; writes 2 → 2 |
+| guess ×100 / ×400 | band 177–232 / 211–284, no trend; writes = accepted guesses + 2 base (import, Play) = **498 / 1,989 + 2**, equal to a core recomputation of the same sequence |
+| resize ×300 | 169–203 / 197–234; writes 2 → 2 |
+
+Same-session A/B at scale 1, 1520 × 980:
+- Break Room: Stage 20 121.8 vs Stage 21 121.4 MB private bytes.
+- Travle open vs Stage 20's placeholder: FN 147.9 vs 138.4, Wabi 173.8 vs 147.8.
+- Open/close timeline: Break page 94.9 → open #1 126.4 → close 127.3 → open #2 149.2, then **145.1–150.6 for every later open/close** (plateau). The Stage 20 placeholder and Flaggle stay at 104–109 with the same script.
+- **Reading:** the real map costs a one-time renderer high-water (195 path tessellations / stencil buffers held by llvmpipe in process memory) that is not returned on close but does not grow. Linux measured +2.3 MiB anon for the same state. **Not a leak; re-measure on physical Windows (C).**
+
+Map stress (Stage 11 bench, `map-stress-windows.ps1`, pan 12 s, isolated data dir): World 28.8 fps / 170 MB private bytes, Dense ×10 26 / 172, Dense ×50 12 / 198, Cells 21.3 / 233 (high-water), Giant 4 / 163; no crash, no panic, every run exits. fps is llvmpipe-bound (B, not a gate).
+
+### 53.16 Startup (B)
+
+`STUDY_NATIVE_STARTUP_REPORT` (`FIRST_FRAME`, ms since `main`), 12 launches per cell, Stage 20 (`7f1f533`, built in a temporary worktree) and Stage 21 interleaved, alternating order, same VM and session:
+
+| Scenario | Stage 20 median (min–max) | Stage 21 median (min–max) |
+|---|---|---|
+| fresh profile | 583 (565–629) | 587 (569–607) |
+| stored profile | 665 (652–683) | 666 (649–743) |
+| stored, Travle puzzle from an older day (pair table built) | 663 (655–711) | 656 (645–680) |
+| launch straight into Travle (`OPEN_GAME=2`) | 1,074 (placeholder) | 1,184 (real modal + map) |
+
+**No startup regression.** The +110 ms is the first Travle open under software GL (map parse plus the first tessellation of 195 paths), paid only when Travle is the first screen. Absolute numbers are VM/llvmpipe; physical comparison is C.
+
+### 53.17 Platform / Stage 18–20 regression
+
+- **Single instance** (`stage20-instance.ps1` with Travle open): 8 simultaneous launches → **1 survivor**; 20 second launches → 0 failures, 1 process, median 1,019 ms; store hash unchanged (no second writer), `playedBreaks` 7 → 7; tray menu → Quit exits, removes the message window and icon; log ends "event loop exited normally", **0 panics** (W20-1 holds). (A)
+- **Lifecycle** (`stage20-lifecycle.ps1`, Stage 20 default and again with Travle open in Wabi): **200 tray hide/restore + 200 minimize/restore, 0 failures** each; 1 process; tray icon before and after; Private WS flat (Travle run 121.2–122.1); Sakura one clock. (A)
+- **Normal exits:** every snapshot run exited 0; the live window closed via `WM_CLOSE` with "event loop exited normally". (A)
+- **Stage 20 surfaces** (`stage20-perf.ps1 -Only B20W-S`, final build): FN Break Room (full / unlocked), Wabi Games light/dark, Meditation, album closed/open, all six games in FN and Wabi, Break Room + Timer — **0 frames, no store write**, 22 petals each. Durak/Wordle/Geodle/Flaggle parity, rest timer and breathing are untouched by Stage 21 and by W21-1 (only Travle components and the new global changed). All Stage 20 automated tests pass. (A)
+- **Stage 19:** Sakura 22 petals, one clock, 0 hidden/minimized ticks; static no-Sakura surfaces 0 frames. (A)
+- **Stage 18:** platform code is byte-identical to `7f1f533` (`git diff 7f1f533 6758a56 -- src/platform` empty). The 35 updater tests (incl. the WinHTTP loopback client, bad/foreign signature, corrupted artifact) and the 3 single-instance tests pass on Windows. No real update feed contacted; the notification toast was not re-run (code unchanged). (A)
+- **Diagnostics note:** a process started with stdout piped to a parent that then exits panics on its next `STUDY_NATIVE_FRAME_STATS` line ("failed printing to stdout", `println!`). This only affects opt-in diagnostics with a dead parent pipe (harness artifact). Scripts redirect to a file.
+
+### 53.18 Accessibility / IME / network
+
+- **UIA tree** (inspected, 112 nodes): group "Daily Travle puzzle"; texts "DAILY TRAVLE", "Build the border route", counts; Button "Close"; "START: Syria", "DESTINATION: Bhutan"; **one** Image "Map route from Syria to Bhutan" (no per-polygon nodes); group "Map zoom controls" with "Zoom in"/"Zoom out"; List "Current Travle route" (chip texts); "Latest guess: …"; the status text; "Shortest route: 5 steps"; Edit "Enter a country"; "Clear country"; "Show countries"; Button "STEP". **TREE INSPECTED — NARRATOR SPEECH NOT VERIFIED.**
+- **IME:** only en-US is installed. **NOT RUN — IME UNAVAILABLE**; pending Stage 24. Unicode input covered by real `Türkiye` typing and the 465 normalization goldens.
+- **Network:** 20 s of Travle use with guesses: **0 TCP, 0 UDP** endpoints owned by the process (A).
+
+### 53.19 Binary size (A)
+
+| | Bytes |
+|---|---|
+| Stage 20 Windows (`7f1f533`, rebuilt in this VM) | 33,615,872 |
+| Stage 21 `6758a56` | 34,776,064 (+1,160,192, +3.45 %) |
+| Stage 21 + W21-1 (final) | **34,833,408** (+57,344 for the metric-driven line boxes) |
+
+Mesa DLLs are not part of the size. Growth attribution as Linux §37 (Slint-generated Travle UI, core module, no dependencies).
+
+### 53.20 Known differences / concerns
+
+1. Tab stops and the post-pick caret in the shared country combo (§53.8), deferred.
+2. Renderer memory high-water when the real map first renders under llvmpipe (§53.15), plateaued; physical re-measure.
+3. Corrupt primary store is replaced without a backup (pre-existing Stage 15 policy, §53.4).
+4. Linux re-capture recommended for W21-1 (layout unchanged by construction: identical constants for Liberation faces).
+5. Linux §33 lists "1,990" writes for `guess:400`; the accepted-guess count is 1,989 (the extra write is the base import). Doc nit only.
+6. Text antialiasing (femtovg/llvmpipe vs Chromium), ≤ 1 px combo offset.
+
+### 53.21 Still pending physical Windows (C, Stage 24)
+
+NVIDIA/FemtoVG performance and CPU; high-refresh behaviour; authoritative startup; Travle memory without llvmpipe; physical sleep/resume; real 125 % and production monitor/DPI combinations; Narrator speech; Japanese IME; installer/updater migration.
+
+### 53.22 Final checks (Windows, after W21-1)
+
+`cargo fmt --check` clean; `cargo check --workspace` **0 warnings**; `cargo test --workspace` **core 174 passed / 1 ignored, app 249 passed / 1 ignored, 0 failed** (test build: the pre-existing `region` warning); `cargo test -p study-tracker-core` 174 / 1 ignored; `cargo build --release` 0 warnings, 34,833,408 bytes; `git diff --check` clean; `git diff -- desktop` empty; `git ls-files "*.dll"` empty.
+
+No real user data: synthetic fixtures, throw-away `STUDY_NATIVE_DATA_DIR` profiles, throw-away Edge profiles; no installed Study Tracker profile on the VM.
+
+Files changed (uncommitted): `ui/break/types.slint` (`CssLine`), `ui/break/games.slint` (Travle line boxes), `ui/main.slint` (export), `src/app_break_room.rs` (Georgia gap on Windows), `docs/stage21-travle.md` (this section). New scripts: `scripts/stage21-perf.ps1`, `scripts/visual-parity/travle-pair.ps1`.
+
+### 53.23 Verdict
+
+**Stage 21: PASS WITH CONCERNS — WINDOWS FUNCTIONALLY VERIFIED.** Travle works end to end on Windows in Field Notebook and Wabi-Sabi. The one Windows-specific layout defect (W21-1) is fixed. Static, hidden and minimized surfaces render 0 frames; 500 open/close cycles plateau with no writes; persistence, rollover, economy, single instance and tray hold. Remaining concerns are physical-hardware qualification, shared keyboard polish, IME/Narrator and the pre-existing corrupt-store policy. Stage 22 not started.

@@ -7,7 +7,7 @@
 // Closing: the backdrop and the ✕ close a game, like production (which binds no Escape here).
 import { FN } from "../fn/palette.slint";
 import { Game, GamesData, WordleData, WTile, WKey, GeodleData, GeoRow, GeoClue, CountryOption,
-         FlaggleData, FlagRow, DurakData, DCard, DCol, Emoji, TravleData, TravleShape } from "types.slint";
+         FlaggleData, FlagRow, DurakData, DCard, DCol, Emoji, CssLine, TravleData, TravleShape } from "types.slint";
 
 component Kicker inherits Text {
     font-family: FN.sans;
@@ -1212,7 +1212,7 @@ component LegendDot inherits Rectangle {
     in property <color> dot;
     in property <bool> ring;
     width: 11px + 7px + t.preferred-width;
-    height: t.preferred-height;
+    height: CssLine.normal(t.font-metrics, 12.48px, CssLine.sans-gap);
     Rectangle { y: (parent.height - 11px) / 2; width: 11px; height: 11px; border-radius: 5.5px; background: root.dot; border-width: root.ring ? 1px : 0px; border-color: #e8dcc73d; }
     t := Text { x: 18px; text: root.label; font-family: FN.sans; font-size: 12.48px; font-weight: 800; color: Game.t.muted; }
 }
@@ -1223,13 +1223,14 @@ component ResultStat inherits Rectangle {
     in property <string> value;
     in property <bool> compact;
     private property <length> pad: root.compact ? 9px : 10px;
-    height: 2px + 2 * root.pad + 12px + 4px + 18px;
+    private property <length> label-lh: CssLine.normal(lab.font-metrics, 11.52px, CssLine.sans-gap);
+    height: 2px + 2 * root.pad + root.label-lh + 4px + CssLine.normal(val.font-metrics, 16px, CssLine.sans-gap);
     border-radius: 12px;
     border-width: 1px;
     border-color: Game.t.border;
     background: Game.t.travle-stat-bg;
-    Text { x: 1px + root.pad; y: 1px + root.pad; width: parent.width - 2px - 2 * root.pad; text: root.label; overflow: elide; font-family: FN.sans; font-size: 11.52px; font-weight: 900; letter-spacing: 0.9216px; color: Game.t.muted; }
-    Text { x: 1px + root.pad; y: 1px + root.pad + 16px; width: parent.width - 2px - 2 * root.pad; text: root.value; overflow: elide; font-family: FN.sans; font-size: 16px; font-weight: 700; color: Game.t.text; }
+    lab := Text { x: 1px + root.pad; y: 1px + root.pad; width: parent.width - 2px - 2 * root.pad; text: root.label; overflow: elide; font-family: FN.sans; font-size: 11.52px; font-weight: 900; letter-spacing: 0.9216px; color: Game.t.muted; }
+    val := Text { x: 1px + root.pad; y: 1px + root.pad + root.label-lh + 4px; width: parent.width - 2px - 2 * root.pad; text: root.value; overflow: elide; font-family: FN.sans; font-size: 16px; font-weight: 700; color: Game.t.text; }
 }
 
 // `.travle-result-card.won` / `.lost`
@@ -1242,12 +1243,14 @@ component TravleResult inherits Rectangle {
     private property <length> gap: root.compact ? 9px : 12px;
     private property <length> inner-w: root.width - 2px - 2 * root.pad;
     private property <length> route-pad: root.compact ? 9px : 12px;
+    private property <length> kicker-lh: CssLine.normal(kicker.font-metrics, 11.52px, CssLine.sans-gap);
+    private property <length> route-label-lh: CssLine.normal(route-label.font-metrics, 11.52px, CssLine.sans-gap);
     // `line-height: 1.45` (23.2px a line), which Slint's Text lacks: count the wrapped lines from the
     // natural height and add the half-leading above the first
     private property <int> route-lines: max(1, round(route-text.preferred-height / 18.4px));
-    private property <length> route-h: 2 * root.route-pad + 12px + 6px + root.route-lines * 23.2px;
+    private property <length> route-h: 2 * root.route-pad + root.route-label-lh + 6px + root.route-lines * 23.2px;
     private property <length> legend-y: stats.y + stats.height + root.gap;
-    height: 2px + 2 * root.pad + 12px + root.gap - 6px + head.preferred-height + root.gap + root.route-h + root.gap + stats.height + root.gap + 14px + root.gap + 46px;
+    height: 2px + 2 * root.pad + root.kicker-lh + root.gap - 6px + head.preferred-height + root.gap + root.route-h + root.gap + stats.height + root.gap + l1.height + root.gap + 46px;
     border-radius: 22px;
     border-width: 1px;
     border-color: Game.t.border;
@@ -1259,7 +1262,7 @@ component TravleResult inherits Rectangle {
     kicker := Text { x: 1px + root.pad; y: 1px + root.pad; text: root.d.won ? "ARRIVED" : "ROUTE MISSED"; font-family: FN.sans; font-size: 11.52px; font-weight: 900; letter-spacing: 1.8432px; color: Game.t.muted; }
     head := Text {
         x: 1px + root.pad;
-        y: kicker.y + 12px + root.gap - 6px;
+        y: kicker.y + root.kicker-lh + root.gap - 6px;
         width: root.inner-w;
         wrap: word-wrap;
         text: root.d.won ? "Route complete" : "Better route found";
@@ -1276,10 +1279,10 @@ component TravleResult inherits Rectangle {
         height: root.route-h;
         border-radius: 14px;
         background: #00000024;
-        Text { x: root.route-pad; y: root.route-pad; text: root.d.won ? "YOUR ROUTE" : "SHORTEST ROUTE"; font-family: FN.sans; font-size: 11.52px; font-weight: 900; letter-spacing: 0.9216px; color: Game.t.muted; }
+        route-label := Text { x: root.route-pad; y: root.route-pad; text: root.d.won ? "YOUR ROUTE" : "SHORTEST ROUTE"; font-family: FN.sans; font-size: 11.52px; font-weight: 900; letter-spacing: 0.9216px; color: Game.t.muted; }
         route-text := Text {
             x: root.route-pad;
-            y: root.route-pad + 18px + 2.4px;
+            y: root.route-pad + root.route-label-lh + 6px + 2.4px;
             width: parent.width - 2 * root.route-pad;
             wrap: word-wrap;
             text: root.d.result-route;
@@ -1306,7 +1309,7 @@ component TravleResult inherits Rectangle {
     // `.travle-result-close`
     Rectangle {
         x: 1px + root.pad;
-        y: root.legend-y + 14px + root.gap;
+        y: root.legend-y + l1.height + root.gap;
         width: close-label.preferred-width + 38px;
         height: 46px;
         border-radius: 16px;
@@ -1341,27 +1344,29 @@ component TravleModal inherits Rectangle {
     // `clamp(230px, 34vh, 320px)` / `clamp(190px, 30vh, 260px)`
     private property <length> svg-h: root.compact ? clamp(root.height * 0.30, 190px, 260px) : clamp(root.height * 0.34, 230px, 320px);
     private property <length> h3-size: root.compact ? clamp(root.width * 0.03, 19.2px, 26.4px) : clamp(root.width * 0.034, 21.6px, 32px);
-    private property <length> card-h: root.compact ? 58px : 64px;
+    // `.travle-target-card > div` etc.: border + padding + label line + 4px gap + value line
+    private property <length> card-pad-y: root.compact ? 9px : 12px;
+    private property <length> card-label-lh: CssLine.normal(label-strut.font-metrics, 11.84px, CssLine.sans-gap);
+    private property <length> card-value-lh: CssLine.normal(value-strut.font-metrics, 16.8px, CssLine.sans-gap);
+    private property <length> card-h: 2px + 2 * root.card-pad-y + root.card-label-lh + 4px + root.card-value-lh;
+    // offset of the value line below the label line; also the Latest guess card's extra `small` line
+    private property <length> card-extra: root.card-label-lh + 4px;
     private property <length> label-size: root.compact ? 11.2px : 12.48px;
     // the head block (`.travle-head`): kicker + 4, heading + 4, then the counts line, whose line box
-    // is the 16px body strut (18.4px), not its own smaller font
-    // Chromium's `line-height: normal` = round(ascent) + round(descent) + round(line gap); Slint
-    // reports ascent/descent, the gap is the face's ratio (Arial/Liberation Sans 0.0327,
-    // Times/Liberation Serif 0.0425; Georgia on Windows has none - checked in the Windows pass)
-    pure function css-line(m: FontMetrics, size: length, gap: float) -> length {
-        return round(m.ascent / 1px) * 1px + round(-m.descent / 1px) * 1px + round(gap * size / 1px) * 1px;
-    }
-    private property <length> kicker-lh: root.css-line(kicker.font-metrics, root.label-size, 0.0327);
+    // is the 16px body strut (18.4px), not its own smaller font. Line boxes: `CssLine.normal`.
+    private property <length> kicker-lh: CssLine.normal(kicker.font-metrics, root.label-size, CssLine.sans-gap);
     private property <int> h2-lines: max(1, round(h2.preferred-height / (1.149 * root.h2-size)));
-    private property <length> h2-lh: root.css-line(h2.font-metrics, root.h2-size, 0.0425) * root.h2-lines;
+    private property <length> h2-lh: CssLine.normal(h2.font-metrics, root.h2-size, CssLine.serif-gap) * root.h2-lines;
     // the 16px body strut every block line box keeps
-    private property <length> strut-lh: root.css-line(strut.font-metrics, 16px, 0.0327);
+    private property <length> strut-lh: CssLine.normal(strut.font-metrics, 16px, CssLine.sans-gap);
     private property <length> head-h: root.kicker-lh + 4px + root.h2-lh + 4px + root.strut-lh;
     private property <length> map-y: root.head-h + root.gap + root.card-h + root.gap;
     private property <length> route-y: root.map-y + root.svg-h + 2px + root.gap;
     private property <length> current-y: root.route-y + chips.height + root.gap;
-    private property <length> lower-y: root.current-y + root.card-h + 18px + root.gap;
+    private property <length> lower-y: root.current-y + root.card-h + root.card-extra + root.gap;
     private property <length> status-h: max(24px, status.preferred-height);
+    // the status line box: the body strut or the heavier face's own line, whichever is taller
+    private property <length> status-lh: max(root.strut-lh, CssLine.normal(status.font-metrics, 16px, CssLine.sans-gap));
     private property <length> play-h: 46px + root.gap + root.status-h + root.gap + root.card-h;
     // the open dropdown (`position: absolute` inside the scrolling modal) extends what scrolls
     private property <length> menu-bottom: root.d.dropdown && !root.d.completed ? root.lower-y + 46px + 6px + min(310px, max(1, root.d.options.length) * 56px + 16px) : 0px;
@@ -1391,6 +1396,8 @@ component TravleModal inherits Rectangle {
                 color: Game.t.text;
             }
             strut := Text { visible: false; text: "x"; font-family: FN.sans; font-size: 16px; }
+            label-strut := CardLabel { visible: false; text: "X"; }
+            value-strut := CardValue { visible: false; text: "X"; }
             Text { x: 0px; y: root.kicker-lh + 4px + root.h2-lh + 4px + (root.strut-lh - self.preferred-height) / 2 + 1px; text: root.d.header; font-family: FN.sans; font-size: root.label-size; letter-spacing: Game.wabi ? 0.08px : 0px; color: Game.t.muted; }
             CloseButton { x: parent.width - self.width; y: 0px; clicked => { root.close(); } }
 
@@ -1402,7 +1409,7 @@ component TravleModal inherits Rectangle {
                 width: (parent.width - 10px) / 2;
                 height: root.card-h;
                 CardLabel { x: 1px + parent.pad-x; y: 1px + parent.pad-y; text: card.label; }
-                CardValue { x: 1px + parent.pad-x; y: 1px + parent.pad-y + 18px; width: parent.width - 2px - 2 * parent.pad-x; text: card.value; }
+                CardValue { x: 1px + parent.pad-x; y: 1px + parent.pad-y + root.card-extra; width: parent.width - 2px - 2 * parent.pad-x; text: card.value; }
                 accessible-role: text;
                 accessible-label: card.label + ": " + card.value;
             }
@@ -1429,10 +1436,10 @@ component TravleModal inherits Rectangle {
             TravleCard {
                 compact: root.compact;
                 y: root.current-y;
-                height: root.card-h + 18px;
+                height: root.card-h + root.card-extra;
                 CardLabel { x: 1px + parent.pad-x; y: 1px + parent.pad-y; text: "LATEST GUESS"; }
-                CardValue { x: 1px + parent.pad-x; y: 1px + parent.pad-y + 18px; width: parent.width - 2px - 2 * parent.pad-x; text: root.d.current; }
-                CardLabel { x: 1px + parent.pad-x; y: 1px + parent.pad-y + 42px; text: root.d.guessed; }
+                CardValue { x: 1px + parent.pad-x; y: 1px + parent.pad-y + root.card-extra; width: parent.width - 2px - 2 * parent.pad-x; text: root.d.current; }
+                CardLabel { x: 1px + parent.pad-x; y: 1px + parent.pad-y + root.card-extra + root.card-value-lh + 4px; text: root.d.guessed; }
                 accessible-role: text;
                 accessible-label: "Latest guess: " + root.d.current + ", " + root.d.guessed;
             }
@@ -1450,7 +1457,7 @@ component TravleModal inherits Rectangle {
             // status and the shortest card before the combo, so its dropdown draws over them
             status := Text {
                 visible: !root.d.completed;
-                y: root.lower-y + 46px + root.gap + (root.strut-lh - self.preferred-height) / 2;
+                y: root.lower-y + 46px + root.gap + (root.status-lh - self.preferred-height) / 2;
                 width: parent.width;
                 height: root.status-h;
                 // the line sits at the top of the 24px min-height box
@@ -1469,7 +1476,7 @@ component TravleModal inherits Rectangle {
                 y: root.lower-y + 46px + root.gap + root.status-h + root.gap;
                 height: root.card-h;
                 CardLabel { x: 1px + parent.pad-x; y: 1px + parent.pad-y; text: "SHORTEST ROUTE"; }
-                CardValue { x: 1px + parent.pad-x; y: 1px + parent.pad-y + 18px; text: root.d.shortest; }
+                CardValue { x: 1px + parent.pad-x; y: 1px + parent.pad-y + root.card-extra; text: root.d.shortest; }
                 accessible-role: text;
                 accessible-label: "Shortest route: " + root.d.shortest;
             }

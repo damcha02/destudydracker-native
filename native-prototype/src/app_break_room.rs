@@ -27,7 +27,7 @@ use crate::break_room_view::{album_data, album_pages_now, fn_break_data, wabi_re
 use crate::dashboard_view::ChronoLocalClock;
 use crate::persistence::break_room_port::FileBreakRoomPort;
 use crate::persistence::NativeStore;
-use crate::{Emoji, MainWindow};
+use crate::{CssLine, Emoji, MainWindow};
 
 struct Runtime {
     // persistent list models: a repeater keeps its items (and their running animations) when the
@@ -126,6 +126,8 @@ pub fn install(window: &MainWindow, model: Rc<RefCell<AppModel>>, store_path: &P
     Emoji::get(window).set_family(emoji_family().into());
     if cfg!(windows) {
         Emoji::get(window).set_symbol("Segoe UI Symbol".into());
+        // FN.serif is Georgia here, whose hhea line gap is 0 (Chromium: 36px heading = 41px line)
+        CssLine::get(window).set_serif_gap(0.0);
     }
     apply_platform_fonts(window);
     let started = Instant::now();
