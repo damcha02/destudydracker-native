@@ -5,7 +5,7 @@
 import { FN } from "../fn/palette.slint";
 import { MonoText, SerifText, SansText, HLine, DotLine } from "../fn/parts.slint";
 import { FnTopbar, FnTabRow } from "../fn/shell.slint";
-import { Emoji } from "../break/types.slint";
+import { Emoji, CssLine } from "../break/types.slint";
 import { SocialView, SAvatar, SFriendRow, SRequestRow, SBoardRow, SStat } from "types.slint";
 
 export global SocialBlue {
@@ -176,7 +176,10 @@ component PersonRow inherits Rectangle {
     in property <length> right: 0px;
     callback activated();
     in property <bool> clickable;
-    height: max(59px, 10px + n.preferred-height + 3px + d.preferred-height + 10px + 4px);
+    // 10px padding around the 38px avatar or the two text lines, 1px rule. The lines are their
+    // `line-height: normal` boxes in the requested faces: a fallback face (a CJK name on Windows,
+    // W22a-3) makes Chromium's line taller but not the card, which the avatar still sizes
+    height: 21px + max(38px, CssLine.normal(n.font-metrics, 16px, CssLine.sans-gap) + 3px + CssLine.normal(d.font-metrics, 12.48px, CssLine.sans-gap));
     FnAvatar { x: 10px; y: (parent.height - 1px - self.height) / 2; a: root.avatar; }
     n := SansText { x: 60px; y: (parent.height - 1px - self.preferred-height - 3px - d.preferred-height) / 2; width: parent.width - 70px - root.right; text: root.name; font-size: 16px; font-weight: 700; color: FN.ink; overflow: elide; }
     d := SansText { x: 60px; y: n.y + n.preferred-height + 3px; width: parent.width - 70px - root.right; text: root.detail; font-size: 12.48px; color: FN.ink-3; overflow: elide; }
@@ -286,7 +289,9 @@ component FriendsPanel inherits Rectangle {
                 }
             }
         }
+        // every `.arena-social-section h4` has `margin: 4px 0 0`, not only the first (W22a-4)
         VerticalLayout {
+            padding-top: 4px;
             spacing: 16px;
             SectionTitle { text: "PENDING"; count: root.v.outgoing.length; }
             if root.v.outgoing.length == 0: EmptyCard { small: true; text: "No pending sent requests."; }
@@ -309,6 +314,7 @@ component FriendsPanel inherits Rectangle {
             }
         }
         VerticalLayout {
+            padding-top: 4px;
             spacing: 16px;
             SectionTitle { text: "YOUR FRIENDS"; count: root.v.friends.length; }
             if root.v.friends.length == 0: EmptyCard { text: "Share your player tag to build your friends leaderboard."; }
@@ -341,7 +347,9 @@ component Chip inherits Rectangle {
     in property <bool> active;
     callback clicked();
     width: t.preferred-width + 28px;
-    height: 35px;
+    // 1px + 9px padding around the 900-weight label's `line-height: normal` box (W22a-3: Arial
+    // Black on Windows, 39px as in WebView2; Liberation Sans 35px)
+    height: 20px + CssLine.normal(t.font-metrics, 13.44px, CssLine.sans-gap);
     border-width: 1px;
     border-color: root.active ? FN.ink : FN.line;
     background: root.active ? FN.surface : transparent;
@@ -358,21 +366,23 @@ component LeaderboardPanel inherits Rectangle {
     callback scope(int);
     callback period(int);
     callback open-row(string);
-    private property <length> name-w: (root.width - 70px - 26px - 90px - 60px - 4 * 14px) / 2;
-    height: 28px + col.preferred-height + 40px + 2px;
+    private property <length> name-w: (root.width - 69px - 26px - 90px - 60px - 4 * 14px) / 2;
+    // `article.arena-leaderboard` in Field Notebook: padding 28px 34px 40px and a border on the
+    // right side only (computed `border-width: 0 1px 0 0`; W22a-8)
+    height: 28px + col.preferred-height + 40px;
     background: FN.surface;
-    border-width: 1px;
-    border-color: FN.line-soft;
     drop-shadow-offset-y: 1px;
     drop-shadow-color: #0000002e;
+    Rectangle { x: parent.width - 1px; width: 1px; background: FN.line-soft; }
     col := VerticalLayout {
-        x: 35px;
-        y: 29px;
-        width: parent.width - 70px;
+        x: 34px;
+        y: 28px;
+        width: parent.width - 69px;
         spacing: 0px;
-        // `.arena-leaderboard-head`
+        // `.arena-leaderboard-head` (its height follows the title's line box: Liberation Serif 27px,
+        // Georgia 26px - W22a-3)
         Rectangle {
-            height: 79px;
+            height: 52px + CssLine.normal(title.font-metrics, 23.2px, CssLine.serif-gap);
             Rectangle {
                 x: 0px;
                 y: 14.5px;
@@ -384,8 +394,8 @@ component LeaderboardPanel inherits Rectangle {
                 SansText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "⚔"; font-family: Emoji.symbol != "" ? Emoji.symbol : FN.sans; font-size: 18.88px; color: FN.ink-3; }
             }
             Kicker { x: 46px; y: 4px; text: "ARENA STANDINGS"; }
-            SerifText { x: 46px; y: 20px; text: root.v.arena-title; font-size: 23.2px; font-weight: 500; letter-spacing: -0.232px; color: FN.ink; }
-            SansText { x: 46px; y: 47px; text: root.v.arena-subtitle; font-size: 16px; color: FN.ink-3; }
+            title := SerifText { x: 46px; y: 20px; text: root.v.arena-title; font-size: 23.2px; font-weight: 500; letter-spacing: -0.232px; color: FN.ink; }
+            SansText { x: 46px; y: 20px + CssLine.normal(title.font-metrics, 23.2px, CssLine.serif-gap); text: root.v.arena-subtitle; font-size: 16px; color: FN.ink-3; }
             ls := SansText { x: parent.width - self.preferred-width; y: 7.5px; text: "Last synced: " + root.v.last-synced; font-size: 12.16px; font-weight: 800; color: FN.ink-3; }
             PaperButton { x: parent.width - self.width; y: 27.5px; text: root.v.busy ? "SYNCING..." : "REFRESH"; enabled: !root.v.busy && root.v.state == 4; clicked => { root.refresh(); } }
             Rectangle { y: parent.height - 2px; height: 2px; background: FN.ink; }
@@ -393,7 +403,6 @@ component LeaderboardPanel inherits Rectangle {
         // scope and period chips (20px in, 12px apart)
         HorizontalLayout {
             padding-left: 20px;
-            height: 35px;
             spacing: 8px;
             alignment: start;
             Chip { text: "Friends Arena"; active: root.v.scope == 0; clicked => { root.scope(0); } }
@@ -403,7 +412,6 @@ component LeaderboardPanel inherits Rectangle {
         Rectangle { height: 12px; }
         HorizontalLayout {
             padding-left: 20px;
-            height: 35px;
             spacing: 8px;
             alignment: start;
             if root.v.scope != 1: Chip { text: "Daily Sprint"; active: root.v.period == 0; clicked => { root.period(0); } }
@@ -430,7 +438,9 @@ component LeaderboardPanel inherits Rectangle {
             }
             Rectangle { height: 18px; }
             for row in root.v.rows: Rectangle {
-                height: max(45px, nm.preferred-height + 27px);
+                // 13px padding around the name's line box, 1px rule (W22a-3: Georgia 44px rows,
+                // Liberation Serif 45px)
+                height: 27px + CssLine.normal(nm.font-metrics, 15.5px, CssLine.serif-gap);
                 background: row.is-self ? FN.ink.with-alpha(0.04) : transparent;
                 MonoText { x: 0px; y: (parent.height - self.preferred-height) / 2; width: 26px; text: row.rank; font-size: 11px; color: row.is-self ? SocialBlue.blue : FN.ink-4; }
                 nm := SerifText { x: 40px; y: (parent.height - self.preferred-height) / 2; text: row.name; font-size: 15.5px; font-weight: 500; color: FN.ink; overflow: elide; width: min(self.preferred-width, root.name-w - (row.is-self ? code.width + 6px : 0px)); }
@@ -498,7 +508,8 @@ component CodePlate inherits Rectangle {
         height: 18px;
         border-radius: 9px;
         background: FN.surface-2;
-        MonoText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.chip; font-size: 10.88px; color: FN.ink-3; }
+        // ⧉ is in neither Courier face; Chromium draws it from Segoe UI Symbol on Windows
+        MonoText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.chip; font-family: Emoji.symbol != "" ? Emoji.symbol : FN.mono; font-size: 10.88px; color: FN.ink-3; }
     }
     TouchArea { enabled: root.enabled; mouse-cursor: root.enabled ? pointer : default; clicked => { root.clicked(); } }
     accessible-role: button;
@@ -508,18 +519,19 @@ component CodePlate inherits Rectangle {
 
 component MiniStat inherits Rectangle {
     in property <SStat> s;
+    // set by the profile card from the label face (W22a-3)
     height: 46px;
     border-width: 1px;
     border-color: FN.line-soft;
     background: FN.surface-2;
     Rectangle {
         x: 10px;
-        y: 9px;
+        y: (root.height - 28px) / 2;
         width: 28px;
         height: 28px;
         border-radius: 9px;
         background: root.s.tone == 1 ? @linear-gradient(135deg, #ffd700 0%, #ffa000 100%) : root.s.tone == 2 ? @linear-gradient(135deg, #8fb4ff 0%, #bbd2ff 100%) : root.s.tone == 3 ? @linear-gradient(135deg, #73956a 0%, #acc1a7 100%) : transparent;
-        Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.s.icon; font-family: root.s.tone == 0 ? Emoji.family : FN.sans; font-size: 16px; font-weight: 900; color: #081018; }
+        Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.s.icon; font-family: root.s.tone == 0 ? Emoji.family : Emoji.symbol != "" ? Emoji.symbol : FN.sans; font-size: 16px; font-weight: 900; color: #081018; }
     }
     SansText { x: 46px; y: 9.3px; text: root.s.value; font-size: 14.4px; font-weight: 700; color: FN.ink; }
     SansText { x: 46px; y: 25.7px; text: root.s.label; font-size: 9.92px; font-weight: 800; color: FN.ink-3; }
@@ -558,7 +570,13 @@ component ProfilePanel inherits Rectangle {
     callback toggle-hours();
     private property <length> stat-w: (root.width - 16px) / 3;
     private property <length> console-h: 66px + (root.v.sync-error != "" ? err.preferred-height + 4px : 0px);
-    height: 89px + 100px + 20px + root.console-h + 20px + 150px;
+    // `.arena-mini-stat`: 1px + 8px padding, the 14.4px value, a 2px gap, the 9.92px/800 label's
+    // `line-height: normal` box, 8px + 1px. Windows (W22a-3): that weight resolves to Arial Black (a
+    // 14px box: 48.4px tiles, as in WebView2); Liberation Sans keeps the 46px tiles.
+    private property <length> stat-h: max(46px, 2px + 16px + 14.4px + 2px + CssLine.normal(stat-label.font-metrics, 9.92px, CssLine.sans-gap));
+    private property <length> stats-h: 2 * root.stat-h + 8px;
+    height: 89px + root.stats-h + 20px + root.console-h + 20px + 150px;
+    stat-label := SansText { visible: false; text: "TODAY"; font-size: 9.92px; font-weight: 800; }
     // avatar (the editor is Stage 22b: the "Edit" caption is kept, inert)
     FnAvatar { x: 0px; y: 0px; a: root.v.avatar; size: 56px; font: 18.56px; }
     SansText { x: 17.1px; y: 61px; text: "Edit"; font-size: 11.52px; font-weight: 800; color: FN.ink-4; }
@@ -616,13 +634,14 @@ component ProfilePanel inherits Rectangle {
     // mini stats: 3 x 2, 8px apart
     for s[i] in root.v.stats: MiniStat {
         x: mod(i, 3) * (root.stat-w + 8px);
-        y: 89px + floor(i / 3) * 54px;
+        y: 89px + floor(i / 3) * (root.stat-h + 8px);
         width: root.stat-w;
+        height: root.stat-h;
         s: s;
     }
     // `.arena-sync-console`
     Rectangle {
-        y: 89px + 100px + 20px;
+        y: 89px + root.stats-h + 20px;
         height: root.console-h;
         border-radius: 20px;
         border-width: 1px;
@@ -635,7 +654,7 @@ component ProfilePanel inherits Rectangle {
     }
     // `.profile-options`
     Rectangle {
-        y: 89px + 100px + 20px + root.console-h + 20px;
+        y: 89px + root.stats-h + 20px + root.console-h + 20px;
         height: 150px;
         border-width: 1px;
         border-color: FN.line;

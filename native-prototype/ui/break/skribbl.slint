@@ -8,7 +8,7 @@
 // The only animation is the gallery refresh spinner, which exists only while a gallery request
 // is in flight (production's `skribbl-spin`).
 import { FN } from "../fn/palette.slint";
-import { Game, Emoji } from "types.slint";
+import { Game, Emoji, CssLine } from "types.slint";
 
 export struct SkribblRow {
     id: string,
@@ -57,6 +57,12 @@ global SkribblPalette {
         #000000, #37474f, #795548, #6d4c41, #d84315, #e53935, #d81b60, #8e24aa, #5e35b1,
         #3949ab, #1e88e5, #039be5, #00acc1, #00897b, #43a047, #7cb342, #c0ca33, #fdd835,
         #ffb300, #fb8c00, #ffffff,
+    ];
+    // production's `PALETTE` strings, for the swatches' accessible names (`Color ${paletteColor}`)
+    out property <[string]> names: [
+        "#000000", "#37474f", "#795548", "#6d4c41", "#d84315", "#e53935", "#d81b60", "#8e24aa",
+        "#5e35b1", "#3949ab", "#1e88e5", "#039be5", "#00acc1", "#00897b", "#43a047", "#7cb342",
+        "#c0ca33", "#fdd835", "#ffb300", "#fb8c00", "#ffffff",
     ];
     out property <[int]> sizes: [3, 6, 10, 16, 26];
 }
@@ -297,7 +303,7 @@ component SectionHead inherits Rectangle {
             horizontal-alignment: center;
             vertical-alignment: center;
             text: "↻";
-            font-family: FN.sans;
+            font-family: Emoji.symbol != "" ? Emoji.symbol : FN.sans;
             font-size: 14.4px;
             color: Game.t.muted;
             // production's 0.8s linear spin, only while the gallery is loading
@@ -416,10 +422,13 @@ export component SkribblModal inherits Rectangle {
                 padding: 18px;
                 spacing: 12px;
                 // ---- head
+                // the kicker's and the heading's `line-height: normal` boxes, 4px apart (W22a-3: the
+                // 900-weight kicker is Arial Black on Windows - 18px, a 60px head as in WebView2;
+                // Liberation Sans/Serif give production's Linux 14px + 4px + 38px = 56px)
                 Rectangle {
-                    height: 56px;
-                    STxt { x: 0px; y: 0px; text: "DAILY SKRIBBL"; font-size: 12.48px; font-weight: 900; letter-spacing: 1.9968px; color: Game.t.muted; }
-                    Text { x: 0px; y: 18px; text: "Draw today's theme"; font-family: FN.serif; font-size: 33.6px; font-weight: 700; letter-spacing: Game.wabi ? 0px : -1.344px; color: Game.t.text; }
+                    height: CssLine.normal(kicker.font-metrics, 12.48px, CssLine.sans-gap) + 4px + CssLine.normal(heading.font-metrics, 33.6px, CssLine.serif-gap);
+                    kicker := STxt { x: 0px; y: 0px; text: "DAILY SKRIBBL"; font-size: 12.48px; font-weight: 900; letter-spacing: 1.9968px; color: Game.t.muted; }
+                    heading := Text { x: 0px; y: CssLine.normal(kicker.font-metrics, 12.48px, CssLine.sans-gap) + 4px; text: "Draw today's theme"; font-family: FN.serif; font-size: 33.6px; font-weight: 700; letter-spacing: Game.wabi ? 0px : -1.344px; color: Game.t.text; }
                     Rectangle {
                         x: parent.width - 27.6px;
                         y: 0px;
@@ -521,7 +530,7 @@ export component SkribblModal inherits Rectangle {
                             height: 26px;
                             spacing: 8px;
                             alignment: start;
-                            for c[i] in SkribblPalette.colors: Swatch { swatch: c; active: root.d.color-index == i; label: "Color " + i; clicked => { root.pick-color(i); } }
+                            for c[i] in SkribblPalette.colors: Swatch { swatch: c; active: root.d.color-index == i; label: "Color " + SkribblPalette.names[i]; clicked => { root.pick-color(i); } }
                             CustomColor { current: root.d.color; active: root.d.color-index < 0; open <=> root.custom-open; }
                         }
                         if root.custom-open: Rectangle {

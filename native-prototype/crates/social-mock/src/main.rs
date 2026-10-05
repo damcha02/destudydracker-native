@@ -2,7 +2,7 @@
 //!
 //!   social-mock [--port 47811] [--seed demo|demo-submitted|self-only|empty]
 //!               [--now 2026-10-04T12:00:00+02:00] [--latency-ms 0]
-//!               [--write-credentials <native data dir>]
+//!               [--write-credentials <native data dir>] [--fault <path>=<500|malformed|drop|delay:ms>[*n]]
 //!
 //! `--write-credentials` writes the synthetic self identity, bound to the local-test endpoint
 //! class, into a native profile directory (never a production identity). Ctrl-C stops it.
@@ -42,6 +42,32 @@ fn main() {
     if let Some(ms) = arg(&args, "--latency-ms").and_then(|v| v.parse().ok()) {
         server.set_latency(Duration::from_millis(ms));
     }
+    // `--fault <path>=<kind>[*n]` (repeatable): the next n (default 1) requests to <path> get
+    // `500`/any status, `malformed` (200 with a non-JSON body), `drop` (connection closed) or
+    // `delay:<ms>`. Manual counterparts of the faults the tests script through `MockServer::fault`.
+    for (i, a) in args.iter().enumerate() {
+        if a != "--fault" {
+            continue;
+        }
+        let Some((path, spec)) = args.get(i + 1).and_then(|s| s.split_once('=')) else {
+            continue;
+        };
+        let (kind, n) = match spec.split_once('*') {
+            Some((k, n)) => (k, n.parse().unwrap_or(1)),
+            None => (spec, 1),
+        };
+        let fault = match kind {
+            "malformed" => social_mock::Fault::Body(b"<html>not json".to_vec()),
+            "drop" => social_mock::Fault::Drop,
+            k if k.starts_with("delay:") => {
+                social_mock::Fault::Delay(Duration::from_millis(k[6..].parse().unwrap_or(1000)))
+            }
+            k => social_mock::Fault::Status(k.parse().unwrap_or(500), b"server error".to_vec()),
+        };
+        for _ in 0..n {
+            server.fault(path, fault.clone());
+        }
+    }
     if let Some(dir) = arg(&args, "--write-credentials") {
         let path = std::path::Path::new(&dir).join("social-credentials.json");
         std::fs::create_dir_all(&dir).expect("data dir");
@@ -57,7 +83,14 @@ fn main() {
         );
     }
     println!("SOCIAL_MOCK {}", server.url());
+    // the request log (method and path only, never a query or body) as it grows
+    let mut printed = 0;
     loop {
-        std::thread::sleep(Duration::from_secs(3600));
+        std::thread::sleep(Duration::from_millis(250));
+        let log = server.log();
+        for (method, path) in &log[printed.min(log.len())..] {
+            println!("REQ {method} {path}");
+        }
+        printed = log.len();
     }
 }

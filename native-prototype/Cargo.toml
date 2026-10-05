@@ -51,6 +51,10 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 tiny-skia = "0.12"
 
 [target.'cfg(windows)'.dependencies]
+# Stage 22a Windows (W22a-5, src/font_fallback.rs): Slint's documented hook into its own fontique
+# collection, to give Han/Kana/Hangul the system fallback families Chromium uses. A feature on
+# the copy of Slint already built (fontique is already compiled in), Windows only, no new crate.
+slint = { version = "1.17.1", default-features = false, features = ["unstable-fontique-010"] }
 # MessageBoxW fallback for fatal startup errors once the release build has no console (Stage 13,
 # see src/platform/startup_error.rs). windows-sys is a thin FFI-declarations crate (no codegen
 # beyond what's referenced) and is already resolved multiple times transitively by winit/glutin.

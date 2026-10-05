@@ -184,7 +184,7 @@ pub fn push() {
                 }
             })
             .collect();
-        crate::app_break_room::sync_model(&rt.rows, &ModelRc::new(VecModel::from(rows)));
+        sync_gallery(&rt.rows, rows);
         let (own_state, own) = match &s.my_image_url {
             Some(u) => state_of(u, &rt.pictures),
             None => (-1, Image::default()),
@@ -258,6 +258,32 @@ pub fn push() {
     }
     upload_canvas(&window);
     arm_clock(&window);
+}
+
+/// Updates the gallery rows in place, except a row whose picture changed (it finished loading,
+/// failed, or was replaced): that row is removed and inserted again, so its card is created with
+/// the picture. Windows verification (W22a-2): a thumbnail whose image arrived after its card's
+/// first paint (`set_row_data`) kept painting nothing under femtovg, while cards created with the
+/// image - the user's own drawing, or every card after reopening the modal - showed it.
+fn sync_gallery(cache: &VecModel<SkribblRow>, rows: Vec<SkribblRow>) {
+    if cache.row_count() != rows.len() {
+        cache.set_vec(rows);
+        return;
+    }
+    for (i, row) in rows.into_iter().enumerate() {
+        let Some(old) = cache.row_data(i) else {
+            continue;
+        };
+        if old == row {
+            continue;
+        }
+        if old.state != row.state || old.image != row.image {
+            cache.remove(i);
+            cache.insert(i, row);
+        } else {
+            cache.set_row_data(i, row);
+        }
+    }
 }
 
 /// Uploads the raster if it changed since the last upload.

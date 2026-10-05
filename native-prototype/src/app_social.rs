@@ -17,7 +17,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use slint::{
-    ComponentHandle, Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, VecModel,
+    ComponentHandle, Image, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode,
+    VecModel,
 };
 use study_tracker_core::dashboard::format::format_minutes;
 use study_tracker_core::social::avatar::{arena_hue, Avatar, AvatarStyle};
@@ -346,6 +347,16 @@ pub fn unread() -> bool {
 
 // ---------------------------------------------------------------------------------- view
 
+/// The picture of an avatar without a photo (never drawn: `has-photo` is false). One shared 1x1
+/// transparent image rather than `Image::default()`: Slint never compares two empty images as
+/// equal, so every view holding one was a changed property and repainted (W22a-6).
+fn no_photo() -> Image {
+    thread_local! {
+        static NONE: Image = Image::from_rgba8(SharedPixelBuffer::<Rgba8Pixel>::new(1, 1));
+    }
+    NONE.with(Image::clone)
+}
+
 fn s_avatar(rt: &mut Runtime, a: &Avatar, name: &str, is_self: bool) -> SAvatar {
     let kind = match a {
         Avatar::Letter { style, .. } => match style {
@@ -359,7 +370,7 @@ fn s_avatar(rt: &mut Runtime, a: &Avatar, name: &str, is_self: bool) -> SAvatar 
         Avatar::Icon { .. } => 6,
         Avatar::Photo { .. } => 7,
     };
-    let mut photo = Image::default();
+    let mut photo = no_photo();
     let mut has_photo = false;
     if let Some(url) = a.remote_photo_url() {
         if let Some(img) = rt.pictures.get(url) {
@@ -592,7 +603,11 @@ fn build_view(rt: &mut Runtime) -> SocialView {
             name: f.display_name.clone().into(),
             code: f.friend_code.as_str().into(),
             detail: Default::default(),
-            avatar: Default::default(),
+            // the chips show no avatar; the placeholder keeps the rows comparable (W22a-6)
+            avatar: SAvatar {
+                photo: no_photo(),
+                ..Default::default()
+            },
             live: is_recently_active(f.last_seen_at, now, RECENTLY_ACTIVE_MS),
         })
         .collect();
@@ -792,6 +807,28 @@ fn build_view(rt: &mut Runtime) -> SocialView {
     v
 }
 
+/// Makes `new` comparable with the window's current view: avatars without a photo get the shared
+/// placeholder, and every list whose rows equal the current one keeps the current model (so its
+/// repeater is not rebuilt). An unchanged view then compares equal as a whole.
+fn keep_unchanged_models(new: &mut SocialView, old: &SocialView) {
+    for avatar in [&mut new.avatar, &mut new.v_avatar] {
+        if !avatar.has_photo {
+            avatar.photo = no_photo();
+        }
+    }
+    fn same<T: Clone + PartialEq + 'static>(a: &ModelRc<T>, b: &ModelRc<T>) -> bool {
+        a.row_count() == b.row_count() && a.iter().zip(b.iter()).all(|(x, y)| x == y)
+    }
+    macro_rules! keep {
+        ($($field:ident),*) => {$(
+            if same(&new.$field, &old.$field) {
+                new.$field = old.$field.clone();
+            }
+        )*};
+    }
+    keep!(incoming, outgoing, friends, rows, stats, v_stats, attendance);
+}
+
 pub fn push() {
     let Some(window) = with(|rt| rt.window.upgrade()).flatten() else {
         return;
@@ -800,8 +837,14 @@ pub fn push() {
         rt.pushes += 1;
         build_view(rt)
     });
-    if let Some(v) = data {
-        window.set_social(v);
+    if let Some(mut v) = data {
+        // A reply with the same content (a friend-status poll, a refresh) must not repaint:
+        // `build_view` makes new models, which Slint compares by identity (W22a-6).
+        let old = window.get_social();
+        keep_unchanged_models(&mut v, &old);
+        if v != old {
+            window.set_social(v);
+        }
     }
     let cleared = with(|rt| {
         let cleared = !rt.code_draft.is_empty() && rt.controller.friend_code_draft.is_empty();
@@ -1093,4 +1136,87 @@ pub fn report() -> String {
         )
     })
     .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn avatar(text: &str) -> SAvatar {
+        SAvatar {
+            text: text.into(),
+            photo: no_photo(),
+            ..Default::default()
+        }
+    }
+
+    fn friend(name: &str, detail: &str) -> SFriendRow {
+        SFriendRow {
+            id: name.into(),
+            name: name.into(),
+            detail: detail.into(),
+            avatar: avatar(&name[..1]),
+            ..Default::default()
+        }
+    }
+
+    /// What `build_view` produces: fresh models every time, avatars as `s_avatar` makes them.
+    fn view(friends: Vec<SFriendRow>, incoming: i32) -> SocialView {
+        SocialView {
+            state: 4,
+            incoming_count: incoming,
+            avatar: avatar("S"),
+            friends: ModelRc::new(VecModel::from(friends)),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn empty_images_never_compare_equal_so_avatars_use_one_placeholder() {
+        // the root cause: Slint's `Image` equality is false for two empty images
+        assert!(Image::default() != Image::default());
+        assert!(SAvatar::default() != SAvatar::default());
+        assert!(avatar("S") == avatar("S"));
+    }
+
+    #[test]
+    fn an_unchanged_reply_keeps_the_models_and_compares_equal() {
+        // the window's current view went through the same step when it was pushed
+        let mut old = view(
+            vec![friend("Bob", "seen Oct 4"), friend("Amélie", "seen Oct 3")],
+            1,
+        );
+        keep_unchanged_models(&mut old, &SocialView::default());
+        // what `build_view` produces for the same server answer: equal rows, new model objects
+        let mut new = view(
+            vec![friend("Bob", "seen Oct 4"), friend("Amélie", "seen Oct 3")],
+            1,
+        );
+        assert!(new != old, "fresh models differ by identity");
+        keep_unchanged_models(&mut new, &old);
+        assert!(new == old, "no property write, so no repaint");
+    }
+
+    #[test]
+    fn a_changed_reply_still_updates() {
+        let mut old = view(vec![friend("Bob", "seen Oct 4")], 1);
+        keep_unchanged_models(&mut old, &SocialView::default());
+        let mut seen = view(vec![friend("Bob", "seen Oct 5")], 1);
+        keep_unchanged_models(&mut seen, &old);
+        assert!(seen != old, "a changed row is written");
+        assert_eq!(seen.friends.row_data(0).unwrap().detail, "seen Oct 5");
+
+        let mut added = view(vec![friend("Bob", "seen Oct 4"), friend("Kenji", "")], 1);
+        keep_unchanged_models(&mut added, &old);
+        assert!(added != old && added.friends.row_count() == 2);
+
+        let mut count = view(vec![friend("Bob", "seen Oct 4")], 0);
+        keep_unchanged_models(&mut count, &old);
+        assert!(count != old, "a scalar change is written");
+        // `ModelRc` equality is identity
+        assert!(
+            count.friends == old.friends,
+            "while the unchanged list keeps its model"
+        );
+    }
 }

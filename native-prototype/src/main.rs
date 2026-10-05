@@ -26,6 +26,7 @@ mod break_room_controller;
 mod break_room_flags;
 mod break_room_view;
 mod dashboard_view;
+mod font_fallback;
 mod game_tokens;
 mod image_cache;
 mod map;
@@ -159,6 +160,8 @@ fn run() -> Result<(), StartupError> {
     let refresh_timer = Rc::new(Timer::default());
 
     let window = MainWindow::new()?;
+    // Windows: CJK fallback families like production's WebView2 (W22a-5), before the first layout.
+    font_fallback::install();
     apply_startup_options(&window, &mut model.borrow_mut());
     // Stage 15 diagnostic hook, same family as STUDY_NATIVE_FRAME_STATS/STARTUP_REPORT: prints
     // the restored-then-startup-option-applied timer state to stdout once, with zero synthetic

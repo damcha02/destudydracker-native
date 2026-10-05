@@ -351,6 +351,8 @@ decision record and are unchanged.
 
 **Verdict: PASS WITH CONCERNS — PENDING WINDOWS VERIFICATION** (concerns in §22a.12).
 
+**Windows VM verification (2026-10-05, "STAGE 22a WINDOWS VERIFICATION" below): PASS WITH CONCERNS — WINDOWS FUNCTIONALLY VERIFIED.** The portable pass is `4b3a62b`; four Windows-found fixes (W22a-1…4) are left uncommitted on top for review. The Linux results below are unchanged.
+
 ## 22a.1 Scope delivered
 
 | Area | Status |
@@ -604,3 +606,283 @@ unshare -rn bash -c 'ip link set lo up
 6. **22b and Stage 24 boundaries:**
    - 22b: Feed, Squads, badges, avatar editor, verified sessions, telemetry.
    - Stage 24: credential migration from the Tauri app.
+
+---
+
+# STAGE 22a WINDOWS VERIFICATION
+
+Run 2026-10-04/05 on the Stage 20/21 VM. Labels as in Stage 20 §43 / Stage 21 §53: **A** = functional Windows result (closes the gate in a VM), **B** = VM diagnostic (software GL; regressions/leaks only), **C** = physical Windows required. The Linux sections above are unchanged.
+
+**Verdict: PASS WITH CONCERNS — WINDOWS FUNCTIONALLY VERIFIED.**
+
+## W.1 Checkpoint
+
+Preflight before any edit: branch `main`; `HEAD` = `origin/main` = **`4b3a62bd3ee7376684d3b8facb37c30d51f1b86b`** ("native: implement stage 22a social network foundation and daily skribbl"); working tree clean; `git diff --check` clean; `git diff -- desktop` empty; `git diff faa48d7 -- cloudflare` empty. `4b3a62b` was not amended; nothing was committed or pushed.
+
+## W.2 Environment
+
+| | |
+|---|---|
+| Machine | QEMU Q35 VM, 8 vCPU, 8 GB (Stage 20/21 VM) |
+| Windows | 11 Pro 25H2, build 26200.8037, timezone Pacific |
+| Display | RDP session, Microsoft Remote Display Adapter 2512×1500 physical at **175 % / 168 DPI**. Live real-input runs at the real 175 %; parity captures pin `SLINT_SCALE_FACTOR=1` (or 1.25) and render in-process |
+| GL | Mesa llvmpipe test shim (`opengl32.dll` + `libgallium_wgl.dll` beside the exe, `GALLIUM_DRIVER=llvmpipe`), untracked (`git ls-files "*.dll"` empty). Without `GALLIUM_DRIVER` both Stage 21 (`e717cd9`) and 22a exit silently right after the platform host starts: VM infrastructure, not a 22a regression. Every CPU/fps/startup/memory number is **B** |
+| Toolchain | rustc/cargo 1.99.0 (x86_64-pc-windows-msvc), VS 2022 Build Tools, Node 24.19 |
+| Production reference | scratch `vite build` of a copy of `desktop/` + `design/` + `PRIVACY.md` with `VITE_SOCIAL_API_URL=http://127.0.0.1:47811`, headless Edge 154 (WebView2 154's Chromium) |
+
+## W.3 Build / tests before any change (A)
+
+`cargo fmt --check` clean. `cargo check --workspace`: **1 warning** (`SkribblCanvas::reset` unused outside tests; Stage 21 Windows had 0). `cargo test --workspace`: **core 210 passed / 1 ignored, app 332 passed / 1 ignored, 0 failed**. App count = Linux 325 − 1 Unix-only (`the_file_is_owner_only`) + 9 Windows-only (3 `single_instance`, 4 `updater::http`, 2 `win_host`). The test build has 8 warnings: Stage 21's `region` plus seven 22a test-only items (unused `port`/`origin`/`theme`/`label`/`available`/`class`, two unused `Result`s in `net/worker.rs` tests), cross-platform and unchanged by this pass. `cargo build --release`: 1 warning (the same `reset`), **45,322,752 bytes**.
+
+## W.4 TLS / dependencies (A)
+
+- `cargo tree`: one crypto provider, `ring` 0.17.14 under `rustls` 0.23.45 / `rustls-webpki`; `webpki-roots`; **no** `openssl`, `native-tls`, `schannel` or `aws-lc`.
+- `dumpbin /dependents`: the only imports added since Stage 21 are **`bcrypt.dll`** (ring/getrandom RNG) and **`ws2_32.dll`** (sockets), both Windows system DLLs. No new runtime DLL; VCRUNTIME140 as before.
+- Release exe starts normally (with the VM GL shim); the transport worked against the loopback mock throughout. A TLS handshake against production was **not** made (by design); rustls/ring initialisation on MSVC is exercised by the `UreqTransport` construction in every Social run.
+
+## W.5 Production-network isolation (A)
+
+- Windows Firewall **outbound block** rules on the release/debug app exe, both mock exes, the Stage 21 exe and (during captures) `msedge.exe`; loopback is exempt from WFP filtering, so the mock still worked.
+- WFP connection-failure auditing (event 5157) and the DNS-Client operational log enabled. A positive control (`curl.exe` against TEST-NET `192.0.2.1` and `st22a-control.invalid`) produced one 5157 and 14 DNS events, so the monitors work.
+- Whole session: **0 blocked connection attempts from the app or the mock; 0 DNS lookups naming the production host by any process.** The 2,453 blocked attempts were all headless Edge's own background services (Microsoft/Akamai endpoints, mDNS, gateway), none to the Worker's Cloudflare addresses.
+- Every Social run used `STUDY_NATIVE_SOCIAL_ENDPOINT=http://127.0.0.1:<port>`; `net_origins` only ever listed `127.0.0.1:<port>`.
+- Disclosure: before the monitors were enabled, I ran one `Resolve-DnsName` of the production host from PowerShell (DNS only, no connection, not the app).
+
+## W.6 NoIdentity hard gate (A) — PASS
+
+Production configuration (no endpoint override), fresh profile, no credential file. Visited with real clicks: Dashboard, Timer, Social, Break Room, Daily Skribbl (locked card on an empty profile, then the open modal with an unlocked fixture: "Connect the Social tab once to enable Daily Skribbl…"). Result: `net_worker=none net_origins=none`, `social_requests=0`, no TCP endpoint owned by the process, 0 WFP-blocked attempts, 0 DNS events, no `social-credentials.json`, the `NET` line at exit `net_worker=none net_origins=none`. Thread count equal to Stage 21 at idle (25). (Rust thread names are not exposed through `GetThreadDescription` with this toolchain, so the worker was counted with the app's `net_threads` counter plus OS thread deltas.)
+
+## W.7 Mock (A)
+
+Built and run on Windows. For manual fault scenarios the mock CLI gained `--fault <path>=<500|malformed|drop|delay:ms>[*n]` and prints its request log (`REQ <method> <path>`, never queries or bodies). This is test infrastructure in `crates/social-mock/src/main.rs` and does not touch the app. Exercised: normal, latency (300/500 ms), offline (mock stopped), malformed (gallery), server error (bootstrap, submit). Loopback-only validation was not relaxed.
+
+## W.8 Account creation through the real UI (A) — PASS
+
+From NoIdentity against the mock: "Create a new Social account" opens a confirmation dialog; nothing is sent and no file exists before **Create account**; **Cancel** sends nothing. First attempt with `--fault /sync/v2=500`: one `/sync/v2`, no credential file, no `social` key in `store.json`, back to NoIdentity. Second attempt: credential written after the server accepted, the default-name prompt appears; a blank name is refused (0 requests); a typed name with Enter saves (`Zoë Ålvarez`, real keyboard). Restart restores the identity.
+
+## W.9 Credential file / Windows ACL (A)
+
+- Location: `%LOCALAPPDATA%\com.damcha.studytracker.native-shell\social-credentials.json` by default, or the test `STUDY_NATIVE_DATA_DIR`. Contents never printed.
+- DACL (`icacls`), inherited from the per-user profile tree: **NT AUTHORITY\SYSTEM (F), BUILTIN\Administrators (F), the current user (F)**. No Users / Everyone / Authenticated Users. The owner is `BUILTIN\Administrators` only because the test shell was elevated (an unelevated launch makes the user the owner). The default location was checked by an equivalent new directory under `%LOCALAPPDATA%`.
+- **Classification: PASS** (current user plus expected privileged principals). No ACL code was added.
+- Caveat: the protection is purely inherited. A file in a shared directory (probe under `C:\`) inherits `BUILTIN\Users (RX)` and `Authenticated Users (M)`. Only the dev/test `STUDY_NATIVE_DATA_DIR` override can put it there. Stage 24 should still move the secret to DPAPI/Credential Manager or set an explicit protected DACL.
+- Atomic write (temp + rename, no `.tmp` left); malformed files are reported and left alone; clear → NoIdentity; replace works (unit tests on Windows, plus the live runs).
+
+## W.10 Secret redaction (A) — PASS
+
+Searched 185 files (app logs, stdout/stderr, mock request logs, stores, probes, STATS) for the synthetic secret and for the 36-character secret of the account created through the UI: **0 hits**; no credential-bearing query strings (logs carry `GET /skribbl/theme -> 200 …`, image paths as `/skribbl/drawing/…`). The clipboard never received a secret. Only the synthetic fixture's `imported-backups` copies contain the synthetic secret (Stage 15 behaviour: the importer keeps a copy of the input backup; the `social` section is withheld from the store).
+
+## W.11 Friends, clipboard, polling (A)
+
+- **Real input:** typing `dann-2345` shows `DANN-2345` (per-keystroke upper-casing), Enter sends one `/friends/request`, "Friend request sent." banner, Pending row. Accept → `/friends/respond`, Incoming empties, Kenji joins Your Friends. Decline (fresh mock) → `/friends/respond`, gone. Friend cards show seen times and avatars (photo for Amélie, emoji for Bob). The player dialog opens with stats, "Seen …", FRIEND badge. It closes with × (production has no Escape handler here either).
+- **Clipboard:** Copy invite link, the tag chip and the invite chip put exactly `https://damcha02.github.io/destudydracker/?invite=SYNT-2345` / `SYNT-2345` on the Windows clipboard (production's format); no secret.
+- **Polling:** one `/friends/status/v2` every 120 s while Social is visible (≈125/245/365/485 s), no duplicate after 30 rapid Social↔Dashboard switches (exactly 1 poll in the next 130 s), **0 polls in 150 s after leaving**, 0 persistence writes, 0 frames between polls. Each Social open does production's one status refresh.
+- **Concern:** an unchanged poll reply still renders 2 frames. `app_social::push` builds new `ModelRc`s each time, so Slint sees changed properties. Platform-independent, ≈2 frames per 2-minute poll while visible; recorded, not changed.
+
+## W.12 Leaderboards / Profile (A)
+
+Friends / World / Squad arenas × Daily / Weekly / Overall all fetch with real clicks. Ranking, ties (two 1h 35m entries in server order), current-user styling (blue rank, tag chip, "(You)" in Wabi). The private-profile notice appears in World after turning on Private profile; the Squad arena shows the 22b notice. Wabi competitive mode adds Standings and persists `preferences.wabiCircleCompetitive`. Profile: name edit and validation, default-name prompt, tag/invite copy, six stats, sync console ("Sync Arena", offline message), three toggles (each a `/sync/v2`), avatar letter. Avatar editor remains 22b.
+
+## W.13 Image policy (A)
+
+The Windows suite covers: allowed Worker/loopback URLs; rejected other hosts, look-alikes, userinfo, other ports, wrong prefixes, traversal (including `\..\`), query/fragment, `file:`, `javascript:`, `data:`, plain HTTP in production mode. Also: requests without credentials or query, 512 KiB avatar / 2 MiB drawing caps, type and signature checks, decompression-bomb limits, golden drawings. Live runs fetched only the mock's own `/skribbl/drawing/` and `/profile/avatar/` paths.
+
+## W.14 Daily Skribbl with real Windows input (A)
+
+- Break Room → Play → intro → Start Drawing → **real mouse drags** (the Linux drag-capture fix holds) → colour change → brush size → enclosed rectangle → **flood fill stays inside** → Undo (fill removed, pixel back to white) → Clear → more strokes → countdown → exactly **one** automatic `/skribbl/submit` at the deadline → gallery → votes → lightbox → yesterday's winner → close/reopen (server-authoritative "You already submitted…", gallery re-fetched).
+- **Pointer geometry:** at 175 % the drawn rectangle lands exactly where the cursor went (screen 1100,600–1500,900 → client 1088,548–1488,848). The canvas keeps 900×600 at every size tested.
+- **Harness note:** drags whose moves were made with `SetCursorPos` lost their last 1–2 steps (Windows synthesises those moves lazily, after the button-up), leaving corner gaps through which a fill leaks. With real input-queue moves (`SendInput`, as a physical mouse produces) the corners close. Not an app defect.
+- **Timer:** deadline-based. Minimize 20 s → restore shows 2:40 (correct); tray-hide via `WM_CLOSE` → restore via the tray icon after 70 s shows 1:50 (correct). Tray-hidden for the whole 3 minutes: exactly one submit at the deadline, 0 frames while hidden. Restoring a tray-hidden window with a raw `ShowWindow` (bypassing the app's tray path) leaves the display stale: a harness path, not a user path.
+- **Submission:** fast real double-click on Submit with `--fault /skribbl/submit=500` → **one** request, "The Social server had a problem. Try again later.", drawing kept. Retry → accepted, gallery loads. A malformed gallery reply is ignored silently (production does the same); Refresh recovers. 409, timeout, offline and cancel-on-close are covered by the Windows end-to-end tests.
+- **Voting:** up → +1, change to down → −1, down again → neutral; a fast double-click sends two toggles and ends consistent (production: one optimistic toggle per click, no in-flight guard either).
+- **No local persistence:** `store.json` before vs after a full Skribbl run differs only in Stage 20's `playedBreaks` log (one entry per Play click). No drawing, theme, countdown, gallery or vote state. The data dir holds nothing else.
+
+## W.15 Offline restore (A) — PASS
+
+With a local profile record: the app starts responsive (window in 773 ms) and shows the cached profile and the offline sync message. Credential without a local record and the mock down: "Your profile could not be loaded / You're offline or the Social server can't be reached. Try again when you're connected. Everything else in Study Tracker works as usual." + **Try again**, 0 frames static. With the mock back, Try again restores the profile (`/player-stats`, presence, sync, status).
+
+## W.16 Navigation, worker lifecycle, single instance, tray (A)
+
+- **Navigation stress** (500 ms server, subtabs/Break Room/Skribbl, 384 steps): 162 sent, 253 coalesced, max queue **7/32**, 0 failed, 0 refused, all drained; no crash.
+- **Worker:** created lazily (none without an account), `net_threads=1` in every run, `NET … net_worker=none` at exit (stopped).
+- **Single instance** (Social open, account, mock): 8-way race → **1 survivor**. The mock saw exactly one instance's startup (1 presence, 2 sync, 1 player-stats, 2 status), so there is no duplicate sync, poller or worker. 20 second launches → 0 failures, 1 process, median 1,016 ms. Store hash and credential hash unchanged (no second writer). Tray Quit exits, removes icon and message window, "event loop exited normally", 0 panics.
+- **Tray/minimize:** Social and an active drawing, each with 100 minimize/restore + 100 tray hide/restore cycles: 1 process, threads back to baseline, memory flat (drawing: private WS 156.6–157.6 MB). Minimized and tray-hidden: **0 frames**. Network replies while hidden render nothing.
+
+## W.17 Static rendering and Sakura (A for frames)
+
+0 frames over 20–30 s windows (complete STATS intervals): NoIdentity (production config), FN Friends / Leaderboard / Profile, Wabi Standings, Skribbl intro, submitted gallery, offline profile error. An active drawing renders only the countdown (≈2 frames/s visible, 0 hidden). Sakura with Social or the Skribbl gallery: **22 petals, one clock** (starts/stops 1/0 visible, 1/1 after minimize), 0 frames and 0 ticks minimized; Social traffic adds no clocks. Without `STUDY_NATIVE_INPUT` throughout (the exhausted-script ~17 fps artifact appears only in the scripted stress runs).
+
+## W.18 Memory / stress (B)
+
+Private WS / Private Bytes (MB), llvmpipe holds render buffers in process memory:
+
+| Point | Value |
+|---|---|
+| Idle no account, Stage 21 vs 22a (same session, 3 runs, scale 1) | 69.2–71.7 / 96.1–97.0 vs 68.4–70.9 / 93.9–95.9 (equal) |
+| NoIdentity Social / FN Friends / Leaderboard / Profile (175 %) | 92.6 / 102.8 / 99.3 / 102.0 |
+| Skribbl intro / submitted gallery / active canvas | 110.4 / 140.6 / 153–157 |
+| 500 Social open/close (300 ms server) | 75–86 / 101–116, flat; 255 sent, 251 coalesced, max queue 2; writes 4 → 4 |
+| 500 Skribbl open/close (submitted day) | private bytes plateau 143–147, no trend; 1,514 requests, 7 images fetched once (cache), max queue 7 |
+| 320 strokes × 30 moves + fills/undos/clears | 111–120 / 142–151, flat |
+
+No crash, panic or `[ERROR]`; no worker leak; queues drained; image cache bounded (7 entries); canvas freed on close; no persistence churn beyond the Stage 20 Play log. 100 offline/reconnect cycles are covered deterministically by the controller tests (`offline_timeout_and_server_errors_fail_gracefully_without_retry_loops`, `many_open_close_cycles_keep_everything_bounded`, `a_failed_profile_restore_says_so_and_try_again_recovers`) plus the live offline runs above.
+
+## W.19 Startup (B)
+
+`STUDY_NATIVE_STARTUP_REPORT` (`FIRST_FRAME`), 12 launches per cell, Stage 21 (`e717cd9`, built on this VM) and 22a interleaved in alternating order:
+
+| Scenario | Stage 21 median (min–max) | Stage 22a median (min–max) |
+|---|---|---|
+| fresh profile, no account (production config) | 580 (565–595) | 584 (573–598) |
+| stored profile, no account | 650 (636–658) | 645 (630–657) |
+| stored profile + synthetic account (mock) | — | 644 (632–663) |
+
+No regression; NoIdentity and an account both start without waiting on the network.
+
+## W.20 Binary size (A for size, attribution indicative)
+
+Stage 21 `e717cd9` on this VM: 34,832,896 B. Stage 22a `4b3a62b`: **45,322,752 B (+10,489,856, +30.1 %)**. With the W22a fixes: **45,388,288 B**. Sections: `.text` 18.33 → 25.52 MB, `.rdata` 13.68 → 16.04 MB, `.pdata` 1.09 → 1.57 MB. Linker-map attribution (`.text`+`.rdata`, by symbol crate, +10.0 MB attributed):
+
+- the app crate including generated Slint code: +4.70 MB, plus generic instantiations attributed to `core`/`i_slint_core`/`alloc`/`std`: +2.61 MB, so **≈7.3 MB UI-driven**;
+- network/TLS: rustls +0.54, ureq +0.16, ring +0.12, http +0.08, ureq_proto +0.06, webpki +0.05, so **≈1.0 MB**, plus part of the +0.89 MB non-Rust bucket (ring assembly/tables);
+- image decoders: image_webp +0.30, image +0.05, zune_jpeg +0.04;
+- serde_json +0.23 MB.
+
+Same shape as Linux; no duplicated crate or accidental dependency. **Stage 24 optimization candidate**, not changed here.
+
+## W.21 Windows visual parity (production WebView2/Edge vs native)
+
+`social-pair.ps1` (scratch; Windows twin of `social-capture-{prod,native}.sh`): one fresh mock per side (frozen 2026-10-04 12:00 Zurich), production in headless Edge with `--tz America/Los_Angeles` (the VM's zone, so local times agree), native in-process snapshot, 1520×980 unless noted. Mean absolute difference per channel /255, **after W22a-2/3/4**:
+
+| Screen | Windows | Linux | Class |
+|---|---|---|---|
+| FN dark Friends (before: 3.13) | 2.89 | 1.97 | CLOSE |
+| FN light Friends | 3.22 | — | CLOSE |
+| FN dark Leaderboard | 4.26 | 2.62 | CLOSE (residual: head +2 px glyph placement; CJK/emoji row 44 vs Chromium's 48 px) |
+| FN dark Profile (before: 3.53) | 2.91 | 0.98 | CLOSE |
+| FN dark Skribbl intro (before: 3.18) | 3.04 | 2.42 | CLOSE |
+| FN dark Skribbl drawing | 2.37 | 1.51 | CLOSE |
+| FN dark Skribbl gallery (before W22a-2: **10.35**) | 6.02 | 5.78 | CLOSE (production card-overflow bug) |
+| FN light Skribbl gallery | 4.19 | 4.20 | CLOSE |
+| Wabi light Friends / dark Friends | 1.78 / 2.09 | 1.73 / 1.91 | MATCH / CLOSE |
+| Wabi light Profile / dark Profile | 0.61 / 0.75 | 0.74 / 0.84 | MATCH |
+| Wabi light Standings | 0.69 | 0.74 | MATCH |
+| Wabi light Skribbl intro / drawing | 2.87 / 1.73 | 2.44 / 1.53 | CLOSE / MATCH |
+| Wabi dark Skribbl gallery | 5.56 | 5.31 | CLOSE (production overflow bug) |
+| FN dark Profile / Leaderboard / gallery at **1.25 (emulated)** | 3.74 / 4.95 / 7.32 | — | CLOSE, no clipping |
+| FN dark Friends / gallery at **1100×760** | 3.82 / 7.79 | — | CLOSE, no clipping |
+| FN NoIdentity | 7.55 | — | DEFERRED (deliberate D1: production auto-creates an account) |
+| FN Friends, `empty` seed | 8.79 | — | not comparable (pre-seeded native credential without a server profile shows the 22a restore error) |
+| Feed / Squad | — | — | DEFERRED (22b notices) |
+
+**Typography and glyphs:**
+- On Windows, Arial at weight ≥ 800 resolves to Arial Black in both engines (W21-1). That made the 22a heavy-label line boxes short; fixed in W22a-3.
+- Arial, Consolas and Georgia lack `⧉ ↯ ◆ ★ ↻`; Chromium draws them from Segoe UI Symbol, Slint's fallback did not (tofu or a different face); fixed in W22a-3.
+- Simplified Chinese stays tofu (concern 1). Japanese kanji, Hebrew, accented Latin and emoji render.
+
+**Deliberate differences re-checked** (still acceptable, none hides a larger defect): the deadline timer (correct after hide/restore), PNG upload (normal drawings ≈5–20 KB), the hex colour field, the lightbox without blur, no gallery overflow.
+
+## W.22 DPI / resize (A)
+
+Real 175 % for all live input (dialogs, modal, canvas, gallery, chips: no clipping, hit boxes on the drawn controls, canvas mapping exact). Emulated 1.25 and the compact 1100×760 viewport: no clipping or overflow, modal scrolls as in production. **Real 125 % → Stage 24 (C).**
+
+## W.23 Accessibility (A for the tree)
+
+UIA tree inspected:
+- Social subtabs are `TabItem`s (the Friends tab reads "Friends, 1 incoming friend requests").
+- Accept/Decline/Send/Copy invite link, "Edit player name", the tag/invite chips, the three toggles and "Sync Arena" are named buttons.
+- Leaderboard arena/period chips are tabs.
+- Skribbl: dialog group "Daily Skribbl"; Brush/Fill, "Brush size N", Undo, Clear, "Custom color", "Close Daily Skribbl", Submit drawing.
+- The canvas is **one** `Image` node, "Drawing canvas for today's theme: … 2:58 left." (no per-stroke nodes). Gallery cards are groups "Drawing by X, score N" with Upvote/Downvote.
+
+Difference: palette swatches read "Color 0…20" where production says "Color #e53935" (platform-independent wording, noted). **TREE INSPECTED — NARRATOR SPEECH NOT VERIFIED (Stage 24).**
+
+## W.24 Unicode (A)
+
+- Accented Latin (Amélie, Zoë, typed `Zoë Ålvarez`), Japanese kanji (健二), Hebrew (שלום עולם) and emoji (🦊) render in Friends, Profile, Leaderboard, Standings and the gallery.
+- The long seed name ("A very long display name that goes on and on and") fits its leaderboard column with no overlap.
+- The Linux RTL fix holds: no spill outside the gallery card. Native's name area is slightly narrower, so the last Hebrew letter is clipped where production just fits (CLOSE).
+- **Simplified Chinese (张伟) renders as tofu** (concern 1).
+
+## W.25 Regressions (A)
+
+- **Stage 21:** all Travle tests pass. Travle parity FN dark mid **1.784** (Stage 21 after W21-1: 1.79), Wabi dark mid **1.377** (1.38), so W21-1 is intact. Real-input smoke: typed `afgh`, dropdown pick, STEP ("4/7 countries guessed"), zoom in/out, close, guess persisted. Travle static 0 frames, no writes.
+- **Stage 20:** Break Room, Durak, Wordle, Flaggle, Geodle, Travle, Wabi Rest games/album/meditation: **0 frames, no store write, 22 petals, no network worker**. Daily Skribbl is now the real implementation. All Stage 20 tests pass.
+- **Stage 19:** FN dashboard/timer 0 frames; Wabi; Sakura 22 petals, one clock, stops when minimized (W.17).
+- **Stage 18:** `git diff e717cd9 -- native-prototype/src/platform` empty. Updater, single-instance and notification code untouched; their tests pass; tray Quit verified (W.16). No updater/installer work.
+
+## W.26 Bugs found and fixed (uncommitted)
+
+| Id | Class | Symptom → root cause | Fix | Verification |
+|---|---|---|---|---|
+| **W22a-1** | build hygiene (portable) | `cargo check` on Windows: 1 warning where Stage 21 had 0. `SkribblCanvas::reset` is only used by tests | `#[cfg_attr(not(test), allow(dead_code))]`, as on its neighbour `undo_bytes` | `cargo check --workspace` and `cargo build --release`: 0 warnings |
+| **W22a-2** | rendering (found on Windows) | Skribbl gallery thumbnails blank: 0–3 of the 6 friends' drawings visible at random (FN dark gallery diff 10.35); the lightbox and the header showed the same drawings. Instrumented: rows had `state=1` and correct opaque 480×320 pixels. Reproduced under Mesa llvmpipe **and** softpipe, independent of `image-fit` and `clip`. After close/reopen (cards created with their pictures) every thumbnail showed. **Cause:** a card whose picture arrived after its first paint was updated in place (`set_row_data`), and femtovg kept painting nothing for that `Image` item | `app_skribbl::sync_gallery`: a row whose picture changed (state or image) is removed and re-inserted, so its card is created with the picture; other changes (votes, scores) still update in place | 4/4 cold snapshots show all 7 thumbnails (before: 0/2 runs); real flow after submit shows all; FN gallery 10.35 → 6.02 (Linux 5.78). No GL harness exists to unit-test the renderer, so the captures are the regression check (as W20-2/W21-1) |
+| **W22a-3** | Windows metrics / glyph fallback (portable formulas) | (a) tofu `⧉` copy chips, tofu `↯`, other faces for `◆ ★`, a box for `↻`: Arial/Consolas lack them and Slint's fallback does not pick Segoe UI Symbol as Chromium does. (b) Heavy-weight line boxes resolve to Arial Black on Windows (as W21-1): Profile mini-stat tiles 48.4 px in WebView2 vs native's fixed 46 (−4.8 px per two rows); Skribbl head 60 vs 56 px; leaderboard chips 39 vs 35 px. Georgia has no line gap: leaderboard head 78 vs 79 px and rows 44 vs 45 px. A CJK name grew `PersonRow` (preferred height of the fallback run) where Chromium's card stays at 59 px | (a) `Emoji.symbol` (Segoe UI Symbol on Windows, empty on Linux) for the copy chip, the coloured stat icons and the gallery refresh glyph. (b) Heights from the resolved faces through Stage 21's `CssLine.normal`: Profile `stat-h` (with a 46 px floor), Skribbl head (kicker + 4 + heading), `Chip` (20 + label), leaderboard head (52 + title) and subtitle, rows (27 + name), `PersonRow` (21 + max(38, name + 3 + detail)). With Liberation faces the formulas give the old constants (46, 56, 35, 79, 45), so Linux layout is unchanged by construction (`PersonRow`: 59 instead of 59.7) | Glyphs match production at 1.0/1.25; Profile 3.53 → 2.91, Skribbl intro 3.18 → 3.04, Friends 3.13 → 2.89; probed boxes (tiles 48.4, chips 39, head 60, rows 44) now equal production |
+| **W22a-4** | parity (portable, found on Windows) | Friends: "Pending" and "Your Friends" sections 4 px too close to the card above. Production gives every `.arena-social-section h4` `margin: 4px 0 0`; native applied it only to Incoming | `padding-top: 4px` on the Pending and Your Friends sections | Friends shift profile: section titles back on production's rows |
+
+Considered and **not** changed: simplified-Chinese fallback (concern 1), unchanged-reply redraw (concern 2), credential ACL hardening (W.9), swatch labels (W.23), 1-glyph RTL clipping in gallery cards (W.24).
+
+## W.27 Security review
+
+No production contact; loopback-only endpoint validation unchanged; credentials bound to the endpoint class (unit tests on Windows); test builds refuse non-loopback (transport guard). The secret appears in no log/output/clipboard. The credential DACL is current user + SYSTEM + Administrators by inheritance (W.9 caveat). The image policy is unchanged and verified. TLS has no verifier override and no OpenSSL/native runtime. Fixes W22a-1…4 touch only rendering, layout and a dead-code attribute; the mock change is test infrastructure.
+
+## W.28 Concerns
+
+1. ~~Simplified Chinese renders as tofu~~ → **fixed in W22a-5** (W.31).
+2. ~~An unchanged Social reply repaints~~ → **fixed in W22a-6** (W.31).
+3. **Credential file relies on the inherited profile ACL**; the dev override into a shared folder would expose it. Stage 24: DPAPI/Credential Manager or explicit DACL.
+4. **Binary +30.1 % on Windows** (+22.4 % Linux), UI-dominated (W.20). Stage 24 candidate.
+5. Residual parity: CJK/emoji leaderboard rows not growing like Chromium's; RTL last glyph clipped in gallery cards (Slint text-engine limitation, W.31). Leaderboard head (W22a-8) and swatch labels (W22a-7) are fixed.
+6. The Mesa test shim needs `GALLIUM_DRIVER=llvmpipe` on this VM (Stage 21 identical).
+7. `imported-backups/` keeps a byte-for-byte copy of an imported production backup including its `social.deviceSecret` (unchanged Stage 15 behaviour, per-user ACL; audit in W.31, Stage 24 item).
+
+## W.29 Stage 24 physical gates (C)
+
+Physical GPU (FemtoVG/NVIDIA) CPU and FPS, high refresh, authoritative startup and memory, real 125 % and multi-monitor DPI, Narrator speech, Japanese/Chinese IME and CJK rendering on localized Windows, sleep/resume with an active drawing, TLS handshake against the real Worker (with real credentials only in the migration stage), credential store migration, installer/updater.
+
+## W.30 Final checks (Windows, after W22a-1…4)
+
+`cargo fmt --check` clean; `cargo check --workspace` **0 warnings**; `cargo test --workspace` **core 210 passed / 1 ignored, app 332 passed / 1 ignored, 0 failed** (test build: the same 8 warnings as the checkpoint); `cargo test -p study-tracker-core` 210 / 1 ignored; `cargo build --release` 0 warnings, **45,388,288 bytes**; `git diff --check` clean; `git diff -- desktop` empty; `git diff faa48d7 -- cloudflare` empty; `git ls-files "*.dll"` empty.
+
+Files changed (uncommitted): `src/app_skribbl.rs` (W22a-2), `src/skribbl_canvas.rs` (W22a-1), `ui/break/skribbl.slint` (W22a-3), `ui/social/fn-social.slint` (W22a-3/4), `crates/social-mock/src/main.rs` (mock `--fault` and request log), and this document. Verification scripts (pair capture, lifecycle, stress, startup, static matrix, map attribution) stayed in a scratch directory.
+
+No real user data or credentials: synthetic fixtures and identities, throw-away profiles, no installed Study Tracker profile on the VM. No Cloudflare deploy, no migration.
+
+## W.31 Follow-up: Windows parity / render-discipline cleanup (2026-10-05)
+
+Requested after the first review; same VM, same isolation (firewall blocks on app/mock/Edge, WFP audit, DNS log), synthetic data only.
+
+### Fixed
+
+| Id | Finding | Root cause | Fix | Verification |
+|---|---|---|---|---|
+| **W22a-5** | Simplified-Chinese names drew as empty boxes (English Windows 11) | Production (Edge 154, probed with `CSS.getPlatformFontsForNode` on cloned production text nodes) resolves Han → **Microsoft YaHei** (Simplified, Traditional, and the kanji of Japanese names), kana → **Yu Gothic**, Hangul → **Malgun Gothic**, emoji → Segoe UI Emoji, Latin → Arial/Georgia. Native fontique asked DirectWrite for one family per script without a locale and got a Japanese face for Han (it has 健二 but not 张伟) | `src/font_fallback.rs`: right after the window is created (before the first layout), the per-script fallbacks of Slint's process-wide collection (`slint::fontique_010::shared_collection()`, Slint's documented hook; feature `unstable-fontique-010` enabled for Windows targets only) are set to installed system families in Chromium's order: Hani YaHei → JhengHei → SimSun → Yu Gothic → Malgun Gothic; Hira/Kana Yu Gothic → MS Gothic → YaHei; Hang Malgun Gothic; Bopo JhengHei → YaHei. Missing families are skipped (Meiryo, Gulim are not installed here). Nothing bundled or registered from disk; named families (Arial, Georgia, Segoe UI Symbol/Emoji) untouched; Linux compiles a no-op and does not enable the feature | A typed name `张伟 張偉 한국 ひらカ 健二 Zoë 🦊` renders every script in the sans field; 张伟 renders in Friends, the serif Leaderboard and the gallery ("张伟 Z…" elides normally). Latin screens' parity numbers unchanged; Segoe UI Symbol glyphs unchanged. **Cost:** binary +4,096 B; FIRST_FRAME fresh 592 → 588 ms, stored 656 → 655 ms (10 interleaved launches each); idle private bytes 94.2–96.0 → 93.9–97.0 MB, with CJK on screen 102.7–105.8 → 103.1–104.4 MB (no change beyond noise); `Cargo.lock` unchanged |
+| **W22a-6** | An unchanged 2-minute friend-status poll rendered 2 frames | Traced HTTP reply → controller → `app_social::push` → `set_social`. Two causes: (1) `build_view` makes new `ModelRc`s, compared by identity; (2) Slint's `Image` equality is **false for two empty images** (`ImageInner` falls through to `_ => false`), so any view holding an avatar without a photo (rows, the profile avatar, the dialog avatar, Wabi attendance rows built with `Default::default()`) never compared equal. Found with a temporary debug log of the old/new view: writes with no printed difference still compared unequal | Avatars without a photo use one shared 1×1 transparent placeholder (`no_photo()`, never drawn: `has-photo` is false). `keep_unchanged_models` puts the window's current model back into every list whose rows are equal, then `push` skips `set_social` when the whole view is equal | Mock run: unchanged poll **0 frames** (twice; before: 2); swapping the mock to a different world makes the next poll repaint (2 frames) and the friend list update; persistence writes only on the change. Tests: `empty_images_never_compare_equal_so_avatars_use_one_placeholder`, `an_unchanged_reply_keeps_the_models_and_compares_equal`, `a_changed_reply_still_updates` |
+| **W22a-7** | Swatches read "Color 3" | — | Production's `aria-label={`Color ${paletteColor}`}` ported: a parallel list of production's `PALETTE` strings in `SkribblPalette.names`; `accessible-checked` already mirrors `aria-pressed`. No layout change | UIA: 21 swatches `Color #000000` … `Color #e53935` … `Color #ffffff` |
+| **W22a-8** | Leaderboard head ≈2 px low | Production's FN `article.arena-leaderboard` computes `border-width: 0 1px 0 0` (right side only) with padding 28/34/40; native drew a 1 px border on all four sides and inset the content 35/29 px, so content sat 1 px right and down and an extra top/left edge was drawn | Right-edge line only; content at (34, 28), width −69 px, height 28 + content + 40. Platform-independent CSS, so Linux benefits too | FN Leaderboard parity 4.26 → **3.48**; head content within ≤ 1 px (the remaining 1 px is the hero rule above, production's at a fractional 213.6 px: rounding) |
+
+### Investigated, not changed
+
+- **Hebrew in gallery cards (CLOSE, text-engine limitation):** the native name box is the right size (the card's width minus the 105.8 px vote group, the same space production has before its card-overflow bug pushes the votes out). LTR names elide correctly in it ("张伟 Z…", "Kenji …"). Slint 1.17's `sharedparley` elision works in visual x from the left edge; an RTL line that overflows extends past the *left* edge instead, so no elision fires and the box clip cuts the last letter. A generic fix needs RTL-aware elision in Slint; widening the box or special-casing scripts would only move the problem. Latin, CJK and long names were rechecked; no Arabic fixture exists in the seeds (same RTL path). Stage 24 / toolkit item.
+- **Imported-backup secret (audit, no redesign):**
+  1. Production's `buildBackup(state)` exports the whole `state`, including `social` with `deviceSecret`, so a user-saved production backup contains it.
+  2. It is the original production backup the user selects (`STUDY_NATIVE_IMPORT_BACKUP`, an explicit diagnostic/user action).
+  3. Native does **not** use the Social credential from it: the importer classifies `social` as *Withheld*; `identity_from_production_backup` is called only by tests.
+  4. Stage 15's `discover_and_read` copies it with `read_to_string` → `fs::write`, byte-for-byte for any valid UTF-8 backup (synthetic check: SHA-256 equal to the source fixture).
+  5. So the copy keeps `deviceSecret` (field present in the synthetic copy).
+  6. Location: `%LOCALAPPDATA%\com.damcha.studytracker.native-shell\imported-backups\<stem>-<unix ms>.json`.
+  7. DACL inherited: SYSTEM (F), Administrators (F), current user (F).
+  8. No Users / Everyone / Authenticated Users; this VM has no other enabled local user, and the DACL grants none.
+  9. Unchanged Stage 15 behaviour (`62ff25f`); 22a changed neither `migration.rs` nor the import path in `main.rs`.
+
+  **Stage 24 migration/security item:** strip or encrypt the `social` section in the kept copy, or protect it like the credential store.
+
+### Regression after the follow-up
+
+`cargo fmt --check` clean; `cargo check --workspace` 0 warnings; `cargo test --workspace` **core 210 / 1 ignored, app 335 / 1 ignored, 0 failed** (+3 tests; test build: the same 8 warnings); `cargo test -p study-tracker-core` 210 / 1 ignored; `cargo build --release` 0 warnings, **45,470,208 B**; `git diff --check` clean; `desktop/` and `cloudflare/` (vs `faa48d7`) unchanged; `Cargo.lock` unchanged.
+
+Parity after the follow-up: FN Friends 2.82, Leaderboard 3.48, Profile 2.91, Skribbl intro 3.04, gallery 6.03 / 4.19 (all thumbnails), Wabi Friends 1.77 / 2.08, Profile 0.61 / 0.75, Skribbl 2.87 / 5.56; Travle FN mid 1.784. Static matrix again 0 frames everywhere static; Sakura 22 petals, one clock, 0 when minimized. No production contact.
+
+Files changed by the follow-up: `src/font_fallback.rs` (new), `src/main.rs`, `Cargo.toml` (Windows-target feature), `src/app_social.rs`, `ui/break/skribbl.slint`, `ui/social/fn-social.slint`, this document.
+
+**NOT COMMITTED. NOT PUSHED. Stage 22b NOT STARTED.**

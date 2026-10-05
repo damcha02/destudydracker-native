@@ -117,6 +117,7 @@ impl SkribblCanvas {
     }
 
     /// `startDrawing`: white paper, empty undo stack.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn reset(&mut self) {
         self.pixmap.fill(tiny_skia::Color::WHITE);
         self.undo.clear();
