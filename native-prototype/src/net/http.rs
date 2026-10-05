@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use study_tracker_core::social::ids::display_text;
 
-/// Production's own paths for the 22a operations (and the image routes). Requests can only use
+/// Production's own paths for the Social operations (22a and 22b) and the image routes. Requests can only use
 /// these; a server payload cannot add one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ApiPath {
@@ -28,6 +28,36 @@ pub enum ApiPath {
     SkribblSubmit,
     SkribblVote,
     SkribblLeaderboard,
+    // Stage 22b
+    Feed,
+    FeedReact,
+    FeedPollVote,
+    FeedComment,
+    FeedUpdate,
+    FeedDelete,
+    FeedImageUpload,
+    FeedImageDelete,
+    ProfileAvatar,
+    SquadsCreate,
+    SquadsSearch,
+    SquadsDetails,
+    SquadsJoin,
+    SquadsRespond,
+    SquadsLeave,
+    SquadsChat,
+    SquadsChatDelete,
+    SquadsPromote,
+    SquadsKick,
+    SquadsSettings,
+    SquadsScoreboard,
+    VerifiedStart,
+    VerifiedHeartbeat,
+    VerifiedFinish,
+    VerifiedReconcile,
+    AnnouncementsCurrent,
+    AnnouncementsUpdateNotice,
+    TelemetryHeartbeat,
+    AdminUsage,
 }
 
 impl ApiPath {
@@ -45,6 +75,35 @@ impl ApiPath {
             Self::SkribblSubmit => "/skribbl/submit",
             Self::SkribblVote => "/skribbl/vote",
             Self::SkribblLeaderboard => "/skribbl/leaderboard",
+            Self::Feed => "/feed",
+            Self::FeedReact => "/feed/react",
+            Self::FeedPollVote => "/feed/poll/vote",
+            Self::FeedComment => "/feed/comment",
+            Self::FeedUpdate => "/feed/update",
+            Self::FeedDelete => "/feed/delete",
+            Self::FeedImageUpload => "/feed/image",
+            Self::FeedImageDelete => "/feed/image/delete",
+            Self::ProfileAvatar => "/profile/avatar",
+            Self::SquadsCreate => "/squads/create",
+            Self::SquadsSearch => "/squads/search",
+            Self::SquadsDetails => "/squads/details",
+            Self::SquadsJoin => "/squads/join",
+            Self::SquadsRespond => "/squads/respond",
+            Self::SquadsLeave => "/squads/leave",
+            Self::SquadsChat => "/squads/chat",
+            Self::SquadsChatDelete => "/squads/chat/delete",
+            Self::SquadsPromote => "/squads/promote",
+            Self::SquadsKick => "/squads/kick",
+            Self::SquadsSettings => "/squads/settings",
+            Self::SquadsScoreboard => "/squads/scoreboard",
+            Self::VerifiedStart => "/verified-session/start",
+            Self::VerifiedHeartbeat => "/verified-session/heartbeat",
+            Self::VerifiedFinish => "/verified-session/finish",
+            Self::VerifiedReconcile => "/verified-session/reconcile-offline",
+            Self::AnnouncementsCurrent => "/announcements/current",
+            Self::AnnouncementsUpdateNotice => "/announcements/update-notice",
+            Self::TelemetryHeartbeat => "/telemetry/heartbeat",
+            Self::AdminUsage => "/admin/usage",
         }
     }
 }

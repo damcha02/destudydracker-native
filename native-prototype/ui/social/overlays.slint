@@ -1,0 +1,607 @@
+// Stage 22b: the remaining Social overlays, in both styles (colours through `SocialStyle`).
+// - the comment notice and the app announcement (`.notice-stack` toasts, top right)
+// - the confirmation (production's `window.confirm`)
+// - the feed image lightbox (`.feed-image-lightbox`)
+// - the profile avatar editor and the crop editor
+// - the Settings items Stage 22b owns (telemetry opt-in, owner cards) and the owner usage report
+// Production blurs what is behind its backdrops (`backdrop-filter`); Slint has no backdrop blur,
+// so the backdrops only dim (parity debt, as in Stage 22a).
+import { FN } from "../fn/palette.slint";
+import { WS } from "../wabi/palette.slint";
+import { MonoText } from "../fn/parts.slint";
+import { SDialogsView, SAvatarChoice, SAdminRow, SocialActions } from "types.slint";
+import { FnAvatar } from "fn-parts.slint";
+import { SocialStyle, DButton, Sheet, RoundClose } from "dialogs.slint";
+import { GhostButton, Switch } from "fn-feed.slint";
+import { Backdrop, BlurBackdrop } from "../backdrop.slint";
+
+// `.update-notice` (Field Notebook: square, `--fn-edge`, `--surface-2`; Wabi keeps the 22px card)
+export component NoticeToast inherits Rectangle {
+    in property <string> title;
+    in property <string> body;
+    in property <string> link;
+    callback follow();
+    callback close();
+    private property <length> text-w: root.width - 2px - 18px - 16px - 14px - 28px;
+    private property <length> link-w: root.link != "" ? lt.preferred-width + 12px : 0px;
+    // the link sits inline after the text when it fits, else on the next line
+    private property <bool> inline: b.preferred-width + 4px + root.link-w <= root.text-w;
+    height: 1px + 16px + t.preferred-height + 3px + b.preferred-height + (root.link != "" && !root.inline ? 18px : 0px) + 15px + 1px;
+    border-width: 1px;
+    border-radius: SocialStyle.wabi ? 22px : 0px;
+    border-color: SocialStyle.wabi ? WS.line : FN.line;
+    background: SocialStyle.paper-2;
+    drop-shadow-offset-y: SocialStyle.wabi ? 8px : 0px;
+    drop-shadow-blur: SocialStyle.wabi ? 24px : 0px;
+    drop-shadow-color: SocialStyle.wabi ? #0000001f : transparent;
+    TouchArea { }
+    t := Text { x: 19px; y: 17px; width: root.text-w; wrap: word-wrap; text: root.title; font-family: SocialStyle.sans; font-size: 16px; font-weight: 700; color: SocialStyle.ink; }
+    b := Text { x: 19px; y: t.y + t.preferred-height + 3px; width: root.text-w; wrap: word-wrap; text: root.body; font-family: SocialStyle.sans; font-size: 14.72px; color: SocialStyle.muted; }
+    Rectangle {
+        visible: root.link != "";
+        x: root.inline ? 19px + b.preferred-width + 4px : 19px;
+        y: root.inline ? b.y + b.preferred-height - 18px : b.y + b.preferred-height;
+        width: root.link-w;
+        height: 18px;
+        lt := Text { x: 6px; text: root.link; font-family: SocialStyle.sans; font-size: 14.72px; font-weight: 800; color: SocialStyle.muted; }
+        Rectangle { x: 6px; y: 17px; width: lt.preferred-width; height: 1px; background: SocialStyle.muted; }
+        if root.link != "": Rectangle {
+            TouchArea { mouse-cursor: pointer; clicked => { root.follow(); } }
+            accessible-role: button;
+            accessible-label: root.link;
+            accessible-action-default => { root.follow(); }
+        }
+    }
+    Rectangle {
+        x: parent.width - 17px - 28px;
+        y: 17px;
+        width: 28px;
+        height: 28px;
+        border-radius: 14px;
+        background: x.has-hover ? SocialStyle.paper : transparent;
+        Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "X"; font-family: SocialStyle.sans; font-size: 16px; font-weight: 800; color: x.has-hover ? SocialStyle.ink : SocialStyle.faint; }
+        x := TouchArea { mouse-cursor: pointer; clicked => { root.close(); } }
+        accessible-role: button;
+        accessible-label: "Dismiss";
+        accessible-action-default => { root.close(); }
+    }
+    accessible-role: text;
+    accessible-label: root.title + ". " + root.body;
+}
+
+// `.notice-stack`: top 86px, right 24px, 360px wide, 12px apart
+export component NoticeStack inherits Rectangle {
+    in property <SDialogsView> d;
+    VerticalLayout {
+        x: parent.width - 24px - self.width;
+        y: 86px;
+        width: min(360px, root.width - 32px);
+        height: self.preferred-height;
+        spacing: 12px;
+        if root.d.announcement-open: NoticeToast {
+            title: root.d.announcement-title;
+            body: root.d.announcement-body;
+            close => { SocialActions.announcement-close(); }
+        }
+        if root.d.notice-open: NoticeToast {
+            title: "New comment on your post.";
+            body: root.d.notice-name + ": \"" + root.d.notice-body + "\"";
+            link: "View";
+            follow => { SocialActions.notice-view(); }
+            close => { SocialActions.notice-close(); }
+        }
+    }
+}
+
+// production's `window.confirm(...)`: the question with Cancel and OK
+export component ConfirmDialog inherits Rectangle {
+    in property <string> text;
+    forward-focus: keys;
+    keys := FocusScope {
+        key-pressed(e) => {
+            if e.text == Key.Escape { SocialActions.confirm(false); return accept; }
+            if e.text == Key.Return { SocialActions.confirm(true); return accept; }
+            reject
+        }
+    }
+    Sheet {
+        eyebrow: "STUDY TRACKER";
+        title: "Please confirm";
+        text: root.text;
+        extra-h: 36px;
+        dismiss => { SocialActions.confirm(false); }
+        HorizontalLayout {
+            height: 36px;
+            alignment: end;
+            spacing: 14px;
+            DButton { text: "CANCEL"; clicked => { SocialActions.confirm(false); } }
+            DButton { text: "OK"; primary: true; clicked => { SocialActions.confirm(true); } }
+        }
+    }
+}
+
+// `.feed-image-lightbox`: the picture at its own size (at most 94% x 90% of the window) in a
+// 10px frame; any click closes it
+export component ImageLightbox inherits Rectangle {
+    in property <image> picture;
+    in property <string> label;
+    private property <float> nat-w: max(1, root.picture.width);
+    private property <float> nat-h: max(1, root.picture.height);
+    private property <float> fit: min(1, min((root.width * 0.94 - 22px) / 1px / root.nat-w, (root.height * 0.90 - 22px) / 1px / root.nat-h));
+    forward-focus: keys;
+    keys := FocusScope { key-pressed(e) => { if e.text == Key.Escape { SocialActions.feed-close-image(); return accept; } reject } }
+    visible: !Backdrop.capturing;
+    BlurBackdrop { dim: #000000b8; }
+    TouchArea { mouse-cursor: pointer; clicked => { SocialActions.feed-close-image(); } }
+    Rectangle {
+        width: root.nat-w * root.fit * 1px + 22px;
+        height: root.nat-h * root.fit * 1px + 22px;
+        border-width: 1px;
+        border-radius: 22px;
+        border-color: #ffffff2e;
+        background: SocialStyle.paper.with-alpha(0.92);
+        Rectangle {
+            x: 11px;
+            y: 11px;
+            width: parent.width - 22px;
+            height: parent.height - 22px;
+            border-radius: 14px;
+            clip: true;
+            Image { width: parent.width; height: parent.height; source: root.picture; image-fit: contain; }
+        }
+    }
+    accessible-role: image;
+    accessible-label: root.label + " (click to close)";
+}
+
+// `.profile-avatar-choice`
+component AvatarChoice inherits Rectangle {
+    in property <SAvatarChoice> c;
+    callback picked();
+    height: 91px;
+    border-width: 1px;
+    border-radius: 18px;
+    // Field Notebook defines no `--accent`: the selected border falls back to `currentColor` and
+    // the selected background to none (as production renders it)
+    border-color: root.c.selected ? SocialStyle.ink : SocialStyle.line;
+    background: root.c.selected ? (SocialStyle.wabi ? WS.sage.mix(SocialStyle.paper, 0.16) : transparent) : SocialStyle.paper-2.with-alpha(0.88);
+    FnAvatar { x: (parent.width - self.width) / 2; y: root.c.label != "" ? 11px : (parent.height - self.height) / 2; a: root.c.avatar; size: 48px; font: 16px; }
+    if root.c.label != "": Text { y: 66px; width: parent.width; horizontal-alignment: center; text: root.c.label; font-family: SocialStyle.sans; font-size: 12.48px; font-weight: 800; color: SocialStyle.ink; }
+    TouchArea { mouse-cursor: pointer; clicked => { root.picked(); } }
+    accessible-role: button;
+    accessible-label: root.c.label != "" ? root.c.label : "Icon " + root.c.avatar.text;
+    accessible-checked: root.c.selected;
+    accessible-action-default => { root.picked(); }
+}
+
+// `.arena-btn--send` (the Save / Apply crop buttons)
+component SendSmall inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: t.preferred-width + 34px;
+    height: 40px;
+    border-width: 1px;
+    border-color: SocialStyle.accent;
+    background: SocialStyle.accent;
+    opacity: root.enabled ? 1 : 0.5;
+    t := Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.text; font-family: SocialStyle.serif; font-size: 13px; font-weight: 500; color: SocialStyle.on-accent; }
+    TouchArea { enabled: root.enabled; mouse-cursor: root.enabled ? pointer : default; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+}
+
+// `.profile-avatar-editor` (560px, 22px padding): head, the Letter/Icon/Photo toggle, the panel,
+// Cancel / Save. Production's Field Notebook card has no background of its own (its gradient
+// mixes the undefined `--accent`): the blurred page shows through, as here (`BlurBackdrop`).
+export component AvatarEditor inherits Rectangle {
+    in property <SDialogsView> d;
+    in property <string> name;
+    private property <length> w: min(560px, root.width - 28px);
+    private property <length> inner: root.w - 44px;
+    private property <length> style-w: (root.inner - 20px) / 3;
+    private property <length> icon-w: (root.inner - 30px) / 4;
+    private property <length> panel-h: root.d.avatar-mode == 0
+        ? 2 * 91px + 10px + 12px + 40px + (root.d.letter-picker ? 12px + 22px + 2 * 28px + 5px : 0px)
+        : root.d.avatar-mode == 1 ? ceil(root.d.avatar-icons.length / 4) * 101px - 10px
+        : 80px + (root.d.avatar-has-photo ? 12px + 40px : 0px) + 12px + 34px;
+    forward-focus: keys;
+    keys := FocusScope { key-pressed(e) => { if e.text == Key.Escape { SocialActions.avatar-close(); return accept; } reject } }
+    visible: !Backdrop.capturing;
+    BlurBackdrop { dim: SocialStyle.wabi ? WS.desk.with-alpha(0.66) : #14110c8c; TouchArea { clicked => { SocialActions.avatar-close(); } } }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.w;
+        height: min(760px, root.height - 32px, 22px + 57.5px + 20px + 48px + 16px + root.panel-h + 18px + 40px + 22px);
+        border-radius: 28px;
+        border-width: SocialStyle.wabi ? 1px : 0px;
+        border-color: SocialStyle.line;
+        background: SocialStyle.wabi ? WS.paper-1 : transparent;
+        drop-shadow-offset-y: 28px;
+        drop-shadow-blur: 80px;
+        drop-shadow-color: #0000006b;
+        clip: true;
+        TouchArea { }
+        RoundClose { x: parent.width - 14px - 30px; y: 12.5px; clicked => { SocialActions.avatar-close(); } }
+        FnAvatar { x: 22px; y: 22px; a: root.d.avatar-draft; size: 56px; font: 18.56px; }
+        MonoText { x: 94px; y: 24.5px; text: "PROFILE PICTURE"; font-family: SocialStyle.mono; font-size: 10px; letter-spacing: 1.8px; color: SocialStyle.faint; }
+        Text { x: 94px; y: 38.5px; text: "Choose your arena mark"; font-family: SocialStyle.sans; font-size: 18.72px; font-weight: 700; color: SocialStyle.ink; }
+        Text { x: 94px; y: 64.5px; text: "Friends will see this after your next arena sync."; font-family: SocialStyle.sans; font-size: 13.44px; color: SocialStyle.muted; }
+        // `.profile-avatar-mode-toggle`
+        Rectangle {
+            x: 22px;
+            y: 99.5px;
+            width: root.inner;
+            height: 48px;
+            border-radius: 24px;
+            border-width: 1px;
+            border-color: SocialStyle.line;
+            background: SocialStyle.paper-2;
+            for label[i] in ["Letter", "Icon", "Photo"]: Rectangle {
+                x: 6px + i * (parent.width - 12px + 6px) / 3;
+                y: 6px;
+                width: (parent.width - 12px - 12px) / 3;
+                height: 36px;
+                border-radius: 18px;
+                // `.active` paints `--accent` (undefined in Field Notebook: no fill) under #081018 text
+                background: root.d.avatar-mode == i && SocialStyle.wabi ? WS.sage : transparent;
+                Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: label; font-family: SocialStyle.sans; font-size: 16px; font-weight: 900; color: root.d.avatar-mode == i ? #081018 : SocialStyle.muted; }
+                TouchArea { mouse-cursor: pointer; clicked => { SocialActions.avatar-mode(i); } }
+                accessible-role: tab;
+                accessible-label: label;
+                accessible-checked: root.d.avatar-mode == i;
+            }
+        }
+        Rectangle {
+            x: 22px;
+            y: 163.5px;
+            width: root.inner;
+            height: root.panel-h;
+            if root.d.avatar-mode == 0: Rectangle {
+                for c[i] in root.d.avatar-styles: AvatarChoice {
+                    x: mod(i, 3) * (root.style-w + 10px);
+                    y: floor(i / 3) * 101px;
+                    width: root.style-w;
+                    c: c;
+                    picked => { SocialActions.avatar-style(c.key); }
+                }
+                GhostButton { x: 0px; y: 204px; text: "CHANGE LETTER"; clicked => { SocialActions.avatar-toggle-letters(); } }
+                if root.d.letter-picker: Rectangle {
+                    y: 256px;
+                    height: 22px + 2 * 28px + 5px;
+                    border-width: 1px;
+                    border-radius: 16px;
+                    border-color: SocialStyle.line;
+                    background: SocialStyle.paper-2;
+                    for l[i] in ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"]: Rectangle {
+                        private property <length> cw: (parent.width - 22px - 12 * 5px) / 13;
+                        x: 11px + mod(i, 13) * (self.cw + 5px);
+                        y: 11px + floor(i / 13) * 33px;
+                        width: self.cw;
+                        height: 28px;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: root.d.letter == l ? SocialStyle.ink : transparent;
+                        Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: l; font-family: SocialStyle.sans; font-size: 12.16px; font-weight: 900; color: root.d.letter == l ? SocialStyle.ink : SocialStyle.muted; }
+                        TouchArea { mouse-cursor: pointer; clicked => { SocialActions.avatar-letter(l); } }
+                        accessible-role: button;
+                        accessible-label: "Letter " + l;
+                        accessible-checked: root.d.letter == l;
+                    }
+                }
+            }
+            if root.d.avatar-mode == 1: Rectangle {
+                for c[i] in root.d.avatar-icons: AvatarChoice {
+                    x: mod(i, 4) * (root.icon-w + 10px);
+                    y: floor(i / 4) * 101px;
+                    width: root.icon-w;
+                    c: c;
+                    picked => { SocialActions.avatar-icon(c.key); }
+                }
+            }
+            if root.d.avatar-mode == 2: VerticalLayout {
+                spacing: 12px;
+                // `.profile-avatar-photo-upload`: dashed in production (drawn solid, parity debt)
+                Rectangle {
+                    height: 80px;
+                    border-width: 1px;
+                    border-radius: 18px;
+                    border-color: up.has-hover ? SocialStyle.ink : SocialStyle.line;
+                    background: SocialStyle.paper-2.with-alpha(0.7);
+                    Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.d.avatar-busy ? "Preparing..." : root.d.avatar-has-photo ? "Change photo" : "Choose a photo"; font-family: SocialStyle.sans; font-size: 14.08px; font-weight: 800; color: SocialStyle.ink; }
+                    up := TouchArea { enabled: !root.d.avatar-busy; mouse-cursor: pointer; clicked => { SocialActions.avatar-pick-photo(); } }
+                    accessible-role: button;
+                    accessible-label: root.d.avatar-has-photo ? "Change photo" : "Choose a photo";
+                }
+                if root.d.avatar-has-photo: HorizontalLayout {
+                    alignment: start;
+                    GhostButton { text: "REMOVE PHOTO"; clicked => { SocialActions.avatar-remove-photo(); } }
+                }
+                Text { wrap: word-wrap; text: "Square photos look best. Up to 512px, under 1 MB. PNG, JPEG, WebP and GIF work."; font-family: SocialStyle.sans; font-size: 11.84px; color: SocialStyle.muted; }
+            }
+        }
+        HorizontalLayout {
+            x: 22px;
+            y: parent.height - 22px - 40px;
+            width: root.inner;
+            height: 40px;
+            alignment: end;
+            spacing: 10px;
+            GhostButton { text: "CANCEL"; clicked => { SocialActions.avatar-close(); } }
+            SendSmall { text: "Save"; enabled: !root.d.avatar-busy; clicked => { SocialActions.avatar-save(); } }
+        }
+    }
+    accessible-role: groupbox;
+    accessible-label: "Edit profile avatar";
+}
+
+// `.profile-crop-editor` (440px, 20px padding, 14px apart): the 300px stage with the rule-of-thirds
+// grid, the zoom slider (1-4) and Cancel / Apply crop. Drag moves, the wheel zooms.
+export component CropEditor inherits Rectangle {
+    in property <SDialogsView> d;
+    private property <length> w: min(440px, root.width - 48px);
+    forward-focus: keys;
+    keys := FocusScope { key-pressed(e) => { if e.text == Key.Escape { SocialActions.crop-cancel(); return accept; } reject } }
+    visible: !Backdrop.capturing;
+    BlurBackdrop { dim: SocialStyle.wabi ? WS.desk.with-alpha(0.66) : #14110c8c; TouchArea { clicked => { SocialActions.crop-cancel(); } } }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.w;
+        height: 20px + head.preferred-height + 14px + 300px + 14px + 24px + 14px + 18px + 40px + 20px;
+        border-width: 1px;
+        border-radius: 16px;
+        border-color: SocialStyle.line;
+        background: SocialStyle.paper;
+        drop-shadow-offset-y: 16px;
+        drop-shadow-blur: 48px;
+        drop-shadow-color: #00000059;
+        TouchArea { }
+        head := VerticalLayout {
+            x: 21px;
+            y: 21px;
+            width: parent.width - 42px;
+            MonoText { text: "PROFILE PICTURE"; font-family: SocialStyle.mono; font-size: 10px; letter-spacing: 1.8px; color: SocialStyle.faint; }
+            Text { text: "Crop your photo"; font-family: SocialStyle.sans; font-size: 18.72px; font-weight: 700; color: SocialStyle.ink; }
+            Rectangle { height: 6px; }
+            Text { wrap: word-wrap; text: "Drag to reposition, scroll or use the slider to zoom. The result is a square picture."; font-family: SocialStyle.sans; font-size: 12.8px; color: SocialStyle.muted; }
+        }
+        stage := Rectangle {
+            x: (parent.width - 300px) / 2;
+            y: 21px + head.preferred-height + 14px;
+            width: 300px;
+            height: 300px;
+            border-radius: 10px;
+            background: SocialStyle.paper-2;
+            clip: true;
+            // the 16px checkerboard under transparent pictures
+            for k in 19 * 19: Rectangle {
+                visible: mod(floor(k / 19) + mod(k, 19), 2) == 0;
+                x: mod(k, 19) * 16px;
+                y: floor(k / 19) * 16px;
+                width: 16px;
+                height: 16px;
+                background: SocialStyle.line;
+            }
+            Image { x: root.d.crop-x; y: root.d.crop-y; width: root.d.crop-w; height: root.d.crop-h; source: root.d.crop-image; image-fit: fill; }
+            for i in 2: Rectangle { x: (i + 1) * parent.width / 3; width: 1px; background: #ffffff59; }
+            for i in 2: Rectangle { y: (i + 1) * parent.height / 3; height: 1px; background: #ffffff59; }
+            Rectangle { border-width: 1px; border-radius: 10px; border-color: #ffffff47; }
+            TouchArea {
+                mouse-cursor: root.d.crop-dragging ? grabbing : grab;
+                pointer-event(e) => {
+                    if e.kind == PointerEventKind.down && e.button == PointerEventButton.left { SocialActions.crop-down(self.mouse-x, self.mouse-y); }
+                    if e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel { SocialActions.crop-up(); }
+                }
+                moved => { if self.pressed { SocialActions.crop-move(self.mouse-x, self.mouse-y); } }
+                scroll-event(e) => {
+                    if e.delta-y != 0 { SocialActions.crop-wheel(e.delta-y > 0); return accept; }
+                    reject
+                }
+            }
+            accessible-role: image;
+            accessible-label: "Profile picture to crop";
+        }
+        // `.profile-crop-zoom-row`: − slider +
+        Rectangle {
+            x: 21px;
+            y: stage.y + 300px + 14px;
+            width: parent.width - 42px;
+            height: 24px;
+            Text { x: 0px; height: parent.height; vertical-alignment: center; text: "−"; font-family: SocialStyle.sans; font-size: 16px; color: SocialStyle.muted; }
+            track := Rectangle {
+                x: 22px;
+                width: parent.width - 44px;
+                Rectangle { y: (parent.height - 4px) / 2; height: 4px; border-radius: 2px; background: SocialStyle.line; }
+                Rectangle {
+                    x: (root.d.crop-zoom - 1) / 3 * (parent.width - 16px);
+                    y: (parent.height - 16px) / 2;
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 8px;
+                    background: SocialStyle.ink;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    pointer-event(e) => { if e.kind == PointerEventKind.down { SocialActions.crop-zoom(1 + 3 * clamp((self.mouse-x - 8px) / (track.width - 16px), 0, 1)); } }
+                    moved => { if self.pressed { SocialActions.crop-zoom(1 + 3 * clamp((self.mouse-x - 8px) / (track.width - 16px), 0, 1)); } }
+                }
+                accessible-role: slider;
+                accessible-label: "Zoom";
+                accessible-value: round(root.d.crop-zoom * 100) / 100;
+                accessible-value-minimum: 1;
+                accessible-value-maximum: 4;
+                accessible-value-step: 0.01;
+                accessible-action-increment => { SocialActions.crop-zoom(min(4, root.d.crop-zoom + 0.1)); }
+                accessible-action-decrement => { SocialActions.crop-zoom(max(1, root.d.crop-zoom - 0.1)); }
+            }
+            Text { x: parent.width - self.width; height: parent.height; vertical-alignment: center; text: "+"; font-family: SocialStyle.sans; font-size: 16px; color: SocialStyle.muted; }
+        }
+        HorizontalLayout {
+            x: 21px;
+            y: parent.height - 21px - 40px;
+            width: parent.width - 42px;
+            height: 40px;
+            alignment: end;
+            spacing: 10px;
+            GhostButton { text: "CANCEL"; clicked => { SocialActions.crop-cancel(); } }
+            SendSmall { text: "Apply crop"; clicked => { SocialActions.crop-apply(); } }
+        }
+    }
+    accessible-role: groupbox;
+    accessible-label: "Crop profile picture";
+}
+
+// `.tab-toggle-row` / `.linux-update-command-card`, the parts of production's Settings panel that
+// Stage 22b owns. The rest of Settings (backup, privacy, updates) is not part of the native app yet.
+component SettingsCard inherits Rectangle {
+    in property <string> title;
+    in property <string> text;
+    in property <string> extra;
+    private property <length> text-w: root.width - 28px - 230px;
+    height: max(56px, 14px + t.preferred-height + 3px + d.preferred-height + (root.extra != "" ? 3px + e.preferred-height : 0px) + 14px);
+    border-width: 1px;
+    border-color: SocialStyle.line;
+    background: SocialStyle.paper-2;
+    t := Text { x: 14px; y: 14px; width: root.text-w; text: root.title; font-family: SocialStyle.sans; font-size: 15px; font-weight: 700; color: SocialStyle.ink; }
+    d := Text { x: 14px; y: t.y + t.preferred-height + 3px; width: root.text-w; wrap: word-wrap; text: root.text; font-family: SocialStyle.sans; font-size: 13px; color: SocialStyle.muted; }
+    e := Text { x: 14px; y: d.y + d.preferred-height + 3px; width: root.text-w; wrap: word-wrap; visible: root.extra != ""; text: root.extra; font-family: SocialStyle.sans; font-size: 13px; color: SocialStyle.muted; }
+    @children
+}
+
+export component SettingsSheet inherits Rectangle {
+    in property <SDialogsView> d;
+    callback dismiss();
+    forward-focus: keys;
+    keys := FocusScope { key-pressed(e) => { if e.text == Key.Escape { root.dismiss(); return accept; } reject } }
+    Sheet {
+        eyebrow: "MENU";
+        title: "Settings";
+        text: "Study Tracker settings that belong to Social. Backup, privacy and updates come with a later stage.";
+        extra-h: cards.preferred-height;
+        dismiss => { root.dismiss(); }
+        cards := VerticalLayout {
+            spacing: 12px;
+            SettingsCard {
+                title: "Anonymous usage telemetry";
+                text: (root.d.telemetry-on ? "On" : "Off") + " · shares only app version, platform, runtime channel, and last-opened time";
+                Switch { x: parent.width - 14px - self.width; y: (parent.height - self.height) / 2; on: root.d.telemetry-on; label: "Anonymous usage telemetry"; toggled => { SocialActions.telemetry(!root.d.telemetry-on); } }
+            }
+            if root.d.is-owner: SettingsCard {
+                title: "Update notice";
+                text: "Owner only: tells users on an older version that an update is available.";
+                GhostButton { x: parent.width - 14px - self.width; y: (parent.height - self.height) / 2; text: root.d.notice-label; enabled: root.d.notice-enabled; clicked => { SocialActions.update-notice(); } }
+            }
+            if root.d.is-owner: SettingsCard {
+                title: "Usage and versions";
+                text: "Owner-only view of synced users plus anonymous opt-in telemetry installs.";
+                extra: root.d.admin-summary;
+                GhostButton { x: parent.width - 14px - self.width; y: (parent.height - self.height) / 2; text: root.d.admin-loading ? "LOADING..." : "LOAD USAGE DATA"; enabled: !root.d.admin-loading; clicked => { SocialActions.admin-load(); } }
+            }
+        }
+    }
+}
+
+// `.admin-usage-section`: the head (title and row count) over a table
+component AdminTable inherits VerticalLayout {
+    in property <string> title;
+    in property <string> count;
+    in property <[string]> heads;
+    in property <[SAdminRow]> rows;
+    spacing: 8px;
+    Rectangle {
+        height: 22px;
+        Text { x: 0px; text: root.title; font-family: SocialStyle.sans; font-size: 17px; font-weight: 700; color: SocialStyle.ink; }
+        Text { x: parent.width - self.preferred-width; y: 3px; text: root.count; font-family: SocialStyle.sans; font-size: 13px; color: SocialStyle.muted; }
+    }
+    Rectangle {
+        height: tbl.preferred-height;
+        border-width: 1px;
+        border-color: SocialStyle.line;
+        tbl := VerticalLayout {
+            x: 1px;
+            width: parent.width - 2px;
+            Rectangle {
+                height: 30px;
+                background: SocialStyle.paper-2;
+                for h[i] in root.heads: MonoText { x: 10px + i * (parent.width - 20px) / root.heads.length; width: (parent.width - 20px) / root.heads.length - 8px; height: parent.height; vertical-alignment: center; text: h.to-uppercase(); font-family: SocialStyle.mono; font-size: 10px; letter-spacing: 1px; color: SocialStyle.faint; overflow: elide; }
+            }
+            for r in root.rows: Rectangle {
+                height: 32px;
+                Rectangle { height: 1px; background: SocialStyle.line.with-alpha(0.6); }
+                for c[i] in r.cells: Text { x: 10px + i * (parent.width - 20px) / root.heads.length; width: (parent.width - 20px) / root.heads.length - 8px; height: parent.height; vertical-alignment: center; text: c; font-family: SocialStyle.sans; font-size: 12.5px; color: i == 0 ? SocialStyle.ink : SocialStyle.muted; font-weight: i == 0 ? 700 : 400; overflow: elide; }
+                accessible-role: list-item;
+                accessible-label: "";
+            }
+        }
+    }
+}
+
+// `.help-modal.admin-usage-modal`: the owner's usage and versions report
+export component AdminUsageDialog inherits Rectangle {
+    in property <SDialogsView> d;
+    private property <length> w: min(1080px, root.width - 32px);
+    forward-focus: keys;
+    keys := FocusScope { key-pressed(e) => { if e.text == Key.Escape { SocialActions.admin-close(); return accept; } reject } }
+    visible: !Backdrop.capturing;
+    BlurBackdrop { dim: #00000080; TouchArea { clicked => { SocialActions.admin-close(); } } }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.w;
+        height: min(root.height - 48px, 31px + body.preferred-height + 31px);
+        border-width: 1px;
+        border-color: SocialStyle.line;
+        background: SocialStyle.paper;
+        clip: true;
+        TouchArea { }
+        Flickable {
+            width: parent.width;
+            height: parent.height;
+            viewport-height: 31px + body.preferred-height + 31px;
+            body := VerticalLayout {
+                x: 31px;
+                y: 31px;
+                width: root.w - 62px;
+                spacing: 18px;
+                Rectangle {
+                    height: 66px;
+                    MonoText { x: 0px; y: 0px; text: "OWNER REPORT"; font-family: SocialStyle.mono; font-size: 10px; letter-spacing: 1.8px; color: SocialStyle.faint; }
+                    Text { x: 0px; y: 20px; text: "Usage and versions"; font-family: SocialStyle.sans; font-size: 24px; font-weight: 700; color: SocialStyle.ink; }
+                    GhostButton { x: parent.width - self.width; y: 0px; text: "X"; clicked => { SocialActions.admin-close(); } }
+                    Rectangle { y: parent.height - 2px; height: 2px; background: SocialStyle.ink; }
+                }
+                Text { wrap: word-wrap; text: "Synced users, latest devices, app versions, and anonymous opt-in telemetry installs."; font-family: SocialStyle.sans; font-size: 16px; color: SocialStyle.muted; }
+                // `.admin-usage-summary-grid`
+                Rectangle {
+                    height: 70px;
+                    for label[i] in ["Synced users", "Active 24h", "Active 7d", "Opt-in installs", "Flagged"]: Rectangle {
+                        x: i * (parent.width + 10px) / 5;
+                        width: (parent.width - 40px) / 5;
+                        border-width: 1px;
+                        border-color: i == 4 ? FN.stamp : SocialStyle.line;
+                        background: SocialStyle.paper-2;
+                        Text { x: 12px; y: 11px; text: label; font-family: SocialStyle.sans; font-size: 12.5px; color: SocialStyle.muted; }
+                        Text { x: 12px; y: 31px; text: root.d.admin-counts[i]; font-family: SocialStyle.sans; font-size: 22px; font-weight: 800; color: SocialStyle.ink; }
+                        accessible-role: text;
+                        accessible-label: label + ": " + root.d.admin-counts[i];
+                    }
+                }
+                AdminTable { title: "Synced Users"; count: root.d.admin-users.length + " latest rows"; heads: ["User", "Last Seen", "Version", "Latest Device", "Channel"]; rows: root.d.admin-users; }
+                AdminTable { title: "Flagged Accounts"; count: root.d.admin-flagged.length + " rows"; heads: ["User", "Reason", "Country", "Network", "Last Seen"]; rows: root.d.admin-flagged; }
+                AdminTable { title: "Opt-In Telemetry Installs"; count: root.d.admin-installs.length + " latest rows"; heads: ["Install", "Last Seen", "First Seen", "Version", "Platform", "Channel"]; rows: root.d.admin-installs; }
+                AdminTable { title: "Recent Abuse Events"; count: root.d.admin-abuse.length + " rows"; heads: ["Type", "Path", "Country", "Network", "User", "When"]; rows: root.d.admin-abuse; }
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 10px;
+                    GhostButton { text: root.d.admin-loading ? "REFRESHING..." : "REFRESH"; enabled: !root.d.admin-loading; clicked => { SocialActions.admin-load(); } }
+                    DButton { height: 40px; text: "Close"; primary: true; clicked => { SocialActions.admin-close(); } }
+                }
+            }
+        }
+    }
+    accessible-role: groupbox;
+    accessible-label: "Usage and versions report";
+}

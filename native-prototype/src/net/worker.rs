@@ -52,6 +52,10 @@ pub struct Job {
     pub request: ApiRequest,
     pub cancel: Option<CancelToken>,
     pub reply: Reply,
+    /// Stage 22b: bounded local work instead of a request (decoding/encoding a picked image off
+    /// the UI thread). It runs in the API queue on this same thread; `reply` is not called (the
+    /// closure delivers its own result). Never network I/O.
+    pub local: Option<Box<dyn FnOnce() + Send>>,
 }
 
 impl Job {
@@ -305,6 +309,13 @@ fn run(shared: Arc<Shared>, transport: Arc<dyn Transport>, origin: Origin) {
             (job.reply)(Err(NetError::Cancelled));
             continue;
         }
+        if let Some(work) = job.local {
+            shared.stats.in_flight.store(1, Ordering::Relaxed);
+            work();
+            shared.stats.in_flight.store(0, Ordering::Relaxed);
+            shared.stats.completed.fetch_add(1, Ordering::Relaxed);
+            continue;
+        }
         shared.stats.in_flight.store(1, Ordering::Relaxed);
         let result = transport.execute(&origin, &job.request);
         shared.stats.in_flight.store(0, Ordering::Relaxed);
@@ -384,6 +395,7 @@ mod tests {
             reply: Box::new(move |r| {
                 let _ = tx.send((n, r));
             }),
+            local: None,
         }
     }
 

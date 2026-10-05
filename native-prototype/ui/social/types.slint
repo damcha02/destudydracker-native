@@ -108,3 +108,418 @@ export struct SocialView {
     // friends seen within 48 hours, most recent first (`live`: "sitting")
     attendance: [SFriendRow],
 }
+
+// ------------------------------------------------------------------------------- Stage 22b
+// The Feed, Squads, the Squad Arena and the 22b dialogs. Rust (`src/app_social_view.rs`) prepares
+// every string; the components only lay it out. Actions go through `SocialActions` (one global,
+// so the FN and Wabi surfaces call the same Rust handlers without threading each callback
+// through the window).
+
+export struct SPollOption {
+    id: string,
+    text: string,
+    selected: bool,
+    // 0..1 of the option bar
+    fill: float,
+    // "2 · 67%"
+    count: string,
+}
+
+export struct SReaction {
+    key: string,
+    // "🔥 2" / "Nod 2"
+    label: string,
+    active: bool,
+    // "Bob, Zoë +2 more" ("" = no tooltip)
+    tooltip: string,
+}
+
+export struct SComment {
+    id: string,
+    person: string,
+    name: string,
+    is-self: bool,
+    avatar: SAvatar,
+    time: string,
+    body: string,
+}
+
+export struct SFeedPost {
+    id: string,
+    // 0 session card, 1 milestone
+    kind: int,
+    person: string,
+    name: string,
+    is-self: bool,
+    // the post is still in the outbox (no image/comment/vote until synced)
+    pending: bool,
+    avatar: SAvatar,
+    time: string,
+    subject: string,
+    detail: string,
+    icon: string,
+    note: string,
+    has-poll: bool,
+    poll-question: string,
+    poll-multiple: bool,
+    poll-options: [SPollOption],
+    poll-total: string,
+    // 0 none, 1 loading, 2 shown, 3 "Image could not load", 4 "Image expired"
+    image-state: int,
+    image: image,
+    // width / height of the picture (contain)
+    image-aspect: float,
+    reactions: [SReaction],
+    picker: bool,
+    comments-open: bool,
+    comment-count: int,
+    comments: [SComment],
+    draft: string,
+    // bumped when Rust clears/replaces the draft (the field re-reads it)
+    draft-rev: int,
+    saving-comment: bool,
+    editing: bool,
+    // "Replace image" / "Add image"
+    edit-image-label: string,
+    edit-can-remove: bool,
+}
+
+export struct SWeekRow {
+    person: string,
+    name: string,
+    is-self: bool,
+    avatar: SAvatar,
+    minutes: string,
+    bar: float,
+}
+
+export struct SFeedView {
+    // 0 friends, 1 global
+    scope: int,
+    loading: bool,
+    // `socialSyncing` (Refresh disabled, "Syncing...")
+    syncing: bool,
+    live-count: int,
+    live-names: string,
+    // the composer (`latestFeedSession`)
+    has-session: bool,
+    posted: bool,
+    session-title: string,
+    poll-open: bool,
+    poll-has-draft: bool,
+    poll-multiple: bool,
+    poll-question: string,
+    poll-options: [string],
+    poll-rev: int,
+    image-draft: bool,
+    image-preview: image,
+    preparing-image: bool,
+    uploads-paused: bool,
+    // owner R2 safety banner
+    r2-banner: bool,
+    r2-paused: bool,
+    r2-text: string,
+    posts: [SFeedPost],
+    week: [SWeekRow],
+    // the edit panel (one post at a time)
+    edit-saving: bool,
+    edit-has-preview: bool,
+    edit-preview: image,
+    edit-remove-hint: bool,
+    edit-pending-hint: bool,
+    edit-rev: int,
+    edit-note: string,
+    // the lightbox
+    lightbox: bool,
+    lightbox-image: image,
+    lightbox-aspect: float,
+    lightbox-label: string,
+    // stories / attendance (Wabi feed)
+    stories: [SFriendRow],
+}
+
+export struct SRoleAction {
+    label: string,
+    role: int,
+    current: bool,
+}
+
+export struct SSquadMember {
+    id: string,
+    name: string,
+    is-self: bool,
+    avatar: SAvatar,
+    role: string,
+    // 0 leader, 1 co-leader, 2 elder, 3 member
+    role-key: int,
+    detail: string,
+    expanded: bool,
+    manage-title: string,
+    manage-detail: string,
+    roles: [SRoleAction],
+    can-kick: bool,
+}
+
+export struct SSquadCard {
+    id: string,
+    name: string,
+    meta: string,
+    // 0 "Join", 1 "Request", 2 a badge
+    action: int,
+    badge: string,
+}
+
+export struct SChatMessage {
+    id: string,
+    name: string,
+    role: string,
+    body: string,
+    is-self: bool,
+    avatar: SAvatar,
+}
+
+export struct SJoinRequest {
+    id: string,
+    name: string,
+    code: string,
+    avatar: SAvatar,
+}
+
+export struct SArenaRow {
+    id: string,
+    rank: int,
+    name: string,
+    is-self: bool,
+    meta: string,
+    points: string,
+    sub: string,
+}
+
+export struct SDetailMember {
+    name: string,
+    detail: string,
+    avatar: SAvatar,
+}
+
+export struct SSquadView {
+    has-squad: bool,
+    busy: bool,
+    // no squad
+    private-draft: bool,
+    searching: bool,
+    suggestions: [SSquadCard],
+    suggestions-loading: bool,
+    can-reload: bool,
+    results: [SSquadCard],
+    pending-note: string,
+    name-rev: int,
+    // the squad
+    kicker: string,
+    name: string,
+    meta: string,
+    is-leader: bool,
+    settings-editing: bool,
+    settings-name: string,
+    settings-private: bool,
+    settings-rev: int,
+    stats: [SStat],
+    members: [SSquadMember],
+    // the squad members' leaderboard (Squad tab)
+    board: [SBoardRow],
+    period: int,
+    messages: [SChatMessage],
+    chat-draft: string,
+    chat-rev: int,
+    can-manage-requests: bool,
+    requests: [SJoinRequest],
+    // the Squad Arena (Leaderboard > Squad Arena)
+    arena-period: int,
+    arena: [SArenaRow],
+    season-name: string,
+    season-text: string,
+    // the squad details dialog
+    details-open: bool,
+    d-rank: int,
+    d-kicker: string,
+    d-name: string,
+    d-badge: string,
+    d-can-join: bool,
+    d-join-label: string,
+    // 0 loading, 1 shown, 2 could not load
+    d-state: int,
+    d-stats: [SStat],
+    d-members: [SDetailMember],
+}
+
+export struct SBadge {
+    icon: string,
+    name: string,
+    how: string,
+    earned: bool,
+    // "×3" for daily badges
+    count: string,
+}
+
+export struct SBadgeGroup {
+    title: string,
+    source: string,
+    badges: [SBadge],
+    // the Pet Rock subgroup under Break Room ("" = none)
+    sub-title: string,
+    sub-source: string,
+    sub-badges: [SBadge],
+}
+
+export struct SAvatarChoice {
+    avatar: SAvatar,
+    label: string,
+    selected: bool,
+    key: string,
+}
+
+export struct SAdminRow {
+    cells: [string],
+}
+
+export struct SDialogsView {
+    // the profile avatar editor
+    avatar-open: bool,
+    avatar-draft: SAvatar,
+    // 0 letter, 1 icon, 2 photo
+    avatar-mode: int,
+    avatar-styles: [SAvatarChoice],
+    avatar-icons: [SAvatarChoice],
+    letter-picker: bool,
+    letter: string,
+    avatar-has-photo: bool,
+    avatar-busy: bool,
+    // the crop editor
+    crop-open: bool,
+    crop-image: image,
+    crop-x: length,
+    crop-y: length,
+    crop-w: length,
+    crop-h: length,
+    crop-zoom: float,
+    crop-dragging: bool,
+    // badges
+    badges-open: bool,
+    badge-groups: [SBadgeGroup],
+    // a confirmation (`window.confirm`)
+    confirm-open: bool,
+    confirm-text: string,
+    // the comment notice and the app announcement (top-right toasts)
+    notice-open: bool,
+    notice-name: string,
+    notice-body: string,
+    announcement-open: bool,
+    announcement-title: string,
+    announcement-body: string,
+    // Settings (telemetry + owner cards)
+    telemetry-on: bool,
+    is-owner: bool,
+    notice-label: string,
+    notice-enabled: bool,
+    admin-loading: bool,
+    admin-summary: string,
+    // the owner usage dialog
+    admin-open: bool,
+    // Synced users, Active 24h, Active 7d, Opt-in installs, Flagged
+    admin-counts: [string],
+    admin-users: [SAdminRow],
+    admin-flagged: [SAdminRow],
+    admin-abuse: [SAdminRow],
+    admin-installs: [SAdminRow],
+}
+
+export global SocialActions {
+    // Feed
+    callback feed-scope(int);
+    callback feed-note-edited(string);
+    callback feed-post();
+    callback feed-pick-image();
+    callback feed-clear-image();
+    callback feed-toggle-poll();
+    callback feed-poll-question(string);
+    callback feed-poll-multiple(bool);
+    callback feed-poll-option(int, string);
+    callback feed-poll-add();
+    callback feed-poll-remove(int);
+    callback feed-poll-clear();
+    callback feed-react(string, string);
+    callback feed-toggle-picker(string);
+    callback feed-vote(string, string);
+    callback feed-toggle-comments(string);
+    callback feed-comment-edited(string, string);
+    callback feed-comment-submit(string);
+    callback feed-edit(string);
+    callback feed-edit-note(string);
+    callback feed-edit-pick-image();
+    callback feed-edit-clear-image();
+    callback feed-edit-remove-image();
+    callback feed-edit-save();
+    callback feed-edit-cancel();
+    callback feed-delete(string);
+    callback feed-open-image(string);
+    callback feed-close-image();
+    callback feed-image-shown(string);
+    // Squads
+    callback squad-name-edited(string);
+    callback squad-toggle-private();
+    callback squad-create();
+    callback squad-search-edited(string);
+    callback squad-search();
+    callback squad-reload();
+    callback squad-join(string);
+    callback squad-respond(string, bool);
+    callback squad-leave();
+    callback squad-edit();
+    callback squad-settings-name(string);
+    callback squad-settings-private();
+    callback squad-settings-save();
+    callback squad-settings-cancel();
+    callback squad-expand(string);
+    callback squad-role(string, int);
+    callback squad-kick(string);
+    callback squad-period(int);
+    callback squad-chat-edited(string);
+    callback squad-chat-send();
+    callback squad-chat-delete(string);
+    callback arena-period(int);
+    callback arena-open(string);
+    callback details-close();
+    callback details-join();
+    // dialogs
+    callback confirm(bool);
+    callback avatar-open();
+    callback avatar-close();
+    callback avatar-mode(int);
+    callback avatar-style(string);
+    callback avatar-icon(string);
+    callback avatar-letter(string);
+    callback avatar-toggle-letters();
+    callback avatar-pick-photo();
+    callback avatar-remove-photo();
+    callback avatar-save();
+    callback crop-down(length, length);
+    callback crop-move(length, length);
+    callback crop-up();
+    callback crop-wheel(bool);
+    callback crop-zoom(float);
+    callback crop-cancel();
+    callback crop-apply();
+    callback badges(bool);
+    callback notice-view();
+    callback notice-close();
+    callback announcement-close();
+    callback telemetry(bool);
+    callback admin-load();
+    callback admin-close();
+    callback update-notice();
+}
+
+export global SocialData {
+    in property <SFeedView> feed;
+    in property <SSquadView> squad;
+    in property <SDialogsView> dialogs;
+}

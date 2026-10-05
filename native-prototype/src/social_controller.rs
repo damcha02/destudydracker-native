@@ -75,10 +75,10 @@ impl Subtab {
         }
     }
 
-    /// 22a implements Friends, Leaderboard and Profile; Feed and Squad are Stage 22b.
+    /// Every subtab is implemented (Feed and Squad since Stage 22b).
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn available(self) -> bool {
-        matches!(self, Self::Leaderboard | Self::Friends | Self::Profile)
+        true
     }
 }
 
@@ -99,6 +99,8 @@ enum Pending {
     Bootstrap,
     Sync {
         silent: bool,
+        /// `sentFeedPostIds`: removed from the outbox once the server accepted them.
+        sent: Vec<study_tracker_core::social::PostId>,
     },
     StatusAfterSync,
     Status,
@@ -115,6 +117,11 @@ enum Pending {
         target: UserId,
     },
     RestoreProfile,
+    // ---- Stage 22b (handled in the child modules) ----
+    Feed(feed::FeedPending),
+    Squad(squad::SquadPending),
+    Profile(avatar::AvatarPending),
+    Background(background::BackgroundPending),
 }
 
 /// Inputs the controller needs from the rest of the app at sync time.
@@ -123,6 +130,25 @@ pub struct SyncContext<'a> {
     pub clock: &'a dyn LocalClock,
     pub device: &'a DeviceIdentity,
     pub app: &'a AppMetadata,
+    /// The Timer's phase and segments, read-only (offline reconciliation's live intervals).
+    pub timer_phase: study_tracker_core::timer::TimerPhase,
+    pub timer_segments: &'a [study_tracker_core::timer::ActiveSegment],
+}
+
+#[path = "social_controller_avatar.rs"]
+pub mod avatar;
+#[path = "social_controller_background.rs"]
+pub mod background;
+#[path = "social_controller_feed.rs"]
+pub mod feed;
+#[path = "social_controller_squad.rs"]
+pub mod squad;
+
+/// What happens when a sync finishes (production chains these after `runSocialSync`).
+#[derive(Debug, Clone, PartialEq)]
+enum AfterSync {
+    /// `postLatestSessionToFeed` with an image: upload it once the post is on the server.
+    UploadPostImage(feed::PostImageJob),
 }
 
 pub struct SocialController {
@@ -160,6 +186,14 @@ pub struct SocialController {
     /// Refreshes not sent because an identical one was already in flight.
     pub coalesced: u64,
     pub stale_replies: u64,
+    // ---- Stage 22b ----
+    pub feed: feed::FeedState,
+    pub squad: squad::SquadState,
+    pub avatar: avatar::AvatarState,
+    pub bg: background::BackgroundState,
+    after_sync: Vec<AfterSync>,
+    /// Network-class failures seen since the last success (drives "connectivity restored").
+    offline_failures: u64,
 }
 
 impl SocialController {
@@ -183,6 +217,7 @@ impl SocialController {
             .as_ref()
             .and_then(|id| port.load().filter(|r| r.user_id == id.user_id));
         let restoring = identity.is_some() && record.is_none();
+        let prefs = port.load_prefs();
         let phase = match identity {
             Some(identity) => IdentityPhase::ExistingIdentity { identity },
             None => IdentityPhase::NoIdentity,
@@ -228,7 +263,28 @@ impl SocialController {
             requests_made: 0,
             coalesced: 0,
             stale_replies: 0,
+            feed: feed::FeedState::default(),
+            squad: squad::SquadState::default(),
+            avatar: avatar::AvatarState::default(),
+            bg: background::BackgroundState::new(prefs),
+            after_sync: Vec::new(),
+            offline_failures: 0,
         }
+        .with_restored_state()
+    }
+
+    /// Fills the in-memory caches from the persisted record (queued posts show in the feed as
+    /// production's cache shows them; the verified anchor survives restarts).
+    fn with_restored_state(mut self) -> Self {
+        if let Some(r) = &self.record {
+            self.bg.verified = study_tracker_core::social::verified::VerifiedMachine::new(
+                r.verified_anchor.clone(),
+            );
+            self.feed.seen_comments = r.seen_comment_ids.iter().cloned().collect();
+            self.feed.seen_initialized = !r.seen_comment_ids.is_empty();
+        }
+        self.feed.reset_caches_from_pending(self.record.as_ref());
+        self
     }
 
     pub fn configured(&self) -> bool {
@@ -260,8 +316,23 @@ impl SocialController {
         self.port.writes()
     }
 
+    /// Defence in depth: a server message that echoes the credential is never shown or kept.
+    pub(crate) fn scrub(&self, text: String) -> String {
+        let secret = match &self.phase {
+            IdentityPhase::ExistingIdentity { identity } => identity.device_secret.expose(),
+            IdentityPhase::NewIdentity { candidate } => candidate.device_secret.expose(),
+            IdentityPhase::NoIdentity => return text,
+        };
+        if !secret.is_empty() && text.contains(secret) {
+            text.replace(secret, "[redacted]")
+        } else {
+            text
+        }
+    }
+
     fn say(&mut self, text: impl Into<String>) {
-        self.message = Some(text.into());
+        let text = self.scrub(text.into());
+        self.message = Some(text);
         self.message_seq += 1;
     }
 
@@ -269,6 +340,7 @@ impl SocialController {
         self.port.persist(self.record.as_ref());
     }
 
+    /// `Post::DecodeImage` etc. are not used by controller requests; uploads are plain HTTP.
     fn send(&mut self, pending: Pending, request: crate::net::http::ApiRequest) -> Outgoing {
         let token = self.tokens.next();
         let cancel = CancelToken::new();
@@ -384,18 +456,17 @@ impl SocialController {
     }
 
     fn refresh_leaderboard(&mut self) -> Vec<Outgoing> {
-        if !self.active()
-            || !self.tab_visible
-            || self.subtab != Subtab::Leaderboard
-            || self.scope == LeaderboardScope::Squad
-        {
-            // the squad scoreboard is Stage 22b
+        if !self.active() || !self.tab_visible || self.subtab != Subtab::Leaderboard {
             return Vec::new();
         }
+        // `refreshSocialLeaderboard` also runs for the squad scope (the members' board the Squad
+        // tab shows); `refreshSquadScoreboard` adds the Squad Arena alongside
         let (scope, period) = (self.scope, self.period);
-        self.with_identity(Pending::Leaderboard { scope, period }, |id| {
+        let mut out = self.with_identity(Pending::Leaderboard { scope, period }, |id| {
             social_api::leaderboard(id, scope, period)
-        })
+        });
+        out.extend(self.refresh_squad_scoreboard(false));
+        out
     }
 
     /// `runSocialSync({ silent })`.
@@ -415,12 +486,14 @@ impl SocialController {
             stats: &stats,
             device: ctx.device,
             app: ctx.app,
+            feed_posts: &record.pending_posts,
         };
+        let sent = social_api::sent_post_ids(&input);
         match social_api::sync_v2(&input) {
             Ok(request) => {
                 self.sync_in_progress = true;
                 self.syncing = true;
-                vec![self.send(Pending::Sync { silent }, request)]
+                vec![self.send(Pending::Sync { silent, sent }, request)]
             }
             Err(err) => {
                 let text = err.user_message("Could not sync social data.");
@@ -434,8 +507,9 @@ impl SocialController {
     }
 
     fn record_sync_failure(&mut self, text: &str, now: WallTimestamp, clock: &dyn LocalClock) {
+        let text = self.scrub(text.to_string());
         if let Some(r) = self.record.as_mut() {
-            r.sync.last_sync_error = Some(text.to_string());
+            r.sync.last_sync_error = Some(text);
             r.sync.next_auto_sync_at =
                 Some(SocialTimestamp::from_wall(next_auto_sync_at(now, clock)));
         }
@@ -466,6 +540,8 @@ impl SocialController {
         let mut out = self.refresh_status();
         out.extend(self.subtab_effect(app, now, ctx));
         out.extend(self.refresh_leaderboard());
+        out.extend(self.refresh_feed());
+        out.extend(self.maybe_load_suggestions());
         out
     }
 
@@ -505,6 +581,8 @@ impl SocialController {
         self.subtab = subtab;
         let mut out = self.subtab_effect(app, now, ctx);
         out.extend(self.refresh_leaderboard());
+        out.extend(self.refresh_feed());
+        out.extend(self.maybe_load_suggestions());
         out
     }
 
@@ -739,6 +817,7 @@ impl SocialController {
             stats: &stats,
             device: ctx.device,
             app: ctx.app,
+            feed_posts: &[],
         };
         let request = match social_api::sync_v2(&input) {
             Ok(r) => r,
@@ -747,13 +826,7 @@ impl SocialController {
                 return Vec::new();
             }
         };
-        self.record = Some(SocialRecord {
-            user_id: candidate.user_id.clone(),
-            profile,
-            sync: SyncStatus::default(),
-            friends: FriendsSnapshot::default(),
-            leaderboards: Vec::new(),
-        });
+        self.record = Some(SocialRecord::new(candidate.user_id.clone(), profile));
         self.phase = IdentityPhase::NewIdentity { candidate };
         self.creating_account = true;
         let _ = now;
@@ -848,6 +921,8 @@ impl SocialController {
 
     // ------------------------------------------------------------------- replies
 
+    /// `{ ...current.social, ...result.social }`: every list the reply carried replaces the
+    /// local one (the outbox is kept). Persists only when the persisted part really changed.
     fn apply_snapshot(&mut self, snapshot: SocialSnapshot) {
         let Some(r) = self.record.as_mut() else {
             return;
@@ -856,6 +931,21 @@ impl SocialController {
         r.friends = snapshot.friends;
         for (scope, period, entries) in snapshot.leaderboards {
             changed |= set_board(&mut r.leaderboards, scope, period, entries);
+        }
+        if let Some(sq) = snapshot.squad {
+            changed |= r.squad != sq.squad
+                || r.squad_incoming != sq.incoming
+                || r.squad_outgoing != sq.outgoing;
+            r.squad = sq.squad;
+            r.squad_incoming = sq.incoming;
+            r.squad_outgoing = sq.outgoing;
+            self.squad.messages = sq.messages;
+        }
+        for (scope, rows) in snapshot.feeds {
+            changed |= self.feed.store_feed(scope, rows, r);
+        }
+        for (period, rows) in snapshot.squad_scores {
+            self.squad.scores.insert(period, rows);
         }
         if changed {
             self.persist();
@@ -874,27 +964,70 @@ impl SocialController {
             return Vec::new();
         };
         let result = reply.http();
+        let mut out = self.track_connectivity(&result);
         if matches!(result, Err(NetError::Cancelled)) {
             match pending {
-                Pending::Sync { .. } => self.sync_in_progress = false,
+                Pending::Sync { .. } => {
+                    self.sync_in_progress = false;
+                    self.after_sync.clear();
+                }
                 Pending::Bootstrap => {
                     return self.bootstrap_result(Err(NetError::Cancelled), now, ctx.clock)
                 }
+                Pending::Feed(p) => self.feed_cancelled(p),
+                Pending::Squad(p) => self.squad_cancelled(p),
+                Pending::Profile(p) => self.avatar_cancelled(p),
+                Pending::Background(p) => self.background_cancelled(p),
                 _ => {}
             }
             self.syncing = self.sync_in_progress;
-            return Vec::new();
+            return out;
         }
+        out.extend(self.on_reply_inner(pending, result, now, ctx));
+        out
+    }
+
+    /// A network-class failure, then a success: connectivity came back (production's `online`
+    /// event, which re-attempts the verified session).
+    fn track_connectivity(
+        &mut self,
+        result: &Result<crate::net::http::HttpResponse, NetError>,
+    ) -> Vec<Outgoing> {
+        match result {
+            Err(NetError::Offline | NetError::Timeout) => {
+                self.offline_failures += 1;
+                Vec::new()
+            }
+            Ok(_) if self.offline_failures > 0 => {
+                self.offline_failures = 0;
+                self.verified_connectivity_restored()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    fn on_reply_inner(
+        &mut self,
+        pending: Pending,
+        result: Result<crate::net::http::HttpResponse, NetError>,
+        now: WallTimestamp,
+        ctx: &SyncContext,
+    ) -> Vec<Outgoing> {
         match pending {
+            Pending::Feed(p) => self.feed_reply(p, result, now, ctx),
+            Pending::Squad(p) => self.squad_reply(p, result, now, ctx),
+            Pending::Profile(p) => self.avatar_reply(p, result, now, ctx),
+            Pending::Background(p) => self.background_reply(p, result, now, ctx),
             Pending::Bootstrap => self.bootstrap_result(
                 result.and_then(|r| social_api::parse_ok(&r)),
                 now,
                 ctx.clock,
             ),
-            Pending::Sync { silent } => {
+            Pending::Sync { silent, sent } => {
                 self.sync_in_progress = false;
                 self.syncing = false;
-                match result.and_then(|r| social_api::parse_ok(&r)) {
+                let after = std::mem::take(&mut self.after_sync);
+                let mut out = match result.and_then(|r| social_api::parse_ok(&r)) {
                     Ok(()) => {
                         if !silent {
                             self.say("Social data synced.");
@@ -905,12 +1038,18 @@ impl SocialController {
                             r.sync.next_auto_sync_at = Some(SocialTimestamp::from_wall(
                                 next_auto_sync_at(now, ctx.clock),
                             ));
+                            // `pendingFeedPosts.filter(post => !sentFeedPostIds.includes(post.id))`
+                            r.pending_posts.retain(|p| !sent.contains(&p.id));
                         }
                         self.persist();
                         // production sets the dot after every successful sync, also while the
                         // Social tab is open (it clears only when the tab is opened again)
                         self.has_unread = true;
-                        self.with_identity(Pending::StatusAfterSync, social_api::friends_status)
+                        let mut out = self
+                            .with_identity(Pending::StatusAfterSync, social_api::friends_status);
+                        // queued deletions go out after the sync, one request each
+                        out.extend(self.send_queued_deletions());
+                        out
                     }
                     Err(err) => {
                         let text = err.user_message("Could not sync social data.");
@@ -920,18 +1059,27 @@ impl SocialController {
                         }
                         Vec::new()
                     }
+                };
+                // production continues its chain whatever the sync's outcome
+                for AfterSync::UploadPostImage(job) in after {
+                    out.extend(self.upload_post_image(job));
                 }
+                out
             }
             Pending::StatusAfterSync | Pending::Status => {
                 if let Ok(snapshot) = result.and_then(|r| social_api::parse_snapshot(&r)) {
                     if matches!(pending, Pending::Status) {
-                        if let Some(r) = self.record.as_mut() {
-                            r.sync.last_sync_error = None;
+                        let cleared = self
+                            .record
+                            .as_mut()
+                            .is_some_and(|r| r.sync.last_sync_error.take().is_some());
+                        if cleared {
+                            self.persist();
                         }
                     }
                     self.apply_snapshot(snapshot);
                 }
-                Vec::new()
+                self.maybe_load_suggestions()
             }
             Pending::Presence => Vec::new(),
             Pending::Leaderboard { scope, period } => {
@@ -1009,13 +1157,7 @@ impl SocialController {
                         let mut profile = SocialProfile::new_default(code);
                         profile.display_name = stats.display_name.clone();
                         profile.avatar = stats.avatar.clone();
-                        self.record = Some(SocialRecord {
-                            user_id: id.user_id,
-                            profile,
-                            sync: SyncStatus::default(),
-                            friends: FriendsSnapshot::default(),
-                            leaderboards: Vec::new(),
-                        });
+                        self.record = Some(SocialRecord::new(id.user_id, profile));
                         self.restoring_profile = false;
                         self.persist();
                         let mut out = self.presence(ctx.app);
@@ -1026,7 +1168,10 @@ impl SocialController {
                                 self.name_draft.clear();
                                 self.name_prompt_open = true;
                             }
+                            out.extend(self.refresh_status());
                             out.extend(self.refresh_leaderboard());
+                            out.extend(self.refresh_feed());
+                            out.extend(self.maybe_load_suggestions());
                         }
                         out
                     }
@@ -1051,6 +1196,9 @@ impl SocialController {
         }
         self.sync_in_progress = false;
         self.syncing = false;
+        self.after_sync.clear();
+        // production sends nothing at exit; the Worker settles a silent verified session
+        self.bg.verified.reset();
     }
 
     // ------------------------------------------------------------------- view helpers
@@ -1070,7 +1218,8 @@ impl SocialController {
             .find(|b| b.scope == scope && b.period == period)
             .map(|b| b.entries.as_slice())
             .unwrap_or(&[]);
-        ranked_for_scope(rows, scope, &id.user_id, &r.friends, &[])
+        let members = r.squad.as_ref().map(|s| s.member_ids()).unwrap_or_default();
+        ranked_for_scope(rows, scope, &id.user_id, &r.friends, &members)
     }
 
     pub fn friends(&self) -> Option<&FriendsSnapshot> {

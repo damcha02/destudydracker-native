@@ -1,4 +1,4 @@
-//! The mock Worker's state and handlers for the Stage 22a routes. Each handler follows the
+//! The mock Worker's state and handlers for the Stage 22a routes (22b routes: `world_22b`). Each handler follows the
 //! production Worker's logic (`cloudflare/src/index.ts`): the same validation order, messages,
 //! status codes, ordering and leaderboard rules (verified/baseline minutes only, migration 0019;
 //! totals per migration 0022), Europe/Zurich days. The goldens recorded from the real Worker
@@ -63,6 +63,8 @@ pub struct World {
     pub votes: HashMap<(String, String), i64>,
     pub avatars: HashMap<String, (String, Vec<u8>)>,
     pub seq: u64,
+    /// Stage 22b state (feed, squads, verified sessions, telemetry, announcements).
+    pub x: crate::world_22b::Extra,
 }
 
 fn sqlite_time(ms: i64) -> String {
@@ -163,6 +165,39 @@ impl World {
             .to_iso()
     }
 
+    pub(crate) fn next_id_pub(&mut self, prefix: &str) -> String {
+        self.next_id(prefix)
+    }
+
+    pub(crate) fn verify_pub(&self, user_id: &str, secret: &str) -> Result<&User, Response> {
+        self.verify(user_id, secret)
+    }
+
+    pub(crate) fn touch_pub(&mut self, user_id: &str) {
+        self.touch(user_id)
+    }
+
+    pub(crate) fn friend_ids_pub(&self, user_id: &str) -> Vec<String> {
+        self.friend_ids(user_id)
+    }
+
+    pub(crate) fn are_friends(&self, a: &str, b: &str) -> bool {
+        self.friendships.contains(&pair(a, b))
+    }
+
+    pub(crate) fn list_avatar_pub(&self, user: &User) -> Value {
+        list_avatar(user)
+    }
+
+    pub(crate) fn baselines_pub(&self, user_id: &str) -> (u64, u64) {
+        self.baselines.get(user_id).copied().unwrap_or((0, 0))
+    }
+
+    /// The full social snapshot (every mutation's reply).
+    pub fn full_snapshot(&self, user_id: &str) -> Value {
+        self.snapshot(user_id, true)
+    }
+
     fn next_id(&mut self, prefix: &str) -> String {
         self.seq += 1;
         format!("{prefix}-{:08}", self.seq)
@@ -237,8 +272,16 @@ impl World {
             })).collect::<Vec<_>>(),
             "incomingFriendRequests": incoming.into_iter().map(req).collect::<Vec<_>>(),
             "outgoingFriendRequests": outgoing.into_iter().map(req).collect::<Vec<_>>(),
-            "squad": null, "outgoingSquadRequests": [], "incomingSquadRequests": [], "squadMessages": [],
         });
+        let squad = self.squad_snapshot(user_id);
+        for k in [
+            "squad",
+            "outgoingSquadRequests",
+            "incomingSquadRequests",
+            "squadMessages",
+        ] {
+            social[k] = squad[k].clone();
+        }
         if include_caches {
             let board = |scope: &str| {
                 json!({
@@ -247,10 +290,9 @@ impl World {
                     "overall": self.leaderboard(user_id, scope, "overall"),
                 })
             };
-            social["cachedLeaderboards"] = json!({"global": board("global"), "friends": board("friends"), "squad": {"daily": [], "weekly": [], "overall": []}});
-            social["cachedFeeds"] = json!({"global": [], "friends": []});
-            social["cachedSquadScoreLeaderboards"] =
-                json!({"daily": [], "season": [], "overall": []});
+            social["cachedLeaderboards"] = json!({"global": board("global"), "friends": board("friends"), "squad": board("squad")});
+            social["cachedFeeds"] = json!({"global": self.feed(user_id, "global"), "friends": self.feed(user_id, "friends")});
+            social["cachedSquadScoreLeaderboards"] = json!({"daily": self.squad_scores("daily"), "season": self.squad_scores("season"), "overall": self.squad_scores("overall")});
         }
         json!({ "social": social })
     }
@@ -270,16 +312,32 @@ impl World {
             .collect()
     }
 
-    /// `getLeaderboard` (global / friends; squad is Stage 22b and empty here).
+    /// `getLeaderboard` (global / friends / the user's squad members).
     pub fn leaderboard(&self, user_id: &str, scope: &str, period: &str) -> Vec<Value> {
-        if scope == "squad" {
-            return Vec::new();
-        }
-        let allowed: Option<HashSet<String>> = (scope == "friends").then(|| {
-            let mut s: HashSet<String> = self.friend_ids(user_id).into_iter().collect();
-            s.insert(user_id.to_string());
-            s
-        });
+        let allowed: Option<HashSet<String>> = match scope {
+            "friends" => {
+                let mut s: HashSet<String> = self.friend_ids(user_id).into_iter().collect();
+                s.insert(user_id.to_string());
+                Some(s)
+            }
+            "squad" => {
+                let squad = self
+                    .x
+                    .members
+                    .iter()
+                    .find(|m| m.user == user_id)
+                    .map(|m| m.squad.clone());
+                Some(
+                    self.x
+                        .members
+                        .iter()
+                        .filter(|m| Some(&m.squad) == squad.as_ref())
+                        .map(|m| m.user.clone())
+                        .collect(),
+                )
+            }
+            _ => None,
+        };
         let (today, week) = (self.today(), self.week_start());
         let mut rows: Vec<(String, u64, u64, Option<String>, &User)> = self
             .users
@@ -444,6 +502,8 @@ impl World {
                 entry.is_private = user["isPrivate"].as_bool().unwrap_or(false);
                 entry.show_hours_to_friends = user["showHoursToFriends"].as_bool().unwrap_or(true);
                 entry.last_seen_at = now;
+                self.upsert_feed_posts(&id, &body["feedPosts"])?;
+                self.settle_stale(&id);
                 Ok(Response::json(
                     &json!({"ok": true, "syncedAt": crate::iso(self.now_ms)}),
                 ))
@@ -532,6 +592,7 @@ impl World {
                 let body = json_body();
                 let id = field(&body, "userId").trim().to_string();
                 self.verify(&id, &field(&body, "deviceSecret"))?;
+                self.settle_stale(&id);
                 let scope = match body["scope"].as_str() {
                     Some(s @ ("friends" | "squad")) => s,
                     _ => "global",
@@ -764,16 +825,23 @@ impl World {
             ("GET", path) if path.starts_with("/profile/avatar/") => {
                 let key = percent_decode(&path["/profile/avatar/".len()..]);
                 match self.avatars.get(&key) {
-                    Some((_, bytes)) => Ok(Response {
+                    Some((mime, bytes)) => Ok(Response {
                         status: 200,
-                        content_type: "image/png",
+                        content_type: match mime.as_str() {
+                            "image/jpeg" => "image/jpeg",
+                            "image/webp" => "image/webp",
+                            "image/gif" => "image/gif",
+                            _ => "image/png",
+                        },
                         body: bytes.clone(),
                         extra_headers: vec![("cache-control", "public, max-age=86400".into())],
                     }),
                     None => Ok(Response::text(404, "Avatar not found.")),
                 }
             }
-            _ => Ok(Response::text(404, "Not found.")),
+            _ => Ok(self
+                .handle_22b(req)
+                .unwrap_or_else(|| Response::text(404, "Not found."))),
         })();
         result.unwrap_or_else(|e| e)
     }

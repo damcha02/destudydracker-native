@@ -8,8 +8,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-/// Requests larger than this are refused (the Worker accepts at most 1.5 MB uploads).
-const MAX_BODY: usize = 4 * 1024 * 1024;
+/// Requests larger than this are refused (the Worker's largest upload is a 5 MB feed image).
+const MAX_BODY: usize = 8 * 1024 * 1024;
 const MAX_HEADER_LINES: usize = 64;
 
 #[derive(Debug, Clone)]

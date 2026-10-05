@@ -1,0 +1,348 @@
+// Stage 22: the Field Notebook Social building blocks shared by the Friends / Leaderboard /
+// Profile panels (22a) and the Feed / Squad panels (22b). Moved out of `fn-social.slint` unchanged.
+import { FN } from "../fn/palette.slint";
+import { MonoText, SerifText, SansText, HLine, DotLine } from "../fn/parts.slint";
+import { Emoji, CssLine } from "../break/types.slint";
+import { SAvatar, SStat } from "types.slint";
+
+export global SocialBlue {
+    // production's `#8fb4ff` (request badges, the own leaderboard row, code-plate keys)
+    out property <color> blue: #8fb4ff;
+}
+
+// `ArenaAvatar` in the Field Notebook style: a flat paper box with the hairline edge.
+export component FnAvatar inherits Rectangle {
+    in property <SAvatar> a;
+    in property <length> size: 38px;
+    in property <length> font: 13.44px;
+    // icon avatars scale with the box (production: 18.4 px at 38, 23.2 px at 48)
+    in property <length> icon-font: root.size * 0.483;
+    width: root.size;
+    height: root.size;
+    border-radius: 2px;
+    border-width: 1px;
+    border-color: FN.line;
+    background: FN.surface-2;
+    clip: true;
+    if root.a.kind == 7 && root.a.has-photo: Image { width: parent.width; height: parent.height; source: root.a.photo; image-fit: cover; }
+    if !(root.a.kind == 7 && root.a.has-photo): Text {
+        width: parent.width;
+        height: parent.height;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.a.text;
+        color: FN.ink;
+        font-size: root.a.kind == 6 ? root.icon-font : root.a.kind == 2 ? root.font * 1.4 : root.font;
+        font-weight: root.a.kind == 1 ? 800 : root.a.kind == 2 ? 700 : 900;
+        font-italic: root.a.kind == 2 || root.a.kind == 3;
+        font-family: root.a.kind == 6 ? Emoji.family : root.a.kind == 1 || root.a.kind == 2 ? FN.serif : root.a.kind == 4 || root.a.kind == 5 ? FN.mono : FN.sans;
+        letter-spacing: root.a.kind == 0 || root.a.kind == 1 ? -0.04 * root.font : 0px;
+    }
+    accessible-role: image;
+    accessible-label: "Avatar " + root.a.text;
+}
+
+export component Kicker inherits MonoText {
+    font-size: 10px;
+    letter-spacing: 1.8px;
+    color: FN.ink-4;
+}
+
+// `.arena-btn--send`: ink fill, paper text (Newsreader 13px)
+export component SendButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    in property <length> h: 36px;
+    callback clicked();
+    width: t.preferred-width + 34px;
+    height: root.h;
+    border-width: 1px;
+    border-color: FN.ink;
+    background: FN.ink;
+    opacity: root.enabled ? 1 : 0.5;
+    t := SerifText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.text; font-size: 13px; font-weight: 500; color: FN.desk; }
+    TouchArea { enabled: root.enabled; mouse-cursor: root.enabled ? pointer : default; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+}
+
+// `.arena-btn--accept` / `--decline` / Refresh: small uppercase mono on paper
+export component PaperButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: t.preferred-width + 26px;
+    height: 30px;
+    border-width: 1px;
+    border-color: FN.line;
+    background: touch.has-hover && root.enabled ? FN.paper-2 : FN.surface-2;
+    opacity: root.enabled ? 1 : 0.5;
+    t := MonoText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.text; font-size: 11px; letter-spacing: 0.66px; color: FN.ink-3; }
+    touch := TouchArea { enabled: root.enabled; mouse-cursor: root.enabled ? pointer : default; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+}
+
+// `.arena-input`
+export component FnField inherits Rectangle {
+    in property <string> placeholder;
+    in property <bool> enabled: true;
+    in property <bool> read-only;
+    in property <bool> upper;
+    in-out property <string> text;
+    callback accepted();
+    callback edited(string);
+    height: 44px;
+    border-width: 1px;
+    border-color: input.has-focus ? FN.ink-3 : FN.line;
+    border-radius: 2px;
+    background: FN.surface;
+    clip: true;
+    input := TextInput {
+        x: 15px;
+        width: parent.width - 30px;
+        height: parent.height;
+        vertical-alignment: center;
+        single-line: true;
+        text <=> root.text;
+        enabled: root.enabled;
+        read-only: root.read-only;
+        font-family: FN.sans;
+        font-size: 16px;
+        color: FN.ink;
+        accepted => { root.accepted(); }
+        edited => { root.edited(self.text); }
+        accessible-role: text-input;
+        accessible-label: root.placeholder;
+    }
+    if root.text == "": SansText {
+        x: 15px;
+        height: parent.height;
+        vertical-alignment: center;
+        text: root.placeholder;
+        font-size: 16px;
+        color: FN.ink-4;
+    }
+    public function select-all-and-copy() {
+        input.select-all();
+        input.copy();
+    }
+}
+
+// `.arena-social-section h4` with its blue count
+export component SectionTitle inherits Rectangle {
+    in property <string> text;
+    in property <int> count;
+    height: 23px;
+    t := SansText { x: 0px; y: 0px; text: root.text; font-size: 14.08px; font-weight: 700; letter-spacing: 1.408px; color: FN.ink; }
+    Rectangle {
+        x: t.preferred-width + 8px;
+        y: 0px;
+        width: n.preferred-width + 14px;
+        height: 16px;
+        border-radius: 8px;
+        background: SocialBlue.blue;
+        n := SansText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.count; font-size: 11.52px; font-weight: 700; color: #081018; }
+    }
+    HLine { y: parent.height - 1px; tone: FN.ink; }
+}
+
+// `.arena-empty`
+export component EmptyCard inherits Rectangle {
+    in property <string> strong;
+    in property <string> text;
+    in property <bool> small;
+    height: col.preferred-height + (root.small ? 24px : 36px);
+    border-width: 1px;
+    border-color: FN.line-soft;
+    background: FN.surface-2;
+    col := VerticalLayout {
+        x: 14px;
+        width: parent.width - 28px;
+        alignment: center;
+        spacing: 4px;
+        if root.strong != "": SansText { horizontal-alignment: center; text: root.strong; font-size: 14px; font-weight: 700; color: FN.ink; wrap: word-wrap; }
+        SansText { horizontal-alignment: center; text: root.text; font-size: root.small ? 12.8px : 14px; color: FN.ink-3; wrap: word-wrap; }
+    }
+}
+
+export component PersonRow inherits Rectangle {
+    in property <SAvatar> avatar;
+    in property <string> name;
+    in property <string> detail;
+    in property <length> right: 0px;
+    callback activated();
+    in property <bool> clickable;
+    // 10px padding around the 38px avatar or the two text lines, 1px rule. The lines are their
+    // `line-height: normal` boxes in the requested faces: a fallback face (a CJK name on Windows,
+    // W22a-3) makes Chromium's line taller but not the card, which the avatar still sizes
+    height: 21px + max(38px, CssLine.normal(n.font-metrics, 16px, CssLine.sans-gap) + 3px + CssLine.normal(d.font-metrics, 12.48px, CssLine.sans-gap));
+    FnAvatar { x: 10px; y: (parent.height - 1px - self.height) / 2; a: root.avatar; }
+    n := SansText { x: 60px; y: (parent.height - 1px - self.preferred-height - 3px - d.preferred-height) / 2; width: parent.width - 70px - root.right; text: root.name; font-size: 16px; font-weight: 700; color: FN.ink; overflow: elide; }
+    d := SansText { x: 60px; y: n.y + n.preferred-height + 3px; width: parent.width - 70px - root.right; text: root.detail; font-size: 12.48px; color: FN.ink-3; overflow: elide; }
+    DotLine { y: parent.height - 1px; width: parent.width; }
+    if root.clickable: TouchArea { mouse-cursor: pointer; clicked => { root.activated(); } }
+    @children
+}
+
+// ------------------------------------------------------------------------------------ panels
+
+// `.arena-panel-head`: a 44px icon box, a kicker and an h3, ruled below
+export component PanelHead inherits Rectangle {
+    in property <string> icon;
+    in property <string> kicker;
+    in property <string> title;
+    height: 57px;
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 44px;
+        height: 44px;
+        border-width: 1px;
+        border-color: FN.line;
+        background: FN.surface-2;
+        SansText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.icon; font-size: 16px; font-weight: 900; color: FN.ink-3; }
+    }
+    Kicker { x: 56px; y: 6px; text: root.kicker; }
+    SerifText { x: 56px; y: 20px; text: root.title; font-size: 18.72px; font-weight: 500; letter-spacing: -0.1872px; color: FN.ink; }
+    HLine { y: parent.height - 1px; tone: FN.ink; }
+}
+
+// `.social-single-panel` > `article.arena-panel`
+export component ArticlePanel inherits Rectangle {
+    in property <length> content-h;
+    height: root.content-h + 2 * 28px + 40px - 28px + 2px + 40px;
+    background: FN.surface-2;
+    Rectangle {
+        x: 26px;
+        y: 28px;
+        width: parent.width - 52px;
+        height: root.content-h + 42px;
+        border-width: 1px;
+        border-color: FN.line;
+        background: FN.surface;
+        drop-shadow-offset-y: 1px;
+        drop-shadow-color: #0000002e;
+        Rectangle { x: 21px; y: 21px; width: parent.width - 42px; height: root.content-h; @children }
+    }
+}
+
+export component Chip inherits Rectangle {
+    in property <string> text;
+    in property <bool> active;
+    callback clicked();
+    width: t.preferred-width + 28px;
+    // 1px + 9px padding around the 900-weight label's `line-height: normal` box (W22a-3: Arial
+    // Black on Windows, 39px as in WebView2; Liberation Sans 35px)
+    height: 20px + CssLine.normal(t.font-metrics, 13.44px, CssLine.sans-gap);
+    border-width: 1px;
+    border-color: root.active ? FN.ink : FN.line;
+    background: root.active ? FN.surface : transparent;
+    t := SansText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.text; font-size: 13.44px; font-weight: 900; color: root.active ? FN.ink : FN.ink-3; }
+    TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    accessible-role: tab;
+    accessible-label: root.text;
+    accessible-checked: root.active;
+}
+
+export component CodePlate inherits Rectangle {
+    in property <string> key;
+    in property <string> text;
+    in property <string> chip;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 7px + 16px + 6px + t.preferred-width + 6px + 19px + 9px + 2px;
+    height: 28px;
+    border-width: 1px;
+    border-color: FN.line;
+    opacity: root.enabled ? 1 : 0.55;
+    Rectangle {
+        x: 8px;
+        y: 6px;
+        width: 16px;
+        height: 16px;
+        border-radius: 8px;
+        background: SocialBlue.blue.with-alpha(0.18);
+        MonoText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.key; font-size: 11.2px; font-weight: 800; color: SocialBlue.blue; }
+    }
+    t := MonoText { x: 30px; height: parent.height; vertical-alignment: center; text: root.text; font-size: 10px; font-weight: 800; letter-spacing: 0.8px; color: FN.ink-3; }
+    Rectangle {
+        x: 30px + t.preferred-width + 6px;
+        y: 5px;
+        width: 19px;
+        height: 18px;
+        border-radius: 9px;
+        background: FN.surface-2;
+        // ⧉ is in neither Courier face; Chromium draws it from Segoe UI Symbol on Windows
+        MonoText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.chip; font-family: Emoji.symbol != "" ? Emoji.symbol : FN.mono; font-size: 10.88px; color: FN.ink-3; }
+    }
+    TouchArea { enabled: root.enabled; mouse-cursor: root.enabled ? pointer : default; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+}
+
+export component MiniStat inherits Rectangle {
+    in property <SStat> s;
+    // set by the profile card from the label face (W22a-3)
+    height: 46px;
+    border-width: 1px;
+    border-color: FN.line-soft;
+    background: FN.surface-2;
+    Rectangle {
+        x: 10px;
+        y: (root.height - 28px) / 2;
+        width: 28px;
+        height: 28px;
+        border-radius: 9px;
+        background: root.s.tone == 1 ? @linear-gradient(135deg, #ffd700 0%, #ffa000 100%) : root.s.tone == 2 ? @linear-gradient(135deg, #8fb4ff 0%, #bbd2ff 100%) : root.s.tone == 3 ? @linear-gradient(135deg, #73956a 0%, #acc1a7 100%) : transparent;
+        Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.s.icon; font-family: root.s.tone == 0 ? Emoji.family : Emoji.symbol != "" ? Emoji.symbol : FN.sans; font-size: 16px; font-weight: 900; color: #081018; }
+    }
+    SansText { x: 46px; y: 9.3px; text: root.s.value; font-size: 14.4px; font-weight: 700; color: FN.ink; }
+    SansText { x: 46px; y: 25.7px; text: root.s.label; font-size: 9.92px; font-weight: 800; color: FN.ink-3; }
+    accessible-role: text;
+    accessible-label: root.s.label + ": " + root.s.value;
+}
+
+export component ProfileToggle inherits Rectangle {
+    in property <string> title;
+    in property <string> text;
+    in property <bool> on;
+    callback clicked();
+    height: 68px;
+    border-width: 1px;
+    border-color: FN.line-soft;
+    background: FN.surface-2;
+    SansText { x: 15px; y: 15px; width: parent.width - 30px; text: root.title; font-size: 16px; font-weight: 700; color: FN.ink; }
+    SansText { x: 15px; y: 38px; width: parent.width - 30px; text: root.text; font-size: 12.8px; color: FN.ink-3; overflow: elide; }
+    TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    accessible-role: switch;
+    accessible-label: root.title;
+    accessible-checked: root.on;
+}
+
+
+// A wrapped paragraph whose height is measured at its real (layout-given) width. A bare wrapped
+// `Text` inside a layout reports a taller preferred height than it draws, which left gaps under
+// feed notes; this keeps the box exactly the drawn lines.
+export component WrapText inherits Rectangle {
+    in property <string> text;
+    in property <length> font-size: 16px;
+    in property <int> font-weight: 400;
+    in property <bool> font-italic;
+    in property <color> ink: FN.ink;
+    in property <string> font-family: FN.sans;
+    height: t.preferred-height;
+    t := Text {
+        width: parent.width;
+        text: root.text;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        font-italic: root.font-italic;
+        font-family: root.font-family;
+        color: root.ink;
+        wrap: word-wrap;
+    }
+}

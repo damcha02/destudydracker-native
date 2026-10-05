@@ -27,6 +27,7 @@ pub mod http;
 pub mod images;
 pub mod multipart;
 pub mod social_api;
+pub mod social_ext;
 pub mod transport;
 pub mod worker;
 

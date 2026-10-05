@@ -3,6 +3,7 @@
 //!   social-mock [--port 47811] [--seed demo|demo-submitted|self-only|empty]
 //!               [--now 2026-10-04T12:00:00+02:00] [--latency-ms 0]
 //!               [--write-credentials <native data dir>] [--fault <path>=<500|malformed|drop|delay:ms>[*n]]
+//!               [--squad none] [--owner] [--announcement]   (Stage 22b)
 //!
 //! `--write-credentials` writes the synthetic self identity, bound to the local-test endpoint
 //! class, into a native profile directory (never a production identity). Ctrl-C stops it.
@@ -31,12 +32,31 @@ fn main() {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_millis() as i64)
         });
-    let world = match arg(&args, "--seed").as_deref() {
+    let mut world = match arg(&args, "--seed").as_deref() {
         Some("empty") => seed::empty(now),
         Some("self-only") => seed::self_only(now),
         Some("demo-submitted") => seed::demo(now, true),
         _ => seed::demo(now, false),
     };
+    // Stage 22b: feed and squads on the demo worlds; `--squad none` leaves the user squadless,
+    // `--owner` gives the user production's owner tag (owner panels), `--announcement` adds one
+    if world.users.len() > 1 {
+        seed::add_22b(&mut world, arg(&args, "--squad").as_deref() != Some("none"));
+    }
+    if args.iter().any(|a| a == "--owner") {
+        if let Some(u) = world.users.get_mut(seed::SELF_ID) {
+            u.friend_code = social_mock::world_22b::OWNER_CODE.into();
+        }
+    }
+    if args.iter().any(|a| a == "--announcement") {
+        world.x.announcements.push((
+            "synthetic-announcement-1".into(),
+            "Exam season tips".into(),
+            "Synthetic announcement for local testing.".into(),
+            None,
+            true,
+        ));
+    }
     let server = MockServer::start(port, world).expect("bind 127.0.0.1");
     seed::bind_origin(&mut server.world.lock().unwrap());
     if let Some(ms) = arg(&args, "--latency-ms").and_then(|v| v.parse().ok()) {

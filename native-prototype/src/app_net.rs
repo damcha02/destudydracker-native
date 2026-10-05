@@ -18,16 +18,18 @@ use crate::net::worker::{Job, NetWorker, StatsSnapshot};
 use crate::net_jobs::{NetReply, Outgoing};
 
 type Handler = Box<dyn FnOnce(u64, NetReply)>;
+type LocalHandler = Box<dyn FnOnce(Box<dyn std::any::Any>)>;
 
 struct Runtime {
     origin: Option<Origin>,
     worker: Option<Arc<NetWorker>>,
     next_id: u64,
     handlers: HashMap<u64, (u64, Handler)>,
+    local_handlers: HashMap<u64, LocalHandler>,
 }
 
 thread_local! {
-    static NET: RefCell<Runtime> = RefCell::new(Runtime { origin: None, worker: None, next_id: 0, handlers: HashMap::new() });
+    static NET: RefCell<Runtime> = RefCell::new(Runtime { origin: None, worker: None, next_id: 0, handlers: HashMap::new(), local_handlers: HashMap::new() });
 }
 
 /// The endpoint for this run (`None`: Social is not available - no request will ever be made).
@@ -77,6 +79,7 @@ pub fn submit(out: Outgoing, handler: impl FnOnce(u64, NetReply) + 'static) {
             let reply = NetReply::from_result(result, post);
             let _ = slint::invoke_from_event_loop(move || deliver(id, reply));
         }),
+        local: None,
     };
     if worker.submit(job).is_err() {
         // queue full or shutting down: report it through the normal path (asynchronously)
@@ -84,6 +87,59 @@ pub fn submit(out: Outgoing, handler: impl FnOnce(u64, NetReply) + 'static) {
             deliver(id, NetReply::Http(Err(NetError::Cancelled)))
         });
     }
+}
+
+/// Stage 22b: runs bounded CPU work (a picked image's decode/resize/encode) on the network worker
+/// thread - never the UI thread, never a new thread - and hands the result to `handler` on the UI
+/// thread. Only reachable with an established Social identity (the image pickers are Social
+/// surfaces); `false` if the worker refused it (queue full / shutting down).
+pub fn submit_local<T: Send + 'static>(
+    work: impl FnOnce() -> T + Send + 'static,
+    handler: impl FnOnce(T) + 'static,
+) -> bool {
+    let prepared = NET.with(|n| {
+        let mut n = n.borrow_mut();
+        let origin = n.origin.clone()?;
+        if n.worker.is_none() {
+            n.worker = Some(Arc::new(NetWorker::new(
+                Arc::new(UreqTransport::new()),
+                origin,
+            )));
+        }
+        n.next_id += 1;
+        let id = n.next_id;
+        n.local_handlers.insert(
+            id,
+            Box::new(move |any: Box<dyn std::any::Any>| {
+                if let Ok(v) = any.downcast::<T>() {
+                    handler(*v);
+                }
+            }),
+        );
+        Some((id, n.worker.clone()?))
+    });
+    let Some((id, worker)) = prepared else {
+        return false;
+    };
+    let job = Job {
+        request: crate::net::images::local_marker(),
+        cancel: None,
+        reply: Box::new(|_| {}),
+        local: Some(Box::new(move || {
+            let value: Box<dyn std::any::Any + Send> = Box::new(work());
+            let _ = slint::invoke_from_event_loop(move || {
+                let handler = NET.with(|n| n.borrow_mut().local_handlers.remove(&id));
+                if let Some(h) = handler {
+                    h(value);
+                }
+            });
+        })),
+    };
+    if worker.submit(job).is_err() {
+        NET.with(|n| n.borrow_mut().local_handlers.remove(&id));
+        return false;
+    }
+    true
 }
 
 pub fn stats() -> Option<StatsSnapshot> {
@@ -95,6 +151,7 @@ pub fn shutdown() {
     let worker = NET.with(|n| {
         let mut n = n.borrow_mut();
         n.handlers.clear();
+        n.local_handlers.clear();
         n.worker.take()
     });
     if let Some(w) = worker {

@@ -1,0 +1,514 @@
+// Stage 22b: the Wabi-Sabi Circle feed (`.wabi-feed-shell` under the attendance chips): the scope
+// row, the one-line composer, then the feed as a two-column ledger (who and when on the left,
+// the post on the right) ending with production's "That is the whole feed." line. Geometry from
+// the production DOM probe at 1520x980 (`prod-wabi-light-feed`); the data is the same
+// `SocialData.feed` the Field Notebook feed shows, actions through `SocialActions`.
+import { WS } from "../wabi/palette.slint";
+import { Emoji } from "../break/types.slint";
+import { SFeedView, SFeedPost, SPollOption, SReaction, SComment, SocialActions } from "types.slint";
+import { WAvatar } from "wabi-avatar.slint";
+
+component WSans inherits Text {
+    font-family: WS.sans;
+    color: WS.ink;
+}
+
+component WSerif inherits Text {
+    font-family: WS.serif;
+    color: WS.ink;
+}
+
+// the upper-case 10.5px text buttons of the composer and the cards
+component WLink inherits Rectangle {
+    in property <string> text;
+    in property <bool> active;
+    in property <bool> enabled: true;
+    in property <color> ink: WS.muted;
+    in property <length> spacing: 1.26px;
+    callback clicked();
+    width: t.preferred-width;
+    height: 12px;
+    t := WSans {
+        x: 0px;
+        height: parent.height;
+        vertical-alignment: center;
+        text: root.text.to-uppercase();
+        font-size: 10.5px;
+        letter-spacing: root.spacing;
+        color: !root.enabled ? WS.faint : root.active || touch.has-hover ? WS.sage : root.ink;
+    }
+    touch := TouchArea { enabled: root.enabled; mouse-cursor: root.enabled ? pointer : default; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+}
+
+// a borderless single-line field (the composer, the poll editor, replies)
+component WField inherits Rectangle {
+    in property <string> placeholder;
+    in property <string> initial;
+    in property <int> rev;
+    in property <bool> enabled: true;
+    in property <length> font: 17px;
+    in property <string> family: WS.serif;
+    callback edited(string);
+    callback accepted();
+    out property <string> value: input.text;
+    height: 32px;
+    opacity: root.enabled ? 1 : 0.55;
+    input := TextInput {
+        width: parent.width;
+        height: parent.height;
+        vertical-alignment: center;
+        single-line: true;
+        text: root.initial;
+        enabled: root.enabled;
+        font-family: root.family;
+        font-size: root.font;
+        color: WS.ink;
+        edited => { root.edited(self.text); }
+        accepted => { root.accepted(); }
+        accessible-role: text-input;
+        accessible-label: root.placeholder;
+    }
+    changed rev => { input.text = root.initial; }
+    if input.text == "": Text { x: 0px; height: parent.height; vertical-alignment: center; text: root.placeholder; font-family: root.family; font-size: root.font; color: WS.muted; }
+}
+
+// `.feed-poll-vote` in Wabi: the soft 14px-round row, a sage fill behind
+component WPollVote inherits Rectangle {
+    in property <SPollOption> o;
+    in property <bool> multiple;
+    callback vote();
+    height: 42px;
+    border-width: 1px;
+    border-radius: 14px;
+    border-color: root.o.selected || touch.has-hover ? WS.sage : #e6dfd5;
+    // production's `oklch(... none / .84)` surfaces resolve to a pink-tinted paper
+    background: #f8edef;
+    clip: true;
+    Rectangle { x: 1px; y: 1px; width: (parent.width - 2px) * root.o.fill; height: parent.height - 2px; background: #50704b29; }
+    WSans { x: 12px; y: (parent.height - self.preferred-height) / 2; text: root.o.selected ? "✓" : root.multiple ? "□" : "○"; font-family: Emoji.symbol != "" ? Emoji.symbol : WS.sans; font-size: 16px; font-weight: 900; }
+    cnt := WSans { x: parent.width - 12px - self.preferred-width; y: (parent.height - self.preferred-height) / 2; text: root.o.count; font-size: 12.16px; font-weight: 900; color: WS.ink-3; }
+    WSans { x: 30.7px; y: (parent.height - self.preferred-height) / 2; width: cnt.x - 8px - self.x; text: root.o.text; font-size: 16px; font-weight: 800; overflow: elide; }
+    touch := TouchArea { mouse-cursor: pointer; clicked => { root.vote(); } }
+    accessible-role: button;
+    accessible-label: root.o.text + ", " + root.o.count;
+    accessible-checked: root.o.selected;
+}
+
+// "Nod N" with the who-nodded tooltip
+component WNod inherits Rectangle {
+    in property <SReaction> r;
+    callback clicked();
+    width: t.preferred-width;
+    height: 12px;
+    t := WSans { x: 0px; height: parent.height; vertical-alignment: center; text: root.r.label.to-uppercase(); font-size: 10.5px; letter-spacing: 1.26px; color: root.r.active || touch.has-hover ? WS.sage : WS.muted; }
+    touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    if touch.has-hover && root.r.tooltip != "": Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: -8px - self.height;
+        width: tip.preferred-width + 22px;
+        height: 30px;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: WS.line;
+        background: WS.paper;
+        tip := WSans { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.r.tooltip.to-uppercase(); font-size: 11.2px; letter-spacing: 1.26px; }
+    }
+    accessible-role: button;
+    accessible-label: root.r.label + (root.r.tooltip != "" ? ", " + root.r.tooltip : "");
+    accessible-checked: root.r.active;
+}
+
+component WComment inherits Rectangle {
+    in property <SComment> c;
+    callback open-person(string);
+    height: max(28px, nm.preferred-height + 4px + body.preferred-height) + 16px;
+    WAvatar { x: 0px; y: 8px; a: root.c.avatar; size: 28px; }
+    nm := WSerif { x: 40px; y: 8px; text: root.c.name; font-size: 14px; TouchArea { mouse-cursor: pointer; clicked => { root.open-person(root.c.person); } } }
+    WSans { x: 40px + nm.preferred-width + 8px; y: 8px + (nm.preferred-height - self.preferred-height) / 2; text: root.c.time; font-size: 10px; letter-spacing: 0.7px; color: WS.faint; }
+    body := WSans { x: 40px; y: 8px + nm.preferred-height + 4px; width: parent.width - 40px; wrap: word-wrap; text: root.c.body; font-size: 14px; color: WS.ink-3; }
+    Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-soft; }
+    accessible-role: text;
+    accessible-label: root.c.name + ", " + root.c.time + ": " + root.c.body;
+}
+
+// `article.feed-card.wabi-feed-card`: a 128px "who and when" column, the post beside it
+component WFeedCard inherits Rectangle {
+    in property <SFeedPost> p;
+    in property <SFeedView> f;
+    callback open-person(string);
+    private property <length> body-w: root.width - 128px;
+    // the head: name, date, the round avatar (and the ✎ under it on your own posts), 18/12 padding
+    private property <length> head-h: 18px + nm.preferred-height + 5px + 11px + 10px + 40px + (root.p.is-self ? 40px : 0px) + 12px;
+    private property <length> pre-h: pre.preferred-height;
+    private property <length> body0: root.pre-h + (root.pre-h > 0 ? 6px : 0px) + 14px;
+    // a taller head stretches the body; production's grid hands the slack to the session line
+    // and to the gap under it
+    private property <length> extra: max(0px, root.head-h - (16px + root.body0 + 6px));
+    private property <length> react-y: 16px + root.body0 + 6px + root.extra;
+    private property <length> reply-y: root.react-y + 22px;
+    height: root.reply-y + 12px + (root.p.comments-open ? 12px + comments.preferred-height : 0px) + 16px + 1px;
+    nm := WSerif { x: 0px; y: 18px; width: 114px; wrap: word-wrap; text: root.p.name; font-size: 16px; font-weight: 500; TouchArea { mouse-cursor: pointer; clicked => { root.open-person(root.p.person); } } accessible-role: button; accessible-label: root.p.name; }
+    WSans { x: 0px; y: 18px + nm.preferred-height + 5px; text: root.p.time; font-size: 10px; letter-spacing: 0.7px; color: WS.faint; }
+    av := WAvatar { x: 0px; y: 18px + nm.preferred-height + 16px + 10px; a: root.p.avatar; size: 40px; }
+    if root.p.is-self: Rectangle {
+        x: 84px;
+        y: av.y + 50px;
+        width: 30px;
+        height: 30px;
+        WSans { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "✎"; font-family: Emoji.symbol != "" ? Emoji.symbol : WS.sans; font-size: 10.5px; color: et.has-hover ? WS.sage : WS.muted; }
+        et := TouchArea { mouse-cursor: pointer; clicked => { SocialActions.feed-edit(root.p.id); } }
+        accessible-role: button;
+        accessible-label: "Edit post";
+    }
+    pre := VerticalLayout {
+        x: 128px;
+        y: 16px;
+        width: root.body-w;
+        height: self.preferred-height;
+        spacing: 6px;
+        // `.feed-poll-card`
+        if root.p.has-poll: Rectangle {
+            height: poll.preferred-height + 26px;
+            border-width: 1px;
+            border-radius: 17px;
+            border-color: #e6dfd5;
+            background: #f4e7e8;
+            poll := VerticalLayout {
+                x: 13px;
+                y: 13px;
+                width: parent.width - 26px;
+                height: self.preferred-height;
+                spacing: 0px;
+                WSans { text: root.p.poll-question; font-size: 16px; font-weight: 700; overflow: elide; }
+                Rectangle { height: 2px; }
+                WSans { text: root.p.poll-multiple ? "Multiple answers" : "One answer"; font-size: 12px; font-weight: 800; color: WS.ink-3; }
+                Rectangle { height: 10px; }
+                VerticalLayout {
+                    spacing: 8px;
+                    for o in root.p.poll-options: WPollVote { o: o; multiple: root.p.poll-multiple; vote => { SocialActions.feed-vote(root.p.id, o.id); } }
+                }
+                Rectangle { height: 10px; }
+                WSans { text: root.p.poll-total; font-size: 12px; font-weight: 800; color: WS.ink-3; }
+            }
+        }
+        // `.feed-card__image`: contain inside a square half the body wide, centred
+        if root.p.image-state == 1 || root.p.image-state == 2: HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: root.body-w / 2;
+                height: root.body-w / 2;
+                border-width: 1px;
+                border-radius: 17px;
+                border-color: it.has-hover ? WS.sage : #e6ddd3;
+                background: #f5e8ea;
+                clip: true;
+                if root.p.image-state == 2: Image {
+                    x: 1px;
+                    y: 1px;
+                    width: parent.width - 2px;
+                    height: parent.height - 2px;
+                    source: root.p.image;
+                    image-fit: contain;
+                    accessible-role: image;
+                    accessible-label: root.p.name + "'s feed post image";
+                }
+                it := TouchArea { mouse-cursor: pointer; clicked => { SocialActions.feed-open-image(root.p.id); } }
+                accessible-role: button;
+                accessible-label: "Open feed image fullscreen";
+            }
+        }
+        // the note: 19px serif on a 26.6px line
+        if !root.p.editing && root.p.note != "": Rectangle {
+            height: max(26.6px, note.preferred-height * 1.23);
+            note := WSerif { y: 0px; height: parent.height; vertical-alignment: center; width: parent.width; wrap: word-wrap; text: "\"" + root.p.note + "\""; font-size: 19px; letter-spacing: 0.08px; }
+        }
+        if root.p.image-state == 3 || root.p.image-state == 4: Rectangle {
+            height: 26.6px;
+            WSerif { height: parent.height; vertical-alignment: center; text: root.p.image-state == 3 ? "Image could not load" : "Image expired"; font-size: 19px; color: WS.ink-3; }
+        }
+        // `.feed-edit-panel`
+        if root.p.editing: VerticalLayout {
+            spacing: 10px;
+            Rectangle {
+                height: 82px;
+                border-width: 1px;
+                border-color: ed.has-focus ? WS.sage : WS.line;
+                background: WS.paper;
+                ed := TextInput {
+                    x: 12px;
+                    y: 10px;
+                    width: parent.width - 24px;
+                    height: parent.height - 20px;
+                    text: root.f.edit-note;
+                    wrap: word-wrap;
+                    single-line: false;
+                    font-family: WS.serif;
+                    font-size: 17px;
+                    color: WS.ink;
+                    edited => { SocialActions.feed-edit-note(self.text); }
+                    accessible-role: text-input;
+                    accessible-label: "Post note";
+                    init => { self.focus(); }
+                }
+            }
+            HorizontalLayout {
+                alignment: start;
+                spacing: 18px;
+                height: 12px;
+                WLink { text: root.p.edit-image-label; enabled: !root.f.edit-saving && !root.f.uploads-paused && !root.p.pending; clicked => { SocialActions.feed-edit-pick-image(); } }
+                if root.p.edit-can-remove && !root.f.edit-remove-hint: WLink { text: "Remove image"; enabled: !root.f.edit-saving; clicked => { SocialActions.feed-edit-remove-image(); } }
+            }
+            if root.p.pending: WSans { text: "Sync this post before adding an image."; font-size: 12px; font-italic: true; color: WS.ink-3; }
+            if root.f.edit-has-preview: HorizontalLayout {
+                spacing: 12px;
+                alignment: start;
+                Image { width: 96px; height: 96px; source: root.f.edit-preview; image-fit: cover; accessible-role: image; accessible-label: "Replacement feed post preview"; }
+                WLink { y: 42px; text: "Clear replacement"; clicked => { SocialActions.feed-edit-clear-image(); } }
+            }
+            if root.f.edit-remove-hint && !root.f.edit-has-preview: WSans { text: "Image will be removed when you save."; font-size: 12px; font-italic: true; color: WS.ink-3; }
+            HorizontalLayout {
+                alignment: start;
+                spacing: 18px;
+                height: 12px;
+                WLink { text: "Save"; ink: WS.ink; enabled: !root.f.edit-saving; clicked => { SocialActions.feed-edit-save(); } }
+                WLink { text: "Cancel"; enabled: !root.f.edit-saving; clicked => { SocialActions.feed-edit-cancel(); } }
+                WLink { text: "Delete"; ink: WS.vermilion; enabled: !root.f.edit-saving; clicked => { SocialActions.feed-delete(root.p.id); } }
+            }
+        }
+    }
+    // the session line: subject · detail, faint
+    Rectangle {
+        x: 128px;
+        y: 16px + root.pre-h + (root.pre-h > 0 ? 6px : 0px) + root.extra / 2;
+        width: root.body-w;
+        height: 14px;
+        sj := WSans { x: 0px; height: parent.height; vertical-alignment: center; text: root.p.subject; font-size: 12px; letter-spacing: 0.08px; color: WS.faint; }
+        WSans { x: sj.preferred-width + 8px; width: parent.width - self.x; height: parent.height; vertical-alignment: center; text: "·   " + root.p.detail; font-size: 12px; letter-spacing: 0.08px; color: WS.faint; overflow: elide; }
+    }
+    // "Nod N" (Wabi shows the fire reaction only) and the reply toggle
+    HorizontalLayout {
+        x: 128px;
+        y: root.react-y;
+        height: 12px;
+        spacing: 14px;
+        alignment: start;
+        for r in root.p.reactions: WNod { r: r; clicked => { SocialActions.feed-react(root.p.id, r.key); } }
+    }
+    WLink {
+        x: 128px;
+        y: root.reply-y;
+        text: root.p.comment-count > 0 ? "Reply · " + root.p.comment-count : "Reply";
+        active: root.p.comments-open;
+        clicked => { SocialActions.feed-toggle-comments(root.p.id); }
+        accessible-expanded: root.p.comments-open;
+    }
+    comments := VerticalLayout {
+        x: 128px;
+        y: root.reply-y + 24px;
+        width: root.body-w;
+        height: self.preferred-height;
+        visible: root.p.comments-open;
+        spacing: 6px;
+        if root.p.comments-open && root.p.comment-count == 0: WSans { text: "No comments yet. Start the reply chain."; font-size: 13px; font-italic: true; color: WS.ink-3; }
+        if root.p.comments-open: VerticalLayout {
+            for c in root.p.comments: WComment { c: c; open-person(id) => { root.open-person(id); } }
+        }
+        if root.p.comments-open: Rectangle {
+            height: 40px;
+            reply := WField {
+                y: 4px;
+                width: parent.width - 80px;
+                font: 15px;
+                placeholder: "Reply or comment under this post...";
+                initial: root.p.draft;
+                rev: root.p.draft-rev;
+                enabled: !root.p.saving-comment;
+                edited(t) => { SocialActions.feed-comment-edited(root.p.id, t); }
+                accepted => { SocialActions.feed-comment-submit(root.p.id); }
+            }
+            Rectangle { y: 36px; width: parent.width - 80px; height: 1px; background: WS.rule-soft; }
+            WLink {
+                x: parent.width - self.width;
+                y: 14px;
+                text: root.p.saving-comment ? "Posting" : "Reply";
+                ink: WS.ink;
+                spacing: 1.365px;
+                enabled: !root.p.saving-comment && reply.value != "";
+                clicked => { SocialActions.feed-comment-submit(root.p.id); }
+            }
+        }
+    }
+    Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-soft; }
+    accessible-role: groupbox;
+    accessible-label: root.p.name + ", " + root.p.subject;
+}
+
+// `article.milestone` in Wabi: a soft paper card
+component WMilestone inherits Rectangle {
+    in property <SFeedPost> p;
+    callback open-person(string);
+    height: 92px;
+    border-width: 1px;
+    border-radius: 18px;
+    border-color: WS.line;
+    background: WS.paper;
+    Rectangle {
+        x: 19px;
+        y: 19px;
+        width: 54px;
+        height: 54px;
+        border-radius: 17px;
+        background: WS.paper-1;
+        Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.p.icon; font-family: Emoji.family; font-size: 23.2px; }
+    }
+    n := WSerif { x: 89px; y: 26px; text: root.p.name; font-size: 18.72px; font-weight: 700; TouchArea { mouse-cursor: pointer; clicked => { root.open-person(root.p.person); } } }
+    WSerif { x: 89px + n.preferred-width + 5px; y: 26px; text: "hit a milestone"; font-size: 18.72px; font-weight: 700; }
+    WSans { x: 89px; y: 48px; width: parent.width - 108px; text: root.p.note; font-size: 16px; color: WS.ink-3; overflow: elide; }
+    accessible-role: groupbox;
+    accessible-label: root.p.name + " hit a milestone";
+}
+
+// `.social-feed-scope` in Wabi: Friends Feed / Global Feed share the row, Refresh on the right;
+// the active scope is a soft raised pill
+component WScope inherits Rectangle {
+    in property <string> text;
+    in property <bool> active;
+    callback clicked();
+    height: 23px;
+    border-radius: 12px;
+    background: root.active ? WS.desk : transparent;
+    drop-shadow-blur: root.active ? 10px : 0px;
+    drop-shadow-offset-y: root.active ? 2px : 0px;
+    drop-shadow-color: root.active ? #0000002a : transparent;
+    WSans { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.text.to-uppercase(); font-size: 10.5px; letter-spacing: 1.05px; color: touch.has-hover ? WS.sage : WS.muted; }
+    touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    accessible-role: tab;
+    accessible-label: root.text;
+    accessible-checked: root.active;
+}
+
+export component WabiFeedPanel inherits Rectangle {
+    in property <SFeedView> f;
+    callback open-person(string);
+    callback refresh();
+    private property <bool> can-post: root.f.has-session && !root.f.posted;
+    height: col.preferred-height;
+    col := VerticalLayout {
+        width: parent.width;
+        spacing: 0px;
+        HorizontalLayout {
+            height: 23px;
+            WScope { text: "Friends Feed"; active: root.f.scope == 0; clicked => { SocialActions.feed-scope(0); } }
+            WScope { text: "Global Feed"; active: root.f.scope == 1; clicked => { SocialActions.feed-scope(1); } }
+            Rectangle {
+                width: 75.5px;
+                WSans { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.f.syncing ? "SYNCING..." : "REFRESH"; font-size: 10.5px; letter-spacing: 1.05px; color: rt.has-hover && !root.f.syncing ? WS.sage : WS.muted; }
+                rt := TouchArea { enabled: !root.f.syncing; mouse-cursor: pointer; clicked => { root.refresh(); } }
+                accessible-role: button;
+                accessible-label: "Refresh";
+            }
+        }
+        Rectangle { height: 34px; }
+        // `.wabi-feed-composer`: the line, ▧ ◉, POST
+        Rectangle {
+            height: 57px;
+            note := WField {
+                x: 0px;
+                y: 11px;
+                width: parent.width - 127px;
+                placeholder: "say something to the circle, then Enter";
+                enabled: root.can-post;
+                initial: "";
+                rev: root.f.poll-rev;
+                edited(t) => { SocialActions.feed-note-edited(t); }
+                accepted => { SocialActions.feed-post(); }
+            }
+            for g[i] in ["▧", "◉"]: Rectangle {
+                x: parent.width - 118px + i * 24.6px;
+                y: 16px;
+                width: 20px;
+                height: 22px;
+                opacity: ic.has-hover ? 1 : 0.55;
+                WSans { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: g; font-family: Emoji.symbol != "" ? Emoji.symbol : WS.sans; font-size: 10.5px; color: (i == 1 && root.f.poll-has-draft) || ic.has-hover ? WS.sage : WS.muted; }
+                ic := TouchArea {
+                    enabled: root.can-post && (i == 1 || (!root.f.uploads-paused && !root.f.preparing-image));
+                    mouse-cursor: pointer;
+                    clicked => { if i == 0 { SocialActions.feed-pick-image(); } else { SocialActions.feed-toggle-poll(); } }
+                }
+                accessible-role: button;
+                accessible-label: i == 0 ? (root.f.image-draft ? "Change image" : "Add image") : "Create poll";
+            }
+            WLink {
+                x: parent.width - 14px - self.width;
+                y: 22px;
+                text: root.f.posted ? "Posted" : "Post";
+                ink: WS.ink;
+                spacing: 1.365px;
+                enabled: root.can-post;
+                clicked => { SocialActions.feed-post(); }
+            }
+            Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-soft; }
+        }
+        // the poll editor and the picked image, under the line
+        if root.f.poll-open: VerticalLayout {
+            padding-top: 12px;
+            padding-bottom: 12px;
+            spacing: 8px;
+            Rectangle {
+                height: 18px;
+                WSerif { x: 0px; text: "Create poll"; font-size: 16px; }
+                WLink { x: parent.width - self.width; y: 3px; text: root.f.poll-multiple ? "Multiple answers: on" : "Multiple answers: off"; active: root.f.poll-multiple; clicked => { SocialActions.feed-poll-multiple(!root.f.poll-multiple); } }
+            }
+            WField { font: 15px; placeholder: "Question"; initial: root.f.poll-question; rev: root.f.poll-rev; edited(t) => { SocialActions.feed-poll-question(t); } }
+            for o[i] in root.f.poll-options: Rectangle {
+                height: 32px;
+                WField { width: parent.width - 30px; font: 15px; family: WS.sans; placeholder: "Option " + (i + 1); initial: o; rev: root.f.poll-rev; edited(t) => { SocialActions.feed-poll-option(i, t); } }
+                if root.f.poll-options.length > 2: WLink { x: parent.width - self.width; y: 10px; text: "×"; clicked => { SocialActions.feed-poll-remove(i); } accessible-label: "Remove option " + (i + 1); }
+                Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-soft; }
+            }
+            HorizontalLayout {
+                height: 12px;
+                spacing: 18px;
+                alignment: start;
+                WLink { text: "+ Add option"; enabled: root.f.poll-options.length < 12; clicked => { SocialActions.feed-poll-add(); } }
+                WLink { text: "Done"; ink: WS.ink; clicked => { SocialActions.feed-toggle-poll(); } }
+                WLink { text: "Clear"; clicked => { SocialActions.feed-poll-clear(); } }
+            }
+            Rectangle { height: 1px; background: WS.rule-soft; }
+        }
+        if root.f.image-draft: HorizontalLayout {
+            padding-top: 12px;
+            padding-bottom: 12px;
+            spacing: 12px;
+            alignment: start;
+            Image { width: 96px; height: 96px; source: root.f.image-preview; image-fit: cover; accessible-role: image; accessible-label: "Selected feed post preview"; }
+            WLink { y: 42px; text: "Remove image"; clicked => { SocialActions.feed-clear-image(); } }
+        }
+        if root.f.preparing-image: WSans { height: 24px; vertical-alignment: center; text: "Preparing image..."; font-size: 12px; font-italic: true; color: WS.ink-3; }
+        // `.section-label`: FEED
+        Rectangle {
+            height: 33px;
+            WSans { x: 0px; y: 14px; text: "FEED" + (root.f.loading ? " · REFRESHING" : ""); font-size: 10px; letter-spacing: 1.8px; color: WS.faint; }
+        }
+        if root.f.posts.length == 0: Rectangle {
+            height: 96px;
+            WSerif { y: 24px; width: parent.width; horizontal-alignment: center; text: "No feed posts yet"; font-size: 17px; }
+            WSans { y: 52px; width: parent.width; horizontal-alignment: center; text: "Post a session or sync to pull the latest arena activity."; font-size: 13px; color: WS.ink-3; }
+        }
+        for p in root.f.posts: VerticalLayout {
+            if p.kind == 1: VerticalLayout {
+                padding-bottom: 14px;
+                WMilestone { p: p; open-person(id) => { root.open-person(id); } }
+            }
+            if p.kind == 0: WFeedCard { p: p; f: root.f; open-person(id) => { root.open-person(id); } }
+        }
+        // `.wabi-feed-end`
+        Rectangle {
+            height: 47px;
+            WSans { x: 0px; y: 24px; text: "That is the whole feed. No counts, no ranks, nothing new until someone shares again."; font-size: 13px; letter-spacing: 0.08px; color: WS.faint; }
+        }
+    }
+}

@@ -163,9 +163,10 @@ pub fn convert_academic(
             Err(reason) => warnings.push(format!("sessions: skipped a record - {reason}")),
         }
     }
-    // Reverse so the *earliest* session ends up prepended last, keeping the resulting order
-    // newest-first exactly like production's own array does (`add_study_sessions` prepends).
-    sessions.reverse();
+    // `add_study_sessions` prepends the batch *as a whole, in batch order*, so production's
+    // newest-first array goes in unchanged and stays newest-first (Stage 22b fix: a `reverse()`
+    // here used to leave the imported history oldest-first, which production's "latest session"
+    // - the Feed composer, `latestFeedSession` - would then have read wrongly).
     result.add_study_sessions(sessions, import_time);
     // Production derives scheduled tasks' unit counts from their timetable on every load (Stage
     // 19); a backup normally already carries the synced numbers, so this is usually a no-op.
@@ -683,5 +684,21 @@ mod tests {
             result.lifetime_study_minutes, 30,
             "re-adding the same import must not double lifetime totals"
         );
+    }
+
+    #[test]
+    fn imported_sessions_keep_productions_newest_first_order() {
+        let backup = serde_json::json!({
+            "sessions": [
+                {"id": "newest", "kind": "study", "startedAt": "2026-10-04T09:00:00.000Z", "endedAt": "2026-10-04T09:40:00.000Z", "minutes": 40},
+                {"id": "older", "kind": "study", "startedAt": "2026-09-20T09:00:00.000Z", "endedAt": "2026-09-20T09:52:00.000Z", "minutes": 52}
+            ]
+        });
+        let (result, _) = convert_academic(
+            backup.as_object().unwrap(),
+            WallTimestamp::from_unix_millis(1_791_108_000_000),
+        );
+        let ids: Vec<&str> = result.sessions.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, ["newest", "older"]);
     }
 }

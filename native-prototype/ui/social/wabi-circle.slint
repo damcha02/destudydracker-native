@@ -2,10 +2,15 @@
 // `data-app-style="wabi-sabi"`): Feed (the attendance chips), Standings (competitive only),
 // Friends, Squad and Profile, chosen from the sidebar's Circle submenu. Geometry from production
 // DOM probes at 1520x980 (content x = 186 + 32, panels max 760 wide). The feed itself and squads
-// are Stage 22b and say so. Rust (`src/app_social.rs`) prepares every value.
+// arrive in Stage 22b (`wabi-feed.slint`, `wabi-squad.slint`). Rust (`src/app_social.rs`)
+// prepares every value.
 import { WS } from "../wabi/palette.slint";
 import { WEyebrow } from "../wabi/parts.slint";
-import { SAvatar, SFriendRow, SBoardRow, SStat, SocialView } from "types.slint";
+import { SAvatar, SFriendRow, SBoardRow, SStat, SocialView, SocialData } from "types.slint";
+import { WAvatar } from "wabi-avatar.slint";
+import { WabiFeedPanel } from "wabi-feed.slint";
+import { WabiSquadPanel } from "wabi-squad.slint";
+export { WAvatar } from "wabi-avatar.slint";
 
 component WSans inherits Text {
     font-family: WS.sans;
@@ -40,34 +45,6 @@ component WTextButton inherits Rectangle {
 }
 
 // `.arena-avatar` in Wabi: a hue gradient disc (or the photo)
-export component WAvatar inherits Rectangle {
-    in property <SAvatar> a;
-    in property <length> size: 30px;
-    // the podium's glyphs take the column's muted ink
-    in property <bool> muted-glyph;
-    width: root.size;
-    height: root.size;
-    border-radius: root.size / 2;
-    background: root.a.is-self
-        ? @linear-gradient(135deg, WS.sage 0%, WS.sage.mix(white, 0.52) 100%)
-        : @linear-gradient(135deg, root.a.grad-a 0%, root.a.grad-b 100%);
-    clip: true;
-    if root.a.kind == 7 && root.a.has-photo: Image { width: parent.width; height: parent.height; source: root.a.photo; image-fit: cover; }
-    if !(root.a.kind == 7 && root.a.has-photo): Text {
-        width: parent.width;
-        height: parent.height;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        text: root.a.text;
-        color: root.muted-glyph ? WS.muted : root.a.is-self ? #081018 : white;
-        font-size: root.size * 0.4;
-        font-weight: root.a.kind == 1 ? 800 : 900;
-        font-family: root.a.kind == 1 || root.a.kind == 2 ? WS.serif : WS.sans;
-    }
-    accessible-role: image;
-    accessible-label: "Avatar " + root.a.text;
-}
-
 // `.section-label` over a list: eyebrow, count on the right, a soft rule below
 component WSection inherits Rectangle {
     in property <string> title;
@@ -456,13 +433,16 @@ export component WabiCircle inherits Rectangle {
     callback create-account();
     // the content column: 32px in, panels at most 760px (the feed spans the whole column)
     private property <length> panel-w: min(760px, root.width - 64px);
+    // the Wabi feed's height (reported by the conditional panel)
+    in-out property <length> feed-h: 100px;
+    in-out property <length> squad-h: 400px;
     private property <length> content-h:
         root.v.state != 4 ? 300px
-        : root.v.subtab == 0 ? 260px
+        : root.v.subtab == 0 ? 164px + root.feed-h
         : root.v.subtab == 1 ? 59px + 155px + 14px + max(0, root.v.rows.length - 3) * 67px + 90px
         : root.v.subtab == 2 ? 22px + 3 * 50px + max(1, root.v.incoming.length) * 51px + max(1, root.v.outgoing.length) * 46px + max(1, root.v.friends.length) * 50px + 68px + 16px + 35px + 16px + 79px
         : root.v.subtab == 4 ? 603px
-        : 200px;
+        : 22px + root.squad-h;
     background: transparent;
     flick := Flickable {
         width: parent.width;
@@ -518,13 +498,13 @@ export component WabiCircle inherits Rectangle {
             }
             if root.v.state == 1: WSans { x: 0px; y: 196px; width: parent.width; wrap: word-wrap; text: "Linking the account from your previous Study Tracker install comes with the data migration."; font-size: 12px; color: WS.faint; }
         }
-        // ---- Feed: the hero, the attendance chips; the feed itself is Stage 22b
+        // ---- Feed: the hero, the attendance chips, then the feed (Stage 22b)
         if root.v.state == 4 && root.v.subtab == 0: Rectangle {
             x: 32px;
             y: 0px;
             // WabiPage's content column: min(1386px, viewport - 298px)
             width: min(1386px, root.width - 102px);
-            height: 260px;
+            height: 164px + root.feed-h;
             WSerif { y: 22px; width: parent.width; height: 37px; horizontal-alignment: center; vertical-alignment: center; text: "Circle"; font-size: 32px; font-weight: 500; }
             WSans { y: 66px; width: parent.width; height: 16px; horizontal-alignment: center; vertical-alignment: center; text: "Who is sitting down today. Attendance, not a leaderboard."; font-size: 14px; color: WS.muted; }
             if root.v.attendance.length == 0: WSans { x: 0px; y: 120px; text: "No friends seen in the last 48 hours. Add friends from the Friends tab below."; font-size: 14px; color: WS.muted; }
@@ -536,9 +516,9 @@ export component WabiCircle inherits Rectangle {
                 alignment: start;
                 for f in root.v.attendance: Rectangle {
                     width: n.preferred-width + 12px + 8px + 9px + 14px + 2px;
-                    border-radius: 15px;
-                    border-width: 1px;
-                    border-color: at.has-hover ? WS.sage : WS.rule-soft;
+                    // production's `border: 1px solid var(--wabi-rule-soft, ...)` substitutes a whole
+                    // shorthand (`1px solid #ddd8c8`) into the declaration, which makes it invalid:
+                    // the chips have no border (hover included)
                     Rectangle {
                         x: 13px;
                         y: (parent.height - 8px) / 2;
@@ -555,24 +535,15 @@ export component WabiCircle inherits Rectangle {
                     accessible-label: f.name + (f.live ? ", sitting" : ", resting");
                 }
             }
-            Rectangle {
+            WabiFeedPanel {
                 x: 36px;
                 y: 164px;
-                width: parent.width - 72px;
-                height: 64px;
-                border-width: 1px;
-                border-color: WS.rule-soft;
-                WSans {
-                    x: 18px;
-                    width: parent.width - 36px;
-                    height: parent.height;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    wrap: word-wrap;
-                    text: "Circle posts arrive with the next Social update. Attendance, Friends, Standings and Profile work now.";
-                    font-size: 15px;
-                    color: WS.ink-3;
-                }
+                width: min(1150px, parent.width - 72px);
+                f: SocialData.feed;
+                open-person(id) => { root.open-person(id); }
+                refresh => { root.refresh(); }
+                init => { root.feed-h = self.height; }
+                changed height => { root.feed-h = self.height; }
             }
         }
         if root.v.state == 4 && root.v.subtab == 1: WStandings {
@@ -595,15 +566,15 @@ export component WabiCircle inherits Rectangle {
             open-friend(id) => { root.open-person(id); }
             copy-invite => { root.copy-invite(); }
         }
-        if root.v.state == 4 && root.v.subtab == 3: Rectangle {
+        // ---- Squad (Stage 22b)
+        if root.v.state == 4 && root.v.subtab == 3: WabiSquadPanel {
             x: 32px;
             y: 22px;
             width: root.panel-w;
-            height: 160px;
-            WEyebrow { x: 0px; y: 0px; height: 12px; text: "SQUAD"; }
-            WSerif { x: 0px; y: 20px; text: "Coming in a later update"; font-size: 27px; font-weight: 500; }
-            Rectangle { y: 66px; height: 1px; background: WS.rule-hard; }
-            WSans { x: 0px; y: 84px; width: parent.width; wrap: word-wrap; text: "Squads, squad chat and the Squad Arena arrive with the next Social update. Friends, Standings and Profile work now."; font-size: 14px; color: WS.ink-3; }
+            s: SocialData.squad;
+            open-person(id) => { root.open-person(id); }
+            init => { root.squad-h = self.height; }
+            changed height => { root.squad-h = self.height; }
         }
         if root.v.state == 4 && root.v.subtab == 4: WProfile {
             x: 32px;

@@ -886,3 +886,346 @@ Parity after the follow-up: FN Friends 2.82, Leaderboard 3.48, Profile 2.91, Skr
 Files changed by the follow-up: `src/font_fallback.rs` (new), `src/main.rs`, `Cargo.toml` (Windows-target feature), `src/app_social.rs`, `ui/break/skribbl.slint`, `ui/social/fn-social.slint`, this document.
 
 **NOT COMMITTED. NOT PUSHED. Stage 22b NOT STARTED.**
+
+---
+
+# STAGE 22b IMPLEMENTATION
+
+Linux implementation pass, 2026-10-05. Uncommitted. Starting checkpoint `fd48867` (Windows-verified
+Stage 22a, = `origin/main` at the start). Verdict for Linux: **PASS WITH CONCERNS — PENDING WINDOWS
+VERIFICATION** (§22b.21).
+
+## 22b.1 Freshness
+
+- Upstream advanced to `00fdcd0` (v0.1.68) during the stage: planner/exam CSS, `ManageSemestersModal`,
+  release notes and a planner `useEffect`. None of it touches Social, the Worker or `cloudflare/`
+  (unchanged). Classified unrelated; no Social behaviour had to be re-read.
+- Production references read: `desktop/src/App.tsx`, `desktop/src/features/social/SocialScreen.tsx`,
+  `desktop/src/App.css`, `cloudflare/src/index.ts` (read only).
+
+## 22b.2 Complete Stage 22 protocol
+
+Every Worker route is accounted for. Routes the production client never calls are not implemented.
+
+| Route | Client | Stage |
+|---|---|---|
+| `/sync/v2` (+ `feedPosts`), `/presence`, `/friends/status/v2`, `/friends/request`, `/friends/respond`, `/leaderboard`, `/player-stats`, `/profile/avatar/<key>` (GET) | yes | 22a (sync body extended in 22b) |
+| `/skribbl/theme`, `/gallery`, `/submit`, `/vote`, `/leaderboard`, `/skribbl/drawing/<key>` (GET) | yes | 22a |
+| `/feed`, `/feed/react`, `/feed/poll/vote`, `/feed/comment`, `/feed/update`, `/feed/delete`, `/feed/image` (upload), `/feed/image/delete`, `/feed/image/<key>` (GET) | yes | 22b |
+| `/profile/avatar` (upload) | yes | 22b |
+| `/squads/create`, `/search`, `/details`, `/join`, `/respond`, `/leave`, `/chat`, `/chat/delete`, `/promote`, `/kick`, `/settings`, `/scoreboard` | yes | 22b |
+| `/verified-session/start`, `/heartbeat`, `/finish`, `/reconcile-offline` | yes | 22b |
+| `/announcements/current`, `/announcements/update-notice` (owner) | yes | 22b |
+| `/telemetry/heartbeat` | yes | 22b |
+| `/admin/usage` (owner) | yes | 22b |
+| `/sync`, `/friends/status` (v1), `/squads/status`, `/squads/demote`, `/health`, `/admin/migrate-device-secrets`, `/admin/migrate-profile-avatars` | **no** (0 references in `desktop/src`) | not implemented |
+
+All 22b requests carry `{ userId, deviceSecret }` in the JSON body exactly as production does
+(telemetry and `GET /announcements/current` carry no identity). Post creation goes through
+`/sync/v2` `feedPosts` (outbox ≤ 25); queued deletions are sent after a successful sync.
+
+## 22b.3 Architecture
+
+Unchanged from 22a: **core → controller → application integration → one network worker**.
+
+- `study-tracker-core/src/social/`: `feed.rs`, `squad.rs`, `verified.rs`, `telemetry.rs`,
+  `announcement.rs` (pure; no I/O, no clock reads), `ids.rs` (new ids, UTF-16 truncation,
+  `display_paragraph`: controls and bidi overrides stripped), `avatar.rs` (`crop` geometry).
+- `src/net/social_ext.rs`: every 22b request builder and bounded parser (`Lenient`, `Rows`,
+  `BoundedMap`); `images.rs` gains `ImageKind::FeedImage` (6 MB cap, GIF sniffing).
+- Controller split: `social_controller_{feed,squad,avatar,background}.rs`.
+- Application: `app_social.rs` (+ `app_social_view.rs`), `image_prep.rs` (decode/resize/encode off
+  the UI thread through `app_net::submit_local`, i.e. on the same single worker), `file_picker.rs`
+  (XDG portal over the already-linked zbus, zenity/kdialog fallback; Windows `IFileOpenDialog`),
+  `backdrop.rs` (blurred backdrops).
+- UI: `ui/social/{fn-parts,fn-feed,fn-squad,overlays,wabi-feed,wabi-squad,wabi-avatar}.slint`,
+  `ui/backdrop.slint`; `SocialActions`/`SocialData` globals.
+- Still one network worker ("social-net", bounded queues API 32 / images 48); still one Slint
+  timer per schedule (§22b.12).
+
+## 22b.4 Feed, posts, polls, comments, reactions
+
+- Feed scopes Friends/Global (`/feed`, limit 40), refreshed on tab open, on scope change, after a
+  sync and every 2 minutes while the Feed subtab is visible. Rows live in one persistent
+  `VecModel`: unchanged replies write nothing; a row whose picture changes is re-inserted.
+- Posting the latest session (`latestFeedSession` = first study/exam session, newest first), with an
+  optional note (≤ 220 UTF-16), poll (question ≤ 180, 2–12 distinct options ≤ 100) and image. Without
+  an image the post waits in the outbox for the next sync ("Post queued. Sync to publish it to the
+  feed."); with an image a sync runs, then the upload. Already-posted sessions are refused.
+  Auto-post queues completed sessions only when enabled. The fallback note is production's
+  `pickFeedFallbackNote` (code-unit sum mod 28).
+- Polls: optimistic vote, per-post sequence numbers so a stale reply never overwrites a newer vote,
+  rollback on failure, never retried.
+- Comments: trimmed, ≤ 220 units; a new comment by someone else on an own post raises one toast
+  ("New comment on your post.", excerpt 72 chars, View / X); seen ids persisted (≤ 1000).
+- Reactions: Field Notebook shows fire/brain/clap plus used keys and the 36-emoji picker; Wabi shows
+  only "Nod N" (fire). Tooltip = up to three names "+N more". Production quirk kept server-side in the
+  mock: the Worker maps `brain` (5 code points) to `fire`.
+- Edit (note, replace/remove image) and delete for own posts; the server enforces ownership (tested
+  with a forged local state).
+
+## 22b.5 Feed images and image cache
+
+- Upload: picked file ≤ 6 MB, decoded and resized on the worker; opaque images become JPEG q82, images
+  with alpha PNG, GIF uploaded as is (production encodes WebP: parity debt). Uploads pause when the
+  owner's R2 status says so.
+- Download: `/feed/image/<key>` only, through the 22a image policy (same origin as the endpoint,
+  bounded size, sniffed format), decoded to fit 1024 px, LRU of 16 pictures. Failure → "Image could
+  not load"; expiry → "Image expired". The lightbox shows the picture at its own size (≤ 94% × 90%).
+
+## 22b.6 Squads, permissions, chat, Squad Arena
+
+- No squad: create (name ≤ 48, public/private), search, four suggested squads (production's shuffle;
+  pinned by `STUDY_NATIVE_BREAK_PICK` in captures), join/request, pending note.
+- Production bug not reproduced: suggestions refetch in a loop when there are none or the request
+  fails; native tries once per visit ("Reload" reshuffles the pool it has).
+- In a squad: head with Edit (leader) / Leave, totals, roster (expandable member cards with
+  production's `getAssignableSquadRoles`/`canKickSquadMember` rules), internal leaderboard, chat
+  (≤ 500 units, own messages deletable), join requests for elders and up. Leaving as the last member
+  asks first (`window.confirm` → native confirmation dialog). The Worker decides every permission;
+  stale local permissions are refused server-side (tested).
+- Squad Arena (Leaderboard → Squad Arena): Daily / Seasonal Points / Overall Points, season notice,
+  rows open the squad details dialog (join/request from there). Scoreboard cached 60 s per period.
+
+## 22b.7 Avatar editor, badges, remaining profile state
+
+- Avatar editor: Letter (6 styles, letter picker), Icon, Photo. A photo opens the crop editor (300 px
+  stage, drag, wheel, slider 1–4×); the result is a 160 px PNG (JPEG ladder down to ≤ 96 KB), uploaded
+  to `/profile/avatar`, then synced.
+- Badges: the Profile "Badges" plate opens the collection from the Break Room's evaluated
+  achievements (one source of truth): Break Room + Pet Rock subgroup, Focus Fossil, Garden; `×N`
+  counts for daily badges; hover/focus tooltip.
+
+## 22b.8 Verified sessions
+
+- Through an application adapter only: `SocialController::observe_timer` reads a read-only
+  `AppModel::timer_state()` snapshot after timer activity; the Timer domain is not modified.
+- Eligible = running and phase not idle/break. Start → heartbeat every 15 minutes → finish; "Verified
+  session not found" restarts. Exactly one heartbeat schedule (production leaks an interval on
+  restarts: not reproduced).
+- Offline: gaps longer than the 2-hour grace window are reconciled once with
+  `/verified-session/reconcile-offline` carrying the offline intervals (≤ 500) and `chainTipHash`
+  (SHA-256 of canonical JSON). The anchor is persisted.
+
+## 22b.9 Telemetry (production semantics)
+
+- Setting "Anonymous usage telemetry", **default off**, opt-in.
+- Payload `{ installId, app: { version, platform, runtimeChannel } }` to `/telemetry/heartbeat`:
+  no user id, no deviceSecret (tested), no new fields or events.
+- Sent at start-up when enabled, on enabling, and hourly; no identity needed, as in production. In
+  test/dev builds it can only reach the loopback mock (verified: 1 request, origin `127.0.0.1:47811`,
+  with and without an identity; 0 when disabled).
+- Native exposes the setting in a Settings sheet (menu → Settings) holding only the Stage 22b items;
+  the rest of production's Settings panel (backup, privacy, updates) is not part of the native app yet.
+
+## 22b.10 Owner / admin
+
+Only what the production client exposes, for the owner tag `ZRWL-WKNF`: the R2 usage banner on the
+Feed, "Notify users below <version>" (`/announcements/update-notice`) and the usage report
+(`/admin/usage`: summary tiles, synced users, flagged accounts, opt-in installs, abuse events, with
+production's columns and "Never"/"unknown"/"—" fallbacks). The Worker enforces ownership (tested).
+Announcements (`/announcements/current`, polled every 2 minutes with an identity) show as a toast;
+dismissals are stored (newest 100).
+
+## 22b.11 Persistence
+
+- `SocialRecord` gains `pending_posts`, `pending_post_deletions`, `verified_anchor`, `squad`,
+  `squad_incoming`, `squad_outgoing`, `own_post_ids` (≤ 100), `seen_comment_ids` (≤ 1000).
+- `SocialPrefs` (`telemetry_enabled`, `install_id`, `dismissed_announcements`) in the preferences section.
+- Not persisted: feed rows, chat, scores, images.
+- Stage 16 import fix: the academic import reversed production's newest-first `sessions` array. The
+  native Timer list then showed the oldest session first, and the Feed composer picked the wrong
+  "latest session". Now kept in order: the Timer list matches production's capture (40 m Oct 4 first,
+  then 52 m Sep 20; HEAD had them inverted). Only affects new imports; no real users before Stage 24.
+
+## 22b.12 Background scheduler inventory
+
+| Scheduler | Cadence | Active only when |
+|---|---|---|
+| Status poll (22a) | 2 min | identity and Social tab visible |
+| Feed poll | 2 min | identity, Social tab visible, Feed subtab |
+| Hourly sync (22a) | 60 min | identity |
+| Verified heartbeat | 15 min | identity and an eligible running Timer session (one schedule, restarted by generation) |
+| Telemetry | 60 min | user opted in and Social configured (no identity needed) |
+| Announcements | 2 min | identity |
+| Session debounce / startup / banner (22a) | single-shot | as 22a |
+
+No per-component timers; nothing animates. Measured: `social_timers` 3–4 with an identity, **0** with
+no identity; 0 ticks in every 30 s window between polls.
+
+## 22b.13 Mock
+
+`crates/social-mock/src/world_22b.rs` follows the Worker for every 22b route (validation, limits,
+ownership, roles, the `brain`→`fire` quirk). `seed::add_22b` adds synthetic posts, a poll, an image,
+comments, reactions, squads, chat, scores and the user Mia. CLI: `--squad none`, `--owner`,
+`--announcement`, `--latency-ms`. Synthetic secret `TEST_SECRET_MUST_NOT_APPEAR`.
+
+## 22b.14 Security
+
+- Endpoint isolation unchanged: test/dev builds accept only loopback endpoints; production
+  configuration with NoIdentity sends nothing.
+- `scrub()` redacts the secret from controller messages and stored errors (a leak into
+  `last_sync_error` was found and fixed). 0 hits of the synthetic secret in app stdout/stderr and mock
+  logs across every run in this section.
+- Server text is bounded and cleaned (`display_paragraph`: controls and bidi overrides stripped);
+  maps/rows bounded (`BoundedMap`, `Rows`); images through the 22a image policy.
+- Mutations (votes, reactions, comments, chat, role changes, uploads) are never retried
+  automatically; votes use sequence numbers.
+- The picked file path is never logged.
+
+## 22b.15 Visual parity (Linux, 1520×980, scale 1, mean absolute difference /255)
+
+Production built from `desktop/` with `VITE_SOCIAL_API_URL=http://127.0.0.1:47811`, captured in
+headless Chromium in a loopback-only netns; native on a private Xwayland; same synthetic fixture and mock.
+
+| Field Notebook (dark) | Diff | | Wabi (light) | Diff |
+|---|---|---|---|---|
+| Feed (with comment toast) | 1.55 | | Circle feed | 1.97 |
+| Squad (in squad) | 1.41 | | Squad (in squad) | 1.88 |
+| Squad (no squad) | 2.80 | | Squad (no squad) | 2.40 |
+| Leaderboard → Squad Arena | 1.93 | | Avatar editor, badges | not compared (see debt) |
+| Squad details dialog | 0.72 | | | |
+| Badges | 2.35 | | | |
+| Avatar editor | 2.34 | | | |
+| Feed image lightbox | 0.17 | | | |
+
+Production findings that the native port reproduces:
+
+- Field Notebook leaves `--accent` undefined, so every `color-mix(... var(--accent) ...)` drops out.
+  Borders fall back to `currentColor` and backgrounds to none. This explains the self/hover arena
+  rows, the transparent badges and avatar-editor cards, and the bare `×N` badge counts.
+- The Wabi attendance chips have no border, because `var(--wabi-rule-soft)` substitutes a whole
+  shorthand. This was a Stage 22a parity bug, fixed here.
+
+## 22b.16 Stage 22 parity-debt register
+
+| # | Production | Native | Why / status |
+|---|---|---|---|
+| 1 | `backdrop-filter: blur(10px)` (lightboxes, dialogs) | **Restored**: one snapshot per opening, CPU box blur ×3 at ¼ size, shown under the dim | Slint has no backdrop filter; measured 0.17/255 on the lightbox |
+| 2 | `<input type="color">` (Skribbl) | **Restored**: HSV square + hue strip + preview + `#rrggbb` field | Slint has no colour dialog |
+| 3 | WebP uploads (feed, avatar, Skribbl) | JPEG q82 / PNG (alpha) / GIF as is; avatar PNG with JPEG ladder | Worker accepts these; no WebP encoder in the binary |
+| 4 | HEIC accepted via the browser | PNG, JPEG, WebP, GIF only | No HEIC decoder |
+| 5 | Dashed borders (`.arena-empty`, upload box) | Solid | Slint has no dashed borders |
+| 6 | Locked badges `filter: grayscale(1)` | Opacity only | Slint cannot desaturate an emoji glyph |
+| 7 | Animated live dot / toast slide-in | Static | Static-rendering rule (0 frames) |
+| 8 | Verified heartbeat interval leaks on "not found" restarts | One schedule | Production bug |
+| 9 | Squad suggestions refetch loop on empty/failed | Once per visit | Production bug |
+| 10 | `window` `online` event triggers verified reconnect | Connectivity inferred from the next successful request | No such event natively |
+| 11 | Worker maps reaction `brain` → `fire` | Reproduced (server side, mock) | Production quirk |
+| 12 | Full Settings panel | Only the 22b items (telemetry, owner cards) | Backup/privacy/updates belong to a later stage |
+| 13 | Wabi dialogs (avatar editor, badges, squad details) | Wabi colours on the shared dialog geometry; not compared to production captures | Remaining Wabi capture work |
+| 14 | `.arena-mini-stat__icon` colour `#081018` (nearly invisible) | Muted ink (as 22a) | Kept 22a decision |
+| 15 | CJK/emoji fallback line boxes in Wabi (taller rows) | Native fonts' own line height | Font metrics (same class as W22a-3) |
+| 16 | 22a items (§22a.5): deadline countdown, single auto-submit, gallery overflow, account on confirm | unchanged | see §22a.5 |
+
+## 22b.17 Static rendering and polls
+
+`STUDY_NATIVE_FRAME_STATS=1`, release, loopback netns, 10 s windows after load: **0 frames, 0
+ticks** on FN Feed, Squad, Squad Arena, Wabi Feed, Wabi Squad, with the badges dialog open (blurred)
+and with the squad details open; NoIdentity (production configuration): 0 frames, 0 requests, 0
+Social timers, no origins.
+
+Unchanged polls:
+
+- Squad tab, 2-minute status poll: **0 frames**. Before the fix in §22b.20 it was 4.
+- Feed tab, 2-minute feed poll: **2 frames**. That is production's own "· Refreshing" label
+  switching on and off (`setFeedLoading` around every poll). Unchanged data writes nothing else.
+
+## 22b.18 Performance, size, stress (release, Linux, Xwayland scale 1)
+
+| Metric | Stage 22a (HEAD) | Stage 22b |
+|---|---|---|
+| Stripped binary | 46,635,240 B (22a doc) | 57,885,288 B (+11.25 MB, +24%) |
+| First frame, median of 7, no account | 95.2 ms | 94.6 ms |
+| Idle RssAnon, no account | 25,136 kB | 25,592 kB (+0.45 MiB) |
+| Threads idle / with account | 8 / 9 | 8 / 9 |
+| RssAnon with account, FN Friends | 26,968 kB | 27,456 kB |
+| RssAnon with account, FN Feed | 26,192 kB (placeholder) | 30,516 kB (posts, decoded image, avatars) |
+
+New dependencies: `ring` (already in the tree through rustls; now used directly for SHA-256),
+`image` `gif` feature, `zbus` blocking API (already linked through accesskit) and Windows shell
+features of the existing `windows` crate. Most of the growth is generated Slint code for the new
+screens, as in 22a.
+
+Stress (mock latency 300 ms): 262 scripted clicks on reactions, votes, comments, scope and subtab
+switches: 242 requests + 2 images, 58 coalesced, queue depth max 4/32, 0 failed, 0 refused, drained to
+0 pending, 0 secret hits. (Synthetic clicks pace the `STUDY_NATIVE_INPUT` script to ~1 step/s; the
+Stage 22a binary does the same.)
+
+## 22b.19 Connection audit
+
+| Scenario | Origins contacted |
+|---|---|
+| NoIdentity, production configuration (Social, Timer running) | none (0 Social requests) |
+| Existing synthetic identity (all surfaces, stress) | `127.0.0.1:47811` |
+| Verified session (Timer start) | `127.0.0.1:47811` (start = 1) |
+| Telemetry enabled, with / without identity | `127.0.0.1:47811` (1 request each); disabled: 0 |
+| Feed images / avatars | `127.0.0.1:47811` |
+| Production Worker | never |
+
+## 22b.20 Bugs found and fixed in this pass
+
+- The secret could reach a stored `last_sync_error`; `scrub()` now redacts it.
+- Profile restore did not run the Feed effects (no posts until a tab change).
+- Stage 16 import reversed session order (Timer list and latest session wrong).
+- Slint compares two empty `Image`s as unequal, so the Feed and dialog views were rewritten on every
+  push, and unchanged polls redrew (4 frames). Unset pictures now share one placeholder.
+- A zero-height overlay container was never repainted (the toast stack); it now spans the window.
+- The Settings blur snapshot captured the closing menu; the snapshot now follows one presented frame
+  with the overlays hidden.
+- Wabi attendance chips drew a border production does not have (22a).
+
+## 22b.21 Regressions
+
+- Pixel-identical against the HEAD binary (mean 0.000): FN dashboard dark and light, Wabi dashboard,
+  FN Break Room, Skribbl intro, Wordle, Wabi Rest, FN Leaderboard (Friends), Wabi Friends.
+- Intended differences: the Timer session list (§22b.11, now matching production), FN Friends icon
+  avatars (scale with the box, as production), and the Profile "Badges" plate (now enabled).
+- Tests: `study-tracker-core` 226 passed (1 ignored); app 365 passed (1 ignored). These include 22
+  Stage 22b end-to-end controller tests against the mock, 8 DTO tests, 16 core tests, 3 image
+  preparation, 2 backdrop-blur and 1 custom-colour tests, the Stage 22a
+  Social/Skribbl tests and all Stage 15–21 tests.
+- `cargo fmt --check` clean. `cargo clippy --workspace --all-targets` is equal to the HEAD baseline in
+  every crate (bin 70 / bin test 32 / core 11 / core test 13 / mock 5 / mock test 5); no new warning
+  kinds.
+
+## 22b.22 How to run against the mock (never production)
+
+As §22a.11. Additional switches: mock `--squad none|--owner|--announcement|--latency-ms N`; app
+`STUDY_NATIVE_SOCIAL_SCOPE=friends|squad|world`, `STUDY_NATIVE_SOCIAL_DIALOG=details|badges|avatar|lightbox`
+(captures), `STUDY_NATIVE_PICK_FILE=<path>` (file dialog answered without UI),
+`STUDY_NATIVE_BREAK_PICK=<0..1>` (also pins the squad suggestion shuffle).
+
+## 22b.23 Concerns
+
+1. Windows has not run any 22b code. In particular `file_picker.rs` (Windows `IFileOpenDialog`) has
+   never been compiled, and `take_snapshot` read-back on the Windows renderer is unverified (it falls
+   back to dim-only).
+2. Binary +24% (generated UI code).
+3. Wabi dialogs are not parity-captured against production (debt 13).
+4. The native Settings sheet carries only Stage 22b items.
+
+## 22b.24 Windows verification plan
+
+1. MSVC build, `cargo test --workspace`, fmt/clippy baseline; `file_picker.rs` compiles and links.
+2. rustls/ring regression against the loopback mock; NoIdentity zero-network gate (production config).
+3. Feed with real input: scopes, posting (with/without image, poll), votes, comments, reactions,
+   edit/delete, lightbox; async feed-image row rendering; comment toast.
+4. Image loading/upload through `IFileOpenDialog` (PNG, JPEG, WebP, GIF; > 6 MB refused).
+5. Squads: create/search/suggest/join/request, roles, kick, leave (confirm), settings, chat; Squad Arena
+   and details.
+6. Avatar editor: letter/icon/photo, crop drag/wheel/slider, upload, sync.
+7. Verified session with a real Timer run against the mock; heartbeat (shortened mock clock), offline
+   gap > 2 h and reconcile; "not found" restart.
+8. Telemetry disabled (0) / enabled with and without identity (loopback only).
+9. Secret scan of logs, crash dumps, captures; credential-file ACL regression.
+10. CJK/RTL/emoji names and messages; Windows CJK fallback (W22a-5) in feed and squad.
+11. 0-frame checks on every Social surface and across unchanged polls (status and feed).
+12. Backdrop blur on the Windows renderer (snapshot read-back) for lightboxes and dialogs.
+13. Tray/minimize, single instance, shutdown with requests pending.
+14. Memory/stress (the 262-click script), startup, binary size.
+15. WebView2 parity captures of the §22b.15 surfaces (FN and Wabi, including Wabi dialogs).
+16. DPI 125%/150% and resize; UI Automation tree of the new controls (buttons, tabs, sliders, switch).
+17. Regression of Stages 18–22a.
+
+Stage 24 physical gates remain separate (credential migration from the Tauri app, real accounts).

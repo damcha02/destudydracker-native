@@ -112,14 +112,18 @@ pub fn initials(name: &str) -> String {
 /// iterates code points and `charCodeAt(0)` reads the first unit, i.e. the high surrogate of an
 /// astral character.)
 pub fn arena_hue(name: &str) -> u32 {
-    let sum: u64 = name
-        .chars()
+    (arena_hue_units(name) % 360) as u32
+}
+
+/// `[...text].reduce((sum, ch) => sum + ch.charCodeAt(0), 0)`: production's string "hash" (also
+/// `pickFeedFallbackNote`).
+pub fn arena_hue_units(text: &str) -> u64 {
+    text.chars()
         .map(|c| {
             let mut units = [0u16; 2];
             u64::from(c.encode_utf16(&mut units)[0])
         })
-        .sum();
-    (sum % 360) as u32
+        .sum()
 }
 
 fn is_letter_a_to_z(raw: &str) -> bool {
@@ -235,5 +239,123 @@ impl Avatar {
             }
             _ => None,
         }
+    }
+}
+
+/// The profile photo crop editor (Stage 22b): production's `AVATAR_CROP_*` constants and
+/// `clampAvatarCrop` / pointer / wheel / slider / `cropAvatarToDataUrl` geometry, in CSS pixels
+/// of the 300 px square stage. `x`/`y` are the crop centre as fractions of the source image.
+pub mod crop {
+    /// `AVATAR_CROP_VIEWPORT_PX`.
+    pub const VIEWPORT: f64 = 300.0;
+    /// `AVATAR_CROP_MAX_ZOOM`.
+    pub const MAX_ZOOM: f64 = 4.0;
+    /// The wheel's zoom step (`deltaY < 0 ? 1.08 : 1 / 1.08`).
+    pub const WHEEL_FACTOR: f64 = 1.08;
+    /// `AVATAR_SOURCE_IMAGE_MAX_BYTES`: the picked file.
+    pub const SOURCE_MAX_BYTES: u64 = 1024 * 1024;
+    /// `AVATAR_IMAGE_MAX_BYTES` / `AVATAR_IMAGE_MAX_DIMENSION`: the cropped result.
+    pub const RESULT_MAX_BYTES: usize = 96 * 1024;
+    pub const RESULT_DIMENSION: u32 = 160;
+    /// `AVATAR_IMAGE_COMPRESSION_ATTEMPTS`: (side, quality).
+    pub const ATTEMPTS: [(u32, f32); 4] = [(160, 0.72), (160, 0.58), (160, 0.45), (128, 0.45)];
+
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub struct Crop {
+        pub x: f64,
+        pub y: f64,
+        pub zoom: f64,
+    }
+
+    impl Default for Crop {
+        /// `{ x: 0.5, y: 0.5, zoom: 1 }` when a photo is picked.
+        fn default() -> Self {
+            Self {
+                x: 0.5,
+                y: 0.5,
+                zoom: 1.0,
+            }
+        }
+    }
+
+    /// The displayed scale: the image covers the stage at zoom 1.
+    pub fn scale(w: f64, h: f64, zoom: f64) -> f64 {
+        (VIEWPORT / w).max(VIEWPORT / h) * zoom
+    }
+
+    /// `clampAvatarCrop`: the stage never shows outside the image.
+    pub fn clamp(c: Crop, w: f64, h: f64) -> Crop {
+        if !(w > 0.0 && h > 0.0) {
+            return Crop::default();
+        }
+        let zoom = c.zoom.clamp(1.0, MAX_ZOOM);
+        let s = scale(w, h, zoom);
+        let half_w = VIEWPORT / (s * 2.0 * w);
+        let half_h = VIEWPORT / (s * 2.0 * h);
+        Crop {
+            x: c.x.max(half_w).min(1.0 - half_w),
+            y: c.y.max(half_h).min(1.0 - half_h),
+            zoom,
+        }
+    }
+
+    /// `handleAvatarCropPointerMove`: the image follows the pointer from the drag's start.
+    pub fn dragged(start: Crop, dx: f64, dy: f64, w: f64, h: f64) -> Crop {
+        let s = scale(w, h, start.zoom);
+        clamp(
+            Crop {
+                x: start.x - dx / (w * s),
+                y: start.y - dy / (h * s),
+                zoom: start.zoom,
+            },
+            w,
+            h,
+        )
+    }
+
+    /// `handleAvatarCropWheel`.
+    pub fn wheeled(c: Crop, zoom_in: bool, w: f64, h: f64) -> Crop {
+        let f = if zoom_in {
+            WHEEL_FACTOR
+        } else {
+            1.0 / WHEEL_FACTOR
+        };
+        clamp(
+            Crop {
+                zoom: (c.zoom * f).clamp(1.0, MAX_ZOOM),
+                ..c
+            },
+            w,
+            h,
+        )
+    }
+
+    /// `handleAvatarCropZoomChange` (the slider).
+    pub fn zoomed(c: Crop, value: f64, w: f64, h: f64) -> Crop {
+        clamp(
+            Crop {
+                zoom: value.clamp(1.0, MAX_ZOOM),
+                ..c
+            },
+            w,
+            h,
+        )
+    }
+
+    /// Where the image is drawn on the stage: `(left, top, width, height)`.
+    pub fn image_rect(c: Crop, w: f64, h: f64) -> (f64, f64, f64, f64) {
+        let s = scale(w, h, c.zoom);
+        (
+            VIEWPORT / 2.0 - c.x * w * s,
+            VIEWPORT / 2.0 - c.y * h * s,
+            w * s,
+            h * s,
+        )
+    }
+
+    /// The source square `cropAvatarToDataUrl` draws: `(sx, sy, side)` in source pixels.
+    pub fn source_square(c: Crop, w: f64, h: f64) -> (f64, f64, f64) {
+        let side = VIEWPORT / scale(w, h, c.zoom);
+        (c.x * w - side / 2.0, c.y * h - side / 2.0, side)
     }
 }

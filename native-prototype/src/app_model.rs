@@ -479,6 +479,12 @@ impl AppModel {
         std::mem::take(&mut self.notification_outbox)
     }
 
+    /// Read-only view of the Timer's state for application integrations (Stage 22b: the
+    /// verified-session adapter reads phase/running/segments; it never drives the Timer).
+    pub fn timer_state(&self) -> &study_tracker_core::timer::TimerState {
+        self.timer.controller.core()
+    }
+
     /// What the tray needs to know about the Timer right now (`platform::tray_model`).
     pub fn tray_state(&self, now: Instant) -> crate::platform::tray_model::TrayTimerState {
         let core = self.timer.controller.core();

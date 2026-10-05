@@ -4715,6 +4715,7 @@ dependencies = [
  "minisign-verify",
  "png",
  "resvg",
+ "ring",
  "serde",
  "serde_json",
  "slint",
@@ -4725,6 +4726,7 @@ dependencies = [
  "ureq",
  "windows",
  "windows-sys 0.59.0",
+ "zbus",
 ]
 
 [[package]]

@@ -24,6 +24,8 @@ use super::http::{ApiRequest, Body, Method, NetError, Priority, Target};
 pub enum ImageKind {
     SkribblDrawing,
     Avatar,
+    /// Stage 22b: feed post images (`feedImageUrl`: `${origin}/feed/image/<key>`).
+    FeedImage,
 }
 
 impl ImageKind {
@@ -31,6 +33,7 @@ impl ImageKind {
         match self {
             Self::SkribblDrawing => "/skribbl/drawing/",
             Self::Avatar => "/profile/avatar/",
+            Self::FeedImage => "/feed/image/",
         }
     }
 
@@ -40,6 +43,8 @@ impl ImageKind {
         match self {
             Self::SkribblDrawing => 2 * 1024 * 1024,
             Self::Avatar => 512 * 1024,
+            // `MAX_FEED_IMAGE_BYTES` (5 MiB) with headroom
+            Self::FeedImage => 6 * 1024 * 1024,
         }
     }
 
@@ -47,7 +52,8 @@ impl ImageKind {
         match self {
             // `skribblImageTypes`: PNG or WebP
             Self::SkribblDrawing => matches!(format, ImageFormat::Png | ImageFormat::WebP),
-            Self::Avatar => true,
+            // `feedImageTypes`: PNG, JPEG, WebP, GIF (an animated GIF shows its first frame)
+            Self::Avatar | Self::FeedImage => true,
         }
     }
 }
@@ -124,6 +130,20 @@ pub fn allow(url: &str, kind: ImageKind, origin: &Origin) -> Option<ImagePath> {
     Some(ImagePath(path.to_string()))
 }
 
+/// The placeholder request a local (non-network) worker job carries for queue bookkeeping; the
+/// worker never sends it.
+pub fn local_marker() -> ApiRequest {
+    ApiRequest {
+        method: Method::Get,
+        target: Target::Image("/local".into()),
+        query: Vec::new(),
+        body: Body::None,
+        max_response: 0,
+        timeout: IMAGE_TIMEOUT,
+        priority: Priority::Api,
+    }
+}
+
 /// The GET for an allowed image: no query, no body, no credentials, its own size cap.
 pub fn request(path: &ImagePath, kind: ImageKind) -> ApiRequest {
     ApiRequest {
@@ -142,6 +162,7 @@ pub enum ImageFormat {
     Png,
     WebP,
     Jpeg,
+    Gif,
 }
 
 fn sniff(bytes: &[u8]) -> Option<ImageFormat> {
@@ -151,9 +172,16 @@ fn sniff(bytes: &[u8]) -> Option<ImageFormat> {
         Some(ImageFormat::WebP)
     } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
         Some(ImageFormat::Jpeg)
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        Some(ImageFormat::Gif)
     } else {
         None
     }
+}
+
+/// The format a file's bytes say they are (local picks: the extension is not trusted).
+pub fn sniff_format(bytes: &[u8]) -> Option<ImageFormat> {
+    sniff(bytes)
 }
 
 fn declared(content_type: Option<&str>) -> Option<ImageFormat> {
@@ -162,6 +190,7 @@ fn declared(content_type: Option<&str>) -> Option<ImageFormat> {
         "image/png" => Some(ImageFormat::Png),
         "image/webp" => Some(ImageFormat::WebP),
         "image/jpeg" | "image/jpg" => Some(ImageFormat::Jpeg),
+        "image/gif" => Some(ImageFormat::Gif),
         _ => None,
     }
 }
@@ -195,10 +224,22 @@ pub fn decode(
     if declared(content_type) != Some(sniffed) || !kind.accepts(sniffed) {
         return Err(NetError::Malformed);
     }
+    decode_bytes(sniffed, bytes, max_w, max_h)
+}
+
+/// Decodes bytes of a known format under the decoder limits and scales them down to fit
+/// `max_w` x `max_h` (also used for images the user picks).
+pub fn decode_bytes(
+    sniffed: ImageFormat,
+    bytes: &[u8],
+    max_w: u32,
+    max_h: u32,
+) -> Result<DecodedImage, NetError> {
     let format = match sniffed {
         ImageFormat::Png => image::ImageFormat::Png,
         ImageFormat::WebP => image::ImageFormat::WebP,
         ImageFormat::Jpeg => image::ImageFormat::Jpeg,
+        ImageFormat::Gif => image::ImageFormat::Gif,
     };
     let mut reader = image::ImageReader::with_format(std::io::Cursor::new(bytes), format);
     let mut limits = image::Limits::default();

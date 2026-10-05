@@ -18,7 +18,7 @@ creds=(--write-credentials "$data"); mseed=$seed
 [ "$seed" = none ] && { creds=(); mseed=demo; }
 export ST_ARGS="$*"
 unshare -rn bash -c "ip link set lo up
-  '$ROOT/target/debug/social-mock' --port 47811 --seed '$mseed' --now 2026-10-04T12:00:00+02:00 ${creds[*]:-} >'$data/mock.out' 2>&1 &
+  '$ROOT/target/debug/social-mock' --port 47811 --seed '$mseed' --now 2026-10-04T12:00:00+02:00 ${creds[*]:-} ${MOCK_ARGS:-} >'$data/mock.out' 2>&1 &
   for i in \$(seq 100); do grep -q SOCIAL_MOCK '$data/mock.out' 2>/dev/null && break; sleep 0.05; done
   env -u WAYLAND_DISPLAY DISPLAY=\${CAPTURE_DISPLAY:-:99} WINIT_UNIX_BACKEND=x11 SLINT_SCALE_FACTOR=1 \
     STUDY_NATIVE_DATA_DIR='$data' STUDY_NATIVE_IMPORT_BACKUP='$fixture' \

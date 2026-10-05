@@ -9,6 +9,7 @@
 // is in flight (production's `skribbl-spin`).
 import { FN } from "../fn/palette.slint";
 import { Game, Emoji, CssLine } from "types.slint";
+import { Backdrop, BlurBackdrop } from "../backdrop.slint";
 
 export struct SkribblRow {
     id: string,
@@ -316,8 +317,9 @@ component SectionHead inherits Rectangle {
     }
 }
 
-// The custom colour (production's `<input type="color">`): the browser opens the platform's
-// colour dialog; native shows a small hex field (documented difference).
+// The custom colour (production's `<input type="color">`): the browser opens its colour dialog;
+// native opens `HsvPicker` under the colour row (Stage 22b: a saturation/value square, a hue strip,
+// a preview and the `#rrggbb` field).
 component CustomColor inherits Rectangle {
     in property <color> current;
     in property <bool> active;
@@ -336,6 +338,136 @@ component CustomColor inherits Rectangle {
     TouchArea { mouse-cursor: pointer; clicked => { root.open = !root.open; } }
     accessible-role: button;
     accessible-label: "Custom color";
+}
+
+// Stage 22b: the custom colour picker. Dragging the square or the strip previews the colour;
+// releasing applies it (as the browser dialog's `input` events do), "Use" applies a typed hex.
+component HsvPicker inherits Rectangle {
+    in property <color> start;
+    callback apply(string);
+    callback done();
+    in-out property <float> hue: root.start.to-hsv().hue;
+    in-out property <float> sat: root.start.to-hsv().saturation;
+    in-out property <float> val: root.start.to-hsv().value;
+    out property <color> picked: Colors.hsv(root.hue, root.sat, root.val);
+    private property <string> rgb: "rgb(" + root.picked.red + "," + root.picked.green + "," + root.picked.blue + ")";
+    height: 148px;
+    // the saturation (left to right) / value (top to bottom) square over the pure hue
+    sv := Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 220px;
+        height: 120px;
+        border-radius: 8px;
+        background: Colors.hsv(root.hue, 1, 1);
+        clip: true;
+        Rectangle { background: @linear-gradient(90deg, #ffffff 0%, #ffffff00 100%); }
+        Rectangle { background: @linear-gradient(180deg, #00000000 0%, #000000 100%); }
+        Rectangle {
+            x: root.sat * parent.width - 7px;
+            y: (1 - root.val) * parent.height - 7px;
+            width: 14px;
+            height: 14px;
+            border-radius: 7px;
+            border-width: 2px;
+            border-color: root.val > 0.5 && root.sat < 0.5 ? #000000 : #ffffff;
+        }
+        sv-touch := TouchArea {
+            mouse-cursor: crosshair;
+            pointer-event(e) => {
+                if e.kind == PointerEventKind.down {
+                    root.sat = clamp(self.mouse-x / self.width, 0, 1);
+                    root.val = 1 - clamp(self.mouse-y / self.height, 0, 1);
+                }
+                if e.kind == PointerEventKind.up { root.apply(root.rgb); }
+            }
+            moved => {
+                if self.pressed {
+                    root.sat = clamp(self.mouse-x / self.width, 0, 1);
+                    root.val = 1 - clamp(self.mouse-y / self.height, 0, 1);
+                }
+            }
+        }
+        accessible-role: slider;
+        accessible-label: "Saturation and brightness";
+        accessible-value: round(root.sat * 100) + "% saturation, " + round(root.val * 100) + "% brightness";
+        accessible-action-increment => { root.val = min(1, root.val + 0.05); root.apply(root.rgb); }
+        accessible-action-decrement => { root.val = max(0, root.val - 0.05); root.apply(root.rgb); }
+    }
+    // the hue strip
+    Rectangle {
+        x: 0px;
+        y: 130px;
+        width: 220px;
+        height: 14px;
+        border-radius: 7px;
+        background: @linear-gradient(90deg, #ff0000 0%, #ffff00 16.67%, #00ff00 33.33%, #00ffff 50%, #0000ff 66.67%, #ff00ff 83.33%, #ff0000 100%);
+        Rectangle {
+            x: root.hue / 360 * parent.width - 3px;
+            y: -2px;
+            width: 6px;
+            height: parent.height + 4px;
+            border-radius: 3px;
+            border-width: 2px;
+            border-color: #ffffff;
+            drop-shadow-blur: 2px;
+            drop-shadow-color: #00000066;
+        }
+        TouchArea {
+            mouse-cursor: pointer;
+            pointer-event(e) => {
+                if e.kind == PointerEventKind.down { root.hue = clamp(self.mouse-x / self.width, 0, 0.9999) * 360; }
+                if e.kind == PointerEventKind.up { root.apply(root.rgb); }
+            }
+            moved => { if self.pressed { root.hue = clamp(self.mouse-x / self.width, 0, 0.9999) * 360; } }
+        }
+        accessible-role: slider;
+        accessible-label: "Hue";
+        accessible-value: round(root.hue);
+        accessible-value-minimum: 0;
+        accessible-value-maximum: 360;
+        accessible-action-increment => { root.hue = mod(root.hue + 10, 360); root.apply(root.rgb); }
+        accessible-action-decrement => { root.hue = mod(root.hue + 350, 360); root.apply(root.rgb); }
+    }
+    // the preview, the hex field, Use and Done
+    Rectangle {
+        x: 236px;
+        y: 0px;
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        border-width: 2px;
+        border-color: Game.t.border;
+        Rectangle { x: 3px; y: 3px; width: parent.width - 6px; height: parent.height - 6px; border-radius: 7px; background: root.picked; }
+        accessible-role: image;
+        accessible-label: "Picked color";
+    }
+    STxt { x: 236px; y: 56px; text: "Custom color (#rrggbb)"; font-size: 12px; color: Game.t.muted; }
+    Rectangle {
+        x: 236px;
+        y: 76px;
+        width: 120px;
+        height: 30px;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: Game.t.border;
+        background: Game.t.surface-2;
+        hex := TextInput {
+            x: 8px;
+            width: parent.width - 16px;
+            height: parent.height;
+            vertical-alignment: center;
+            single-line: true;
+            font-family: FN.mono;
+            font-size: 14px;
+            color: Game.t.text;
+            accepted => { root.apply(self.text); }
+            accessible-role: text-input;
+            accessible-label: "Custom color";
+        }
+    }
+    ToolButton { x: 364px; y: 75px; text: "Use"; clicked => { root.apply(hex.text); } }
+    ToolButton { x: 236px; y: 114px; text: "Done"; clicked => { root.done(); } }
 }
 
 export component SkribblModal inherits Rectangle {
@@ -533,34 +665,10 @@ export component SkribblModal inherits Rectangle {
                             for c[i] in SkribblPalette.colors: Swatch { swatch: c; active: root.d.color-index == i; label: "Color " + SkribblPalette.names[i]; clicked => { root.pick-color(i); } }
                             CustomColor { current: root.d.color; active: root.d.color-index < 0; open <=> root.custom-open; }
                         }
-                        if root.custom-open: Rectangle {
-                            height: 40px;
-                            HorizontalLayout {
-                                spacing: 8px;
-                                alignment: start;
-                                STxt { vertical-alignment: center; text: "Custom color (#rrggbb)"; font-size: 13.44px; color: Game.t.muted; }
-                                Rectangle {
-                                    width: 120px;
-                                    border-radius: 8px;
-                                    border-width: 1px;
-                                    border-color: Game.t.border;
-                                    background: Game.t.surface-2;
-                                    hex := TextInput {
-                                        x: 8px;
-                                        width: parent.width - 16px;
-                                        height: parent.height;
-                                        vertical-alignment: center;
-                                        single-line: true;
-                                        font-family: FN.mono;
-                                        font-size: 14px;
-                                        color: Game.t.text;
-                                        accepted => { root.custom-color(self.text); root.custom-open = false; }
-                                        accessible-role: text-input;
-                                        accessible-label: "Custom color";
-                                    }
-                                }
-                                ToolButton { y: 5px; text: "Use"; clicked => { root.custom-color(hex.text); root.custom-open = false; } }
-                            }
+                        if root.custom-open: HsvPicker {
+                            start: root.d.color;
+                            apply(t) => { root.custom-color(t); }
+                            done => { root.custom-open = false; }
                         }
                         // the canvas (900x600 logical, shown at the modal's width)
                         canvas-wrap := Rectangle {
@@ -683,7 +791,8 @@ export component SkribblModal inherits Rectangle {
 
     // `.skribbl-lightbox`: the expanded drawing; any click closes it
     if root.d.lightbox: Rectangle {
-        background: Game.t.black-72;
+        visible: !Backdrop.capturing;
+        BlurBackdrop { dim: Game.t.black-72; }
         TouchArea { mouse-cursor: pointer; clicked => { root.collapse(); } }
         private property <length> frame-w: min(root.width * 0.94, (root.height * 0.90 - 20px) * 1.5 + 20px);
         Rectangle {

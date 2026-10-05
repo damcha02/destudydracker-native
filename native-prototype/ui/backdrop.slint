@@ -1,0 +1,24 @@
+// Stage 22b: production's `backdrop-filter: blur(10px)` behind the lightboxes and the Social
+// dialogs. Slint has no backdrop filter, so when such an overlay opens Rust takes one snapshot of
+// the window with the overlays hidden (`capturing`), blurs a quarter-size copy on the CPU and hands
+// it back here; the overlay shows it under its dim. Nothing animates and nothing is redrawn after
+// that; when no snapshot is available the backdrop only dims (as before).
+export global Backdrop {
+    in property <image> blur;
+    in property <bool> ready;
+    // true only for the one synchronous snapshot: every blurred overlay hides itself
+    in property <bool> capturing;
+}
+
+export component BlurBackdrop inherits Rectangle {
+    in property <color> dim;
+    if Backdrop.ready: Image {
+        width: parent.width;
+        height: parent.height;
+        source: Backdrop.blur;
+        image-fit: fill;
+        image-rendering: smooth;
+        accessible-role: none;
+    }
+    Rectangle { background: root.dim; }
+}

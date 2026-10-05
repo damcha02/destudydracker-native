@@ -13,6 +13,7 @@ pub mod http;
 pub mod multipart;
 pub mod seed;
 pub mod world;
+pub mod world_22b;
 
 use std::collections::VecDeque;
 use std::sync::atomic::Ordering;

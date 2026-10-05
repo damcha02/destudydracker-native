@@ -21,6 +21,8 @@ struct Env {
     clock: FixedOffsetClock,
     device: DeviceIdentity,
     app: AppMetadata,
+    timer_phase: study_tracker_core::timer::TimerPhase,
+    timer_segments: Vec<study_tracker_core::timer::ActiveSegment>,
 }
 
 impl Env {
@@ -53,6 +55,8 @@ impl Env {
                 platform: "Linux x86_64".into(),
                 runtime_channel: "development".into(),
             },
+            timer_phase: study_tracker_core::timer::TimerPhase::Idle,
+            timer_segments: Vec::new(),
         }
     }
 
@@ -62,6 +66,8 @@ impl Env {
             clock: &self.clock,
             device: &self.device,
             app: &self.app,
+            timer_phase: self.timer_phase,
+            timer_segments: &self.timer_segments,
         }
     }
 }
@@ -118,13 +124,7 @@ fn synthetic_identity() -> SocialIdentity {
 fn synthetic_record() -> SocialRecord {
     let mut profile = SocialProfile::new_default(FriendCode::parse(seed::SELF_CODE).unwrap());
     profile.display_name = seed::SELF_NAME.into();
-    SocialRecord {
-        user_id: synthetic_identity().user_id,
-        profile,
-        sync: SyncStatus::default(),
-        friends: FriendsSnapshot::default(),
-        leaderboards: vec![],
-    }
+    SocialRecord::new(synthetic_identity().user_id, profile)
 }
 
 fn existing(rig: &Rig) -> SocialController {
@@ -138,6 +138,7 @@ fn existing(rig: &Rig) -> SocialController {
     let port = MemorySocialPort {
         record: Some(synthetic_record()),
         writes: 0,
+        prefs: Default::default(),
     };
     SocialController::new(
         Some(rig.endpoint.clone()),
@@ -290,6 +291,7 @@ fn credentials_for_another_endpoint_class_are_not_used() {
         Box::new(MemorySocialPort {
             record: Some(synthetic_record()),
             writes: 0,
+            prefs: Default::default(),
         }),
         false,
     );
@@ -376,12 +378,17 @@ fn the_social_tab_refreshes_and_the_leaderboard_follows_scope_and_period() {
     let global = c.board(LeaderboardScope::Global, LeaderboardPeriod::Weekly);
     assert!(global.iter().any(|e| e.display_name == "Kenji 健二"));
     assert!(!global.iter().any(|e| e.display_name == "Dan Private"));
-    assert!(
-        c.set_scope(LeaderboardScope::Squad).is_empty(),
-        "the squad scoreboard is Stage 22b"
-    );
+    // Stage 22b: the squad scope fetches the squad members' board and the Squad Arena
+    let out = c.set_scope(LeaderboardScope::Squad);
+    assert_eq!(out.len(), 2, "members' board + squad scoreboard");
+    rig.drive(&mut c, out);
     let out = c.set_period(LeaderboardPeriod::Overall);
-    assert!(out.is_empty(), "squad scope makes no leaderboard request");
+    assert_eq!(
+        out.len(),
+        1,
+        "the period changes the members' board; the arena is cached 60 s"
+    );
+    rig.drive(&mut c, out);
     let out = c.set_scope(LeaderboardScope::Global);
     rig.drive(&mut c, out);
     assert_eq!(
@@ -672,3 +679,6 @@ fn navigation_and_reconnect_stress_stays_bounded() {
         "the transport pools connections; open now {open}, most at once {max_open}"
     );
 }
+
+#[path = "social_controller_22b_tests.rs"]
+mod b22;

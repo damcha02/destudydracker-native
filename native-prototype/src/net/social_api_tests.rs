@@ -135,8 +135,8 @@ fn golden_request_and_respond_replies_carry_caches() {
     assert_eq!(s.friends.outgoing[0].to_friend_code.as_str(), "BOBB-2345");
     assert_eq!(
         s.leaderboards.len(),
-        6,
-        "global + friends x daily/weekly/overall"
+        9,
+        "global + friends + squad x daily/weekly/overall"
     );
     let accepted = parse_snapshot(&golden("friend-respond-accept")).unwrap();
     assert_eq!(accepted.friends.friends.len(), 1);
@@ -519,6 +519,7 @@ fn the_sync_payload_matches_sync_social_state() {
         stats: &stats,
         device: &device,
         app: &app,
+        feed_posts: &[],
     })
     .unwrap();
     let body = json_of(&req);

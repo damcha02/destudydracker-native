@@ -96,6 +96,7 @@ component MenuItem inherits Rectangle {
 export component MenuDropdown inherits Rectangle {
     callback change-theme();
     callback change-style();
+    callback open-settings();
     callback dismiss();
     width: Chrome.t.menu-caption ? 236px : 200px;
     height: layout.preferred-height + 2px;
@@ -129,7 +130,7 @@ export component MenuDropdown inherits Rectangle {
         MenuItem { text: "Change style"; clicked => { root.change-style(); } }
         MenuItem { text: "Personal"; enabled: false; }
         MenuItem { text: "Options"; enabled: false; }
-        MenuItem { text: "Settings"; enabled: false; last: true; }
+        MenuItem { text: "Settings"; last: true; clicked => { root.open-settings(); } }
     }
 }
 

@@ -54,9 +54,9 @@ pub const UPLOAD_TIMEOUT: Duration = Duration::from_secs(45);
 /// leaderboard caches) is tens of KiB; this is defensive.
 pub const MAX_API_RESPONSE: u64 = 2 * 1024 * 1024;
 /// Display strings: names (48 in production), themes (~40), server messages.
-const MAX_NAME_CHARS: usize = 64;
+pub(super) const MAX_NAME_CHARS: usize = 64;
 const MAX_THEME_CHARS: usize = 200;
-const MAX_URL_LEN: usize = 512;
+pub(super) const MAX_URL_LEN: usize = 512;
 
 // ------------------------------------------------------------------------------- DTO helpers
 
@@ -150,12 +150,12 @@ impl<'de, T: DeserializeOwned, const CAP: usize> Deserialize<'de> for Rows<T, CA
     }
 }
 
-fn s(v: &Lenient<String>) -> Option<&str> {
+pub(super) fn s(v: &Lenient<String>) -> Option<&str> {
     v.0.as_deref()
 }
 
 /// A non-negative count (`Number(row.minutes)`), clamped.
-fn count(v: &Lenient<f64>, max: u64) -> u64 {
+pub(super) fn count(v: &Lenient<f64>, max: u64) -> u64 {
     match v.0 {
         Some(x) if x.is_finite() && x > 0.0 => (x.round() as u64).min(max),
         _ => 0,
@@ -163,14 +163,14 @@ fn count(v: &Lenient<f64>, max: u64) -> u64 {
 }
 
 /// A signed score, clamped to a sane range.
-fn score(v: &Lenient<f64>) -> i64 {
+pub(super) fn score(v: &Lenient<f64>) -> i64 {
     match v.0 {
         Some(x) if x.is_finite() => x.round().clamp(-1e9, 1e9) as i64,
         _ => 0,
     }
 }
 
-fn name(raw: Option<&str>) -> String {
+pub(super) fn name(raw: Option<&str>) -> String {
     let n = display_text(raw.unwrap_or(""), MAX_NAME_CHARS);
     if n.trim().is_empty() {
         "Student".to_string()
@@ -179,12 +179,12 @@ fn name(raw: Option<&str>) -> String {
     }
 }
 
-fn url(raw: Option<&str>) -> Option<String> {
+pub(super) fn url(raw: Option<&str>) -> Option<String> {
     raw.filter(|u| !u.is_empty() && u.len() <= MAX_URL_LEN)
         .map(str::to_string)
 }
 
-fn iso_date(raw: Option<&str>) -> Option<String> {
+pub(super) fn iso_date(raw: Option<&str>) -> Option<String> {
     let d = raw?;
     study_tracker_core::dashboard::civil::CivilDate::parse_iso(d)
         .filter(|_| d.len() == 10)
@@ -209,7 +209,7 @@ pub struct AvatarDto {
     mime_type: Lenient<String>,
 }
 
-fn avatar(dto: &Lenient<AvatarDto>, display_name: &str) -> Avatar {
+pub(super) fn avatar(dto: &Lenient<AvatarDto>, display_name: &str) -> Avatar {
     let Some(a) = &dto.0 else {
         return Avatar::default_for(display_name);
     };
@@ -230,7 +230,7 @@ fn avatar(dto: &Lenient<AvatarDto>, display_name: &str) -> Avatar {
     )
 }
 
-fn check_status(resp: &HttpResponse) -> Result<(), NetError> {
+pub(super) fn check_status(resp: &HttpResponse) -> Result<(), NetError> {
     if (200..300).contains(&resp.status) {
         Ok(())
     } else {
@@ -238,14 +238,14 @@ fn check_status(resp: &HttpResponse) -> Result<(), NetError> {
     }
 }
 
-fn parse_json<T: DeserializeOwned>(resp: &HttpResponse) -> Result<T, NetError> {
+pub(super) fn parse_json<T: DeserializeOwned>(resp: &HttpResponse) -> Result<T, NetError> {
     check_status(resp)?;
     serde_json::from_slice(&resp.body).map_err(|_| NetError::Malformed)
 }
 
 // ---------------------------------------------------------------------------- request basics
 
-fn json_request<T: Serialize>(path: ApiPath, body: &T) -> ApiRequest {
+pub(super) fn json_request<T: Serialize>(path: ApiPath, body: &T) -> ApiRequest {
     ApiRequest {
         method: Method::Post,
         target: Target::Api(path),
@@ -259,12 +259,12 @@ fn json_request<T: Serialize>(path: ApiPath, body: &T) -> ApiRequest {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct Auth<'a> {
+pub(super) struct Auth<'a> {
     user_id: &'a str,
     device_secret: &'a str,
 }
 
-fn auth(id: &SocialIdentity) -> Auth<'_> {
+pub(super) fn auth(id: &SocialIdentity) -> Auth<'_> {
     Auth {
         user_id: id.user_id.as_str(),
         device_secret: id.device_secret.expose(),
@@ -273,7 +273,7 @@ fn auth(id: &SocialIdentity) -> Auth<'_> {
 
 /// `identityParams(social)`: production sends the credential in the query string of the two
 /// Skribbl GETs. Kept for protocol compatibility; the query exists only inside the transport.
-fn credential_query(id: &SocialIdentity) -> Vec<(&'static str, String)> {
+pub(super) fn credential_query(id: &SocialIdentity) -> Vec<(&'static str, String)> {
     vec![
         ("userId", id.user_id.as_str().to_string()),
         ("deviceSecret", id.device_secret.expose().to_string()),
@@ -282,7 +282,7 @@ fn credential_query(id: &SocialIdentity) -> Vec<(&'static str, String)> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct AppDto<'a> {
+pub(super) struct AppDto<'a> {
     version: &'a str,
     platform: &'a str,
     runtime_channel: &'a str,
@@ -335,8 +335,8 @@ struct StatDto {
 struct SyncBody<'a> {
     user: SyncUser<'a>,
     stats: Vec<StatDto>,
-    /// Feed posts are Stage 22b; production sends its queue here, native sends none yet.
-    feed_posts: [(); 0],
+    /// `pendingFeedPosts.slice(0, 25)` (Stage 22b): the posts the user queued.
+    feed_posts: Vec<super::social_ext::FeedPostWire<'a>>,
 }
 
 pub struct SyncInput<'a> {
@@ -347,6 +347,18 @@ pub struct SyncInput<'a> {
     pub stats: &'a [DailyStat],
     pub device: &'a DeviceIdentity,
     pub app: &'a AppMetadata,
+    /// The queued posts (`pendingFeedPosts`); the first 25 travel with this sync.
+    pub feed_posts: &'a [study_tracker_core::social::feed::PendingPost],
+}
+
+/// The ids of the posts a sync built from `input` carries (`sentFeedPostIds`).
+pub fn sent_post_ids(input: &SyncInput) -> Vec<study_tracker_core::social::PostId> {
+    input
+        .feed_posts
+        .iter()
+        .take(study_tracker_core::social::feed::MAX_PENDING_POSTS)
+        .map(|p| p.id.clone())
+        .collect()
 }
 
 /// `syncSocialState` -> `POST /sync/v2` (creates the account when the id is unknown).
@@ -378,7 +390,12 @@ pub fn sync_v2(input: &SyncInput) -> Result<ApiRequest, NetError> {
                 sessions: s.sessions,
             })
             .collect(),
-        feed_posts: [],
+        feed_posts: input
+            .feed_posts
+            .iter()
+            .take(study_tracker_core::social::feed::MAX_PENDING_POSTS)
+            .map(super::social_ext::FeedPostWire::from)
+            .collect(),
     };
     let req = json_request(ApiPath::SyncV2, &body);
     if req.body.len() > MAX_SYNC_BODY_BYTES {
@@ -493,7 +510,7 @@ pub struct LeaderboardEntryDto {
     is_self: Lenient<bool>,
 }
 
-type LeaderRows = Rows<LeaderboardEntryDto, MAX_LEADERBOARD_ENTRIES>;
+pub(super) type LeaderRows = Rows<LeaderboardEntryDto, MAX_LEADERBOARD_ENTRIES>;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 struct PeriodRowsDto {
@@ -511,6 +528,9 @@ struct CachedLeaderboardsDto {
     global: Lenient<PeriodRowsDto>,
     #[serde(default)]
     friends: Lenient<PeriodRowsDto>,
+    /// The squad members' board (Stage 22b: the Squad tab's internal leaderboard).
+    #[serde(default)]
+    squad: Lenient<PeriodRowsDto>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -524,6 +544,9 @@ struct SocialSnapshotDto {
     outgoing_friend_requests: Option<Rows<FriendRequestDto, MAX_FRIEND_REQUESTS>>,
     #[serde(default)]
     cached_leaderboards: Lenient<CachedLeaderboardsDto>,
+    /// Stage 22b: the squad part (`getSquadSnapshot`) and the full snapshot's caches.
+    #[serde(flatten)]
+    more: super::social_ext::SnapshotMoreDto,
 }
 
 #[derive(Debug, Deserialize)]
@@ -576,7 +599,7 @@ pub fn leaderboard_entry(dto: &LeaderboardEntryDto) -> Option<LeaderboardEntry> 
     })
 }
 
-fn leaderboard_rows(rows: &LeaderRows) -> Vec<LeaderboardEntry> {
+pub(super) fn leaderboard_rows(rows: &LeaderRows) -> Vec<LeaderboardEntry> {
     let mut seen = std::collections::HashSet::new();
     rows.rows
         .iter()
@@ -585,13 +608,26 @@ fn leaderboard_rows(rows: &LeaderRows) -> Vec<LeaderboardEntry> {
         .collect()
 }
 
-/// The 22a part of a `getSocialSnapshot` reply.
+/// A `getSocialSnapshot` reply.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SocialSnapshot {
     pub friends: FriendsSnapshot,
     /// `cachedLeaderboards` when the reply carried them (`/friends/request`, `/friends/respond`
-    /// send the full snapshot; `/friends/status/v2` does not), keyed by scope and period.
+    /// and every squad mutation send the full snapshot; `/friends/status/v2` does not), keyed by
+    /// scope and period.
     pub leaderboards: Vec<(LeaderboardScope, LeaderboardPeriod, Vec<LeaderboardEntry>)>,
+    /// Stage 22b: the squad, its requests and chat (every snapshot carries them).
+    pub squad: Option<study_tracker_core::social::squad::SquadSnapshot>,
+    /// Stage 22b: `cachedFeeds` (full snapshots only).
+    pub feeds: Vec<(
+        study_tracker_core::social::feed::FeedScope,
+        Vec<study_tracker_core::social::feed::FeedPost>,
+    )>,
+    /// Stage 22b: `cachedSquadScoreLeaderboards` (full snapshots only).
+    pub squad_scores: Vec<(
+        study_tracker_core::social::squad::SquadScorePeriod,
+        Vec<study_tracker_core::social::squad::SquadScoreEntry>,
+    )>,
 }
 
 /// `{ social: {...} }` (getSocialSnapshot). A reply without the three lists is malformed.
@@ -616,6 +652,7 @@ pub fn parse_snapshot(resp: &HttpResponse) -> Result<SocialSnapshot, NetError> {
         for (scope, rows) in [
             (LeaderboardScope::Global, cached.global.0),
             (LeaderboardScope::Friends, cached.friends.0),
+            (LeaderboardScope::Squad, cached.squad.0),
         ] {
             if let Some(rows) = rows {
                 leaderboards.push((
@@ -636,9 +673,13 @@ pub fn parse_snapshot(resp: &HttpResponse) -> Result<SocialSnapshot, NetError> {
             }
         }
     }
+    let (squad, feeds, squad_scores) = super::social_ext::snapshot_more(social.more);
     Ok(SocialSnapshot {
         friends,
         leaderboards,
+        squad,
+        feeds,
+        squad_scores,
     })
 }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Stage 22a: one production Social / Daily Skribbl capture against the local mock Worker.
 #
-#   social-capture-prod.sh <prod-dist> <fixture.json> <out.png> <style> <theme> <seed> <js-steps> [probe.js probe.json] [WxH]
+#   [MOCK_ARGS="--squad none --owner"] social-capture-prod.sh <prod-dist> <fixture.json> <out.png> <style> <theme> <seed> <js-steps> [probe.js probe.json] [WxH]
 #
 # Runs entirely inside a loopback-only network namespace (`unshare -rn`): the mock
 # (`target/debug/social-mock`, synthetic seed, frozen 2026-10-04 12:00 Zurich) on 127.0.0.1:47811,
@@ -22,7 +22,7 @@ chmod +x "$BROWSER"
 EVAL=(); [ -n "$PROBE" ] && EVAL=(--eval "$PROBE" --eval-out "$PROBE_OUT")
 export STEPS
 unshare -rn bash -c "ip link set lo up
-  '$ROOT/target/debug/social-mock' --port 47811 --seed '$SEED' --now 2026-10-04T12:00:00+02:00 >/dev/null 2>&1 &
+  '$ROOT/target/debug/social-mock' --port 47811 --seed '$SEED' --now 2026-10-04T12:00:00+02:00 ${MOCK_ARGS:-} >/dev/null 2>&1 &
   sleep 0.5
   node '$HERE/capture-prod.mjs' --browser '$BROWSER' --dist '$DIST' --fixture '$FX' --out '$OUT' --w $W --h $H \
     --tab $TAB --style '$STYLE' --theme '$THEME' --now 2026-10-04T12:00:00+02:00 --tz Europe/Zurich \

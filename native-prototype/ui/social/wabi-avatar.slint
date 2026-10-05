@@ -1,0 +1,33 @@
+// The Wabi-Sabi round avatar (`linear-gradient(135deg, oklch(.67 .14 h), oklch(.52 .16 h+34))`,
+// sage for you), shared by the Circle pages (Stage 22a, moved out in 22b for the feed and squad).
+import { WS } from "../wabi/palette.slint";
+import { SAvatar } from "types.slint";
+
+export component WAvatar inherits Rectangle {
+    in property <SAvatar> a;
+    in property <length> size: 30px;
+    // the podium's glyphs take the column's muted ink
+    in property <bool> muted-glyph;
+    width: root.size;
+    height: root.size;
+    border-radius: root.size / 2;
+    background: root.a.is-self
+        ? @linear-gradient(135deg, WS.sage 0%, WS.sage.mix(white, 0.52) 100%)
+        : @linear-gradient(135deg, root.a.grad-a 0%, root.a.grad-b 100%);
+    clip: true;
+    if root.a.kind == 7 && root.a.has-photo: Image { width: parent.width; height: parent.height; source: root.a.photo; image-fit: cover; }
+    if !(root.a.kind == 7 && root.a.has-photo): Text {
+        width: parent.width;
+        height: parent.height;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.a.text;
+        color: root.muted-glyph ? WS.muted : root.a.is-self ? #081018 : white;
+        font-size: root.size * 0.4;
+        font-weight: root.a.kind == 1 ? 800 : 900;
+        font-family: root.a.kind == 1 || root.a.kind == 2 ? WS.serif : WS.sans;
+    }
+    accessible-role: image;
+    accessible-label: "Avatar " + root.a.text;
+}
+

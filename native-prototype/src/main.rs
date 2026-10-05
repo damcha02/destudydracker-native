@@ -21,14 +21,17 @@ mod app_social;
 #[cfg(windows)]
 mod app_updater;
 mod appearance_view;
+mod backdrop;
 mod break_room_art;
 mod break_room_controller;
 mod break_room_flags;
 mod break_room_view;
 mod dashboard_view;
+mod file_picker;
 mod font_fallback;
 mod game_tokens;
 mod image_cache;
+mod image_prep;
 mod map;
 mod map_adapter;
 mod net;
@@ -198,6 +201,7 @@ fn run() -> Result<(), StartupError> {
     app_social::set_store_path(&store_path);
     app_social::install(&window, Rc::clone(&model), &store_path, &app_paths.data_dir);
     app_skribbl::install(&window);
+    backdrop::bind(&window);
     app_break_room::install(&window, Rc::clone(&model), &store_path);
     apply_model_to_window(&window, &model.borrow(), Instant::now());
     refresh_dashboard(&window, &model.borrow(), &mut dashboard.borrow_mut());
@@ -731,6 +735,9 @@ fn bind_model_callbacks(
                 Rc::clone(&dispatch_dashboard),
             );
         }
+        // Stage 22b (D4): the verified-session adapter reads the Timer's (phase, running) after
+        // every command; the Timer itself knows nothing about it
+        app_social::after_timer_activity();
     };
     let dispatch = Rc::new(dispatch);
 
@@ -816,6 +823,8 @@ fn sync_refresh_timer(
             refresh_dashboard_if_changed(&window, &model.borrow(), &mut dashboard.borrow_mut());
             #[cfg(windows)]
             app_platform::after_timer_activity();
+            // a phase that ends inside this tick (study -> break) is seen here (one comparison)
+            app_social::after_timer_activity();
             if !model.borrow().timer().is_running() {
                 timer_for_callback.stop();
             }

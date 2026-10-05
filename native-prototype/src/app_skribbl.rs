@@ -430,15 +430,12 @@ fn bind(window: &MainWindow) {
         push();
     });
     window.on_skribbl_custom_color(|text| {
-        let hex = text.trim().trim_start_matches('#');
-        if hex.len() == 6 {
-            if let Ok(v) = u32::from_str_radix(hex, 16) {
-                with(|rt| {
-                    if let Some(s) = rt.controller.session.as_mut() {
-                        s.set_color(v);
-                    }
-                });
-            }
+        if let Some(v) = parse_custom_color(&text) {
+            with(|rt| {
+                if let Some(s) = rt.controller.session.as_mut() {
+                    s.set_color(v);
+                }
+            });
         }
         push();
     });
@@ -528,4 +525,40 @@ pub fn report() -> String {
 #[allow(dead_code)]
 pub fn row_count() -> usize {
     with(|rt| rt.rows.row_count()).unwrap_or(0)
+}
+
+/// The custom colour: `#rrggbb` typed in the field, or `rgb(r,g,b)` from the HSV picker
+/// (production's `<input type="color">` hands over `#rrggbb` the same way).
+fn parse_custom_color(text: &str) -> Option<u32> {
+    let t = text.trim();
+    if let Some(inner) = t.strip_prefix("rgb(").and_then(|r| r.strip_suffix(')')) {
+        let parts: Vec<u32> = inner
+            .split(',')
+            .filter_map(|p| p.trim().parse::<u32>().ok())
+            .collect();
+        return (parts.len() == 3 && parts.iter().all(|c| *c <= 255))
+            .then(|| (parts[0] << 16) | (parts[1] << 8) | parts[2]);
+    }
+    let hex = t.trim_start_matches('#');
+    if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        u32::from_str_radix(hex, 16).ok()
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod custom_color_tests {
+    #[test]
+    fn custom_colours_parse_from_the_field_and_the_picker() {
+        assert_eq!(super::parse_custom_color("#ff8800"), Some(0xff8800));
+        assert_eq!(super::parse_custom_color(" 00ff00 "), Some(0x00ff00));
+        assert_eq!(
+            super::parse_custom_color("rgb(255, 136, 0)"),
+            Some(0xff8800)
+        );
+        assert_eq!(super::parse_custom_color("rgb(256,0,0)"), None);
+        assert_eq!(super::parse_custom_color("#ff88"), None);
+        assert_eq!(super::parse_custom_color("+1ff88"), None);
+    }
 }

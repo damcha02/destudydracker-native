@@ -30,12 +30,14 @@ import { AlbumData, AlbumRow, AlbumPageData } from "wabi/album.slint";
 export { AlbumData, AlbumRow, AlbumPageData } from "wabi/album.slint";
 export { SkribblData, SkribblRow } from "break/skribbl.slint";
 import { SkribblModal, SkribblData } from "break/skribbl.slint";
-export { SocialView, SAvatar, SFriendRow, SRequestRow, SBoardRow, SStat } from "social/types.slint";
-import { SocialView } from "social/types.slint";
+export { SocialView, SAvatar, SFriendRow, SRequestRow, SBoardRow, SStat, SocialActions, SocialData, SFeedPost, SFeedView, SSquadView, SDialogsView, SPollOption, SReaction, SComment, SWeekRow, SRoleAction, SSquadMember, SSquadCard, SChatMessage, SJoinRequest, SArenaRow, SDetailMember, SBadge, SBadgeGroup, SAvatarChoice, SAdminRow } from "social/types.slint";
+import { SocialView, SocialData } from "social/types.slint";
 import { FnSocialPage } from "social/fn-social.slint";
 import { WabiCircle } from "social/wabi-circle.slint";
-import { NamePrompt, NewAccountConfirm, PlayerDialog, MessageBanner, SocialStyle } from "social/dialogs.slint";
+import { NamePrompt, NewAccountConfirm, PlayerDialog, MessageBanner, SocialStyle, SquadDetailsDialog, BadgesDialog } from "social/dialogs.slint";
+import { NoticeStack, ConfirmDialog, ImageLightbox, AvatarEditor, CropEditor, SettingsSheet, AdminUsageDialog } from "social/overlays.slint";
 export { SocialStyle } from "social/dialogs.slint";
+export { Backdrop } from "backdrop.slint";
 
 export { WS, WsTokens } from "wabi/palette.slint";
 export { WabiSidebarData, WabiDashData, WabiTimerData, WabiQuietData, WabiCourseItem, WabiTaskItem, WabiDeadlineRow, WabiPlannedRow, WabiModeCard, WabiQuietOther } from "wabi/types.slint";
@@ -155,6 +157,17 @@ export component MainWindow inherits Window {
     in property <int> texture-frame;
     in-out property <bool> menu-open: false;
     in-out property <int> panel-view: -1;
+    // Stage 22b: the Settings sheet (telemetry opt-in and the owner cards)
+    in-out property <bool> settings-open: false;
+    // Stage 22b: an overlay with production's blurred backdrop is open (Rust snapshots and blurs
+    // the window once per opening, `src/backdrop.rs`)
+    out property <bool> backdrop-wanted: (root.show-social && (root.social.viewing || root.social.name-prompt
+            || SocialData.squad.details-open || SocialData.dialogs.badges-open || SocialData.dialogs.avatar-open
+            || SocialData.dialogs.crop-open || SocialData.feed.lightbox))
+        || root.social.confirm-new || root.settings-open || SocialData.dialogs.admin-open || SocialData.dialogs.confirm-open
+        || (root.show-break && root.games.open == 4 && root.skribbl.lightbox);
+    callback backdrop-changed(bool);
+    changed backdrop-wanted => { root.backdrop-changed(self.backdrop-wanted); }
     in property <[ChoiceCard]> palette-cards;
     in property <[ChoiceCard]> style-cards;
     callback appearance-pick-palette(int);
@@ -1010,6 +1023,7 @@ export component MainWindow inherits Window {
             y: root.wabi ? 157px : 60px;
             change-theme => { root.menu-open = false; root.panel-view = 0; }
             change-style => { root.menu-open = false; root.panel-view = 1; }
+            open-settings => { root.menu-open = false; root.settings-open = true; }
         }
         if root.panel-view >= 0: AppearancePanel {
             width: parent.width;
@@ -1045,6 +1059,57 @@ export component MainWindow inherits Window {
             busy: root.social.busy;
             dismiss => { root.social-close-person(); }
             request(code) => { root.social-send-request(code); }
+        }
+        // production's `.notice-stack` (announcement, then the comment notice), over every surface and
+        // under the dialogs (z-index 85 against their 100+)
+        if SocialData.dialogs.announcement-open || SocialData.dialogs.notice-open: NoticeStack {
+            // full size: a zero-height item's children are not repainted (it has no dirty area)
+            width: parent.width;
+            height: parent.height;
+            d: SocialData.dialogs;
+        }
+        if root.show-social && SocialData.squad.details-open: SquadDetailsDialog {
+            width: parent.width;
+            height: parent.height;
+            s: SocialData.squad;
+            busy: root.social.busy;
+        }
+        if root.show-social && SocialData.dialogs.badges-open: BadgesDialog {
+            width: parent.width;
+            height: parent.height;
+            groups: SocialData.dialogs.badge-groups;
+        }
+        if root.show-social && SocialData.feed.lightbox: ImageLightbox {
+            width: parent.width;
+            height: parent.height;
+            picture: SocialData.feed.lightbox-image;
+            label: SocialData.feed.lightbox-label;
+        }
+        if root.show-social && SocialData.dialogs.avatar-open && !SocialData.dialogs.crop-open: AvatarEditor {
+            width: parent.width;
+            height: parent.height;
+            d: SocialData.dialogs;
+        }
+        if root.show-social && SocialData.dialogs.crop-open: CropEditor {
+            width: parent.width;
+            height: parent.height;
+            d: SocialData.dialogs;
+        }
+        if root.settings-open: SettingsSheet {
+            width: parent.width;
+            height: parent.height;
+            d: SocialData.dialogs;
+            dismiss => { root.settings-open = false; }
+        }
+        if SocialData.dialogs.admin-open: AdminUsageDialog {
+            width: parent.width;
+            height: parent.height;
+            d: SocialData.dialogs;
+        }
+        if SocialData.dialogs.confirm-open: ConfirmDialog {
+            width: parent.width;
+            height: parent.height;
+            text: SocialData.dialogs.confirm-text;
         }
         if root.app-message != "": MessageBanner {
             width: parent.width - (root.wabi ? 10px : 0px);

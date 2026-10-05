@@ -5,6 +5,9 @@
 use serde_json::json;
 
 use crate::world::{DrawingRow, FriendRequestRow, User, World};
+use crate::world_22b::{
+    CommentRow, JoinRow, MemberRow, MessageRow, PollRow, PostRow, ScoreRow, SquadRow,
+};
 
 pub const SELF_ID: &str = "synthetic-user-0001";
 pub const SELF_SECRET: &str = "TEST_SECRET_MUST_NOT_APPEAR";
@@ -306,6 +309,329 @@ pub fn demo(now: i64, self_submitted: bool) -> World {
             .insert(("drawing-yesterday-0".into(), voter.into()), 1);
     }
     w
+}
+
+/// A W x H photo-like PNG (a gradient with a disc), for feed images.
+pub fn photo_png(w: u32, h: u32, seed: u32) -> Vec<u8> {
+    let mut px = vec![0u8; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let (fx, fy) = (x as f32 / w as f32, y as f32 / h as f32);
+            let disc = (fx - 0.62).powi(2) + (fy - 0.4).powi(2) < 0.04;
+            let base = [
+                (90.0 + 120.0 * fy) as u8,
+                (120.0 + 80.0 * fx) as u8,
+                (160.0 + (seed % 60) as f32) as u8,
+            ];
+            px[i..i + 4].copy_from_slice(&if disc {
+                [250, 214, 120, 255]
+            } else {
+                [base[0], base[1], base[2], 255]
+            });
+        }
+    }
+    let mut out = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut out, w, h);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut writer = enc.write_header().expect("png header");
+        writer.write_image_data(&px).expect("png data");
+    }
+    out
+}
+
+#[allow(clippy::too_many_arguments)]
+fn post(
+    id: &str,
+    user: &str,
+    subject: &str,
+    detail: &str,
+    note: &str,
+    icon: &str,
+    minutes: u64,
+    at: i64,
+) -> PostRow {
+    PostRow {
+        id: id.into(),
+        user: user.into(),
+        kind: "session".into(),
+        subject: subject.into(),
+        detail: detail.into(),
+        note: note.into(),
+        icon: icon.into(),
+        minutes,
+        preset: "Focus".into(),
+        created_at: crate::iso(at),
+        image_key: None,
+        image_mime: None,
+        image_expires: None,
+        image_expired_at: None,
+    }
+}
+
+/// Stage 22b data on top of [`demo`]: feed posts (text, poll, image, comments, reactions, a
+/// milestone, an expired image), squads (the user's own as leader, public/private/full others,
+/// join requests, chat) and Squad Arena scores. `in_squad = false` leaves the user squadless.
+pub fn add_22b(w: &mut World, in_squad: bool) {
+    let now = w.now_ms;
+    let minute = 60_000;
+    // a user in no squad (the join request below)
+    w.users.insert(
+        "synthetic-user-mia".into(),
+        user(
+            "synthetic-user-mia",
+            "MIAA-2345",
+            "Mia",
+            json!({"kind": "letter", "letter": "M", "style": "classic"}),
+            now - 90 * minute,
+        ),
+    );
+    let x = &mut w.x;
+    x.posts.push(post(
+        "post-bob-1",
+        "synthetic-friend-bob",
+        "Linear Algebra",
+        "2h 20m · Focus",
+        "eigenvalues finally make sense",
+        "✦",
+        140,
+        now - 25 * minute,
+    ));
+    x.posts.push(post(
+        "post-zoe-1",
+        "synthetic-friend-zoe",
+        "Organic Chemistry",
+        "1h 35m · Exam",
+        "张伟 says: 反应机理 ✓",
+        "⚔",
+        95,
+        now - 70 * minute,
+    ));
+    let mut img = post(
+        "post-amelie-1",
+        "synthetic-friend-amelie",
+        "Art History",
+        "50m · Focus",
+        "notes from the museum trip",
+        "✦",
+        50,
+        now - 110 * minute,
+    );
+    img.image_key = Some("feed-posts/post-amelie-1/img-1.png".into());
+    img.image_mime = Some("image/png".into());
+    img.image_expires = Some(now + 3 * 24 * 60 * minute);
+    x.images.insert(
+        "feed-posts/post-amelie-1/img-1.png".into(),
+        photo_png(640, 420, 7),
+    );
+    x.posts.push(img);
+    let mut expired = post(
+        "post-rtl-1",
+        "synthetic-friend-rtl",
+        "Hebrew",
+        "30m · Focus",
+        "שלום עולם",
+        "✦",
+        30,
+        now - 30 * 60 * minute,
+    );
+    expired.image_expired_at = Some(crate::iso(now - 60 * minute));
+    x.posts.push(expired);
+    x.posts.push(post(
+        "post-self-1",
+        SELF_ID,
+        "Analysis II",
+        "1h 35m · Focus",
+        "only 5 billion things to go...",
+        "✦",
+        95,
+        now - 4 * 60 * minute,
+    ));
+    x.posts.push(post(
+        "post-kenji-1",
+        "synthetic-user-kenji",
+        "Kanji drills",
+        "3h 30m · Focus",
+        "健二: 漢字 x 200",
+        "✦",
+        210,
+        now - 5 * 60 * minute,
+    ));
+    let mut ms = post(
+        "post-bob-ms",
+        "synthetic-friend-bob",
+        "",
+        "100 hours",
+        "100 hours of focus",
+        "🏆",
+        0,
+        now - 26 * 60 * minute,
+    );
+    ms.kind = "milestone".into();
+    x.posts.push(ms);
+    x.polls.insert(
+        "post-bob-1".into(),
+        PollRow {
+            question: "Best study snack?".into(),
+            multiple: false,
+            options: vec![
+                ("opt-bob-1".into(), "Apples".into()),
+                ("opt-bob-2".into(), "Dark chocolate".into()),
+                ("opt-bob-3".into(), "Coffee, obviously".into()),
+            ],
+        },
+    );
+    x.polls.insert(
+        "post-self-1".into(),
+        PollRow {
+            question: "Which topic next?".into(),
+            multiple: true,
+            options: vec![
+                ("opt-self-1".into(), "Series".into()),
+                ("opt-self-2".into(), "Integrals".into()),
+            ],
+        },
+    );
+    for (p, o, u) in [
+        ("post-bob-1", "opt-bob-2", "synthetic-friend-zoe"),
+        ("post-bob-1", "opt-bob-2", "synthetic-friend-amelie"),
+        ("post-bob-1", "opt-bob-3", "synthetic-user-kenji"),
+        ("post-self-1", "opt-self-1", "synthetic-friend-bob"),
+    ] {
+        x.poll_votes.push((p.into(), o.into(), u.into()));
+    }
+    for (p, u, e) in [
+        ("post-bob-1", "synthetic-friend-zoe", "fire"),
+        ("post-bob-1", SELF_ID, "fire"),
+        ("post-bob-1", "synthetic-friend-amelie", "brain"),
+        ("post-bob-1", "synthetic-user-kenji", "🎯"),
+        ("post-self-1", "synthetic-friend-bob", "clap"),
+        ("post-zoe-1", "synthetic-friend-bob", "❤️"),
+    ] {
+        x.reactions.push((p.into(), u.into(), e.into()));
+    }
+    for (i, (p, u, body, ago)) in [
+        ("post-bob-1", "synthetic-friend-zoe", "same, finally!", 20),
+        ("post-bob-1", SELF_ID, "nice work", 15),
+        ("post-self-1", "synthetic-friend-bob", "go go go 🚀", 180),
+        (
+            "post-self-1",
+            "synthetic-friend-amelie",
+            "Amélie: très bien",
+            170,
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        x.comments.push(CommentRow {
+            id: format!("comment-seed-{i}"),
+            post: p.into(),
+            user: u.into(),
+            body: body.into(),
+            created_at: now - ago * minute,
+        });
+    }
+    // squads
+    let squads = [
+        ("squad-owl", "Night Owls", false, "synthetic-friend-bob"),
+        ("squad-lib", "Library Ghosts", true, "synthetic-user-kenji"),
+        ("squad-full", "Full House", false, "synthetic-user-priya"),
+        ("squad-math", "Maths Circle", false, "synthetic-user-long"),
+        ("squad-quiet", "Quiet Corner", true, "synthetic-friend-rtl"),
+    ];
+    for (i, (id, name, private, by)) in squads.iter().enumerate() {
+        x.squads.push(SquadRow {
+            id: (*id).into(),
+            name: (*name).into(),
+            private: *private,
+            created_by: (*by).into(),
+            created_at: now - (40 - i as i64) * 24 * 60 * minute,
+        });
+    }
+    let mut members = vec![
+        ("squad-lib", "synthetic-user-kenji", "leader"),
+        ("squad-full", "synthetic-user-priya", "leader"),
+        ("squad-full", "synthetic-user-dan", "co_leader"),
+        ("squad-full", "synthetic-friend-amelie", "elder"),
+        ("squad-full", "synthetic-friend-rtl", "member"),
+        ("squad-math", "synthetic-user-long", "leader"),
+    ];
+    if in_squad {
+        members.extend([
+            ("squad-owl", SELF_ID, "leader"),
+            ("squad-owl", "synthetic-friend-bob", "co_leader"),
+            ("squad-owl", "synthetic-friend-zoe", "member"),
+        ]);
+    } else {
+        members.extend([
+            ("squad-owl", "synthetic-friend-bob", "leader"),
+            ("squad-owl", "synthetic-friend-zoe", "member"),
+        ]);
+    }
+    for (i, (s, u, r)) in members.into_iter().enumerate() {
+        x.members.push(MemberRow {
+            squad: s.into(),
+            user: u.into(),
+            role: r.into(),
+            joined_at: now - (30 - i as i64) * 24 * 60 * minute,
+        });
+    }
+    if in_squad {
+        // the user leads a private squad with one join request (from a squadless user)
+        x.squads[0].private = true;
+        x.joins.push(JoinRow {
+            id: "squad-request-mia".into(),
+            squad: "squad-owl".into(),
+            user: "synthetic-user-mia".into(),
+            status: "pending",
+            created_at: now - 45 * minute,
+        });
+        for (i, (u, body, ago)) in [
+            ("synthetic-friend-bob", "library at 9?", 95),
+            (SELF_ID, "yes, see you there", 90),
+            ("synthetic-friend-zoe", "我也来 🦊", 60),
+            ("synthetic-friend-bob", "bring snacks", 30),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            x.messages.push(MessageRow {
+                id: format!("message-seed-{i}"),
+                squad: "squad-owl".into(),
+                user: u.into(),
+                body: body.into(),
+                created_at: now - ago * minute,
+            });
+        }
+    } else {
+        x.joins.push(JoinRow {
+            id: "squad-request-self".into(),
+            squad: "squad-quiet".into(),
+            user: SELF_ID.into(),
+            status: "pending",
+            created_at: now - 45 * minute,
+        });
+    }
+    for (s, date, pts, mins, mc) in [
+        ("squad-owl", "2026-09-20", 3, 410, 3),
+        ("squad-owl", "2026-09-21", 2, 300, 3),
+        ("squad-lib", "2026-09-20", 2, 260, 1),
+        ("squad-lib", "2026-09-21", 3, 380, 1),
+        ("squad-full", "2026-09-20", 1, 500, 4),
+        ("squad-full", "2026-09-21", 1, 420, 4),
+        ("squad-math", "2026-08-10", 3, 200, 1),
+    ] {
+        x.scores.push(ScoreRow {
+            squad: s.into(),
+            date: date.into(),
+            points: pts,
+            total_minutes: mins,
+            member_count: mc,
+        });
+    }
 }
 
 /// Points seeded photo avatars at the server's real origin (call after `MockServer::start`).

@@ -1,0 +1,452 @@
+// Stage 22b: the Wabi-Sabi Circle squad page (`.wabi-squad-panel`, 760px): without a squad the
+// create and find forms with suggested squads; in a squad the head with Edit / Leave, three ruled
+// totals, the roster beside the internal leaderboard ("this week", no period chips), the chat and,
+// for elders and up, the join requests. Geometry from the production probes at 1520x980
+// (`prod-wabi-light-squad`, `-squad-exp`, `-nosquad`). Data `SocialData.squad`, actions
+// `SocialActions`, exactly as the Field Notebook squad tab.
+import { WS } from "../wabi/palette.slint";
+import { SSquadView, SSquadMember, SSquadCard, SChatMessage, SBoardRow, SJoinRequest, SocialActions } from "types.slint";
+import { WAvatar } from "wabi-avatar.slint";
+
+component WSans inherits Text {
+    font-family: WS.sans;
+    color: WS.ink;
+}
+
+component WSerif inherits Text {
+    font-family: WS.serif;
+    color: WS.ink;
+}
+
+// `.arena-btn` in Wabi: upper-case text (sage `--send`/`--accept`, faint `--decline`)
+component WBtn inherits Rectangle {
+    in property <string> text;
+    in property <bool> send;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: t.preferred-width;
+    height: 18px;
+    t := WSans { x: 0px; height: parent.height; vertical-alignment: center; text: root.text.to-uppercase(); font-size: 10.5px; letter-spacing: 1.365px; color: !root.enabled ? WS.faint.with-alpha(0.6) : touch.has-hover ? WS.ink : root.send ? WS.sage : WS.faint; }
+    touch := TouchArea { enabled: root.enabled; mouse-cursor: root.enabled ? pointer : default; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+}
+
+// `.arena-panel-head`: kicker, serif title, a hard rule under it
+component WHead inherits Rectangle {
+    in property <string> kicker;
+    in property <string> title;
+    in property <length> title-size: 22px;
+    in property <string> aside;
+    height: root.title != "" ? 59px : 29px;
+    WSans { x: 0px; y: 4px; text: root.kicker.to-uppercase(); font-size: 10.5px; letter-spacing: 2.1px; color: WS.muted; }
+    if root.title != "": WSerif { x: 0px; y: root.title-size > 24px ? 18px : 22px; text: root.title; font-size: root.title-size; font-weight: 500; }
+    if root.aside != "": WSans { x: parent.width - self.preferred-width; y: 24px; text: root.aside; font-size: 10.5px; letter-spacing: 1.05px; color: WS.faint; }
+    Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-hard; }
+}
+
+// `.arena-empty.small`: dashed in production (drawn solid: Slint has no dashed borders)
+component WEmpty inherits Rectangle {
+    in property <string> text;
+    height: 41px;
+    border-width: 1px;
+    border-radius: 18px;
+    border-color: WS.line;
+    WSans { x: 12px; width: parent.width - 24px; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.text; font-size: 13.76px; color: WS.ink-3; overflow: elide; }
+}
+
+// `.arena-input`: a 44px boxed field
+component WBox inherits Rectangle {
+    in property <string> placeholder;
+    in property <string> initial;
+    in property <int> rev;
+    in property <bool> enabled: true;
+    callback edited(string);
+    callback accepted();
+    out property <string> value: input.text;
+    height: 44px;
+    border-width: 1px;
+    border-color: input.has-focus ? WS.sage : WS.line;
+    background: #ffffff0e;
+    opacity: root.enabled ? 1 : 0.6;
+    input := TextInput {
+        x: 15px;
+        width: parent.width - 30px;
+        height: parent.height;
+        vertical-alignment: center;
+        single-line: true;
+        text: root.initial;
+        enabled: root.enabled;
+        font-family: WS.sans;
+        font-size: 16px;
+        color: WS.ink;
+        edited => { root.edited(self.text); }
+        accepted => { root.accepted(); }
+        accessible-role: text-input;
+        accessible-label: root.placeholder;
+    }
+    changed rev => { input.text = root.initial; }
+    if input.text == "": WSans { x: 15px; height: parent.height; vertical-alignment: center; text: root.placeholder; font-size: 16px; color: WS.muted; }
+}
+
+// `.profile-toggle.squad-privacy-toggle` (sage when public)
+component WPrivacy inherits Rectangle {
+    in property <bool> private;
+    callback clicked();
+    height: 68px;
+    border-width: 1px;
+    border-radius: 18px;
+    border-color: !root.private ? WS.sage : WS.line;
+    background: !root.private ? WS.sage.with-alpha(0.13) : WS.paper-1;
+    WSans { x: 15px; y: 15px; width: parent.width - 30px; text: root.private ? "Private squad" : "Public squad"; font-size: 16px; font-weight: 700; overflow: elide; }
+    WSans { x: 15px; y: 38px; width: parent.width - 30px; text: root.private ? "Players must request to join." : "Players can join instantly."; font-size: 12.8px; color: WS.ink-3; overflow: elide; }
+    TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    accessible-role: switch;
+    accessible-label: "Public squad";
+    accessible-checked: !root.private;
+}
+
+// `.squad-search-card`
+component WSquadCard inherits Rectangle {
+    in property <SSquadCard> c;
+    in property <bool> busy;
+    height: 59px;
+    border-width: 1px;
+    border-radius: 16px;
+    border-color: WS.line.with-alpha(0.8);
+    background: WS.paper-1;
+    WSans { x: 12px; y: 12px; width: parent.width - 120px; text: root.c.name; font-size: 16px; font-weight: 700; overflow: elide; }
+    WSans { x: 12px; y: 33px; width: parent.width - 120px; text: root.c.meta; font-size: 12.48px; color: WS.ink-3; overflow: elide; }
+    if root.c.action <= 1: WBtn { x: parent.width - 12px - self.width; y: 20.5px; send: true; text: root.c.action == 0 ? "Join" : "Request"; enabled: !root.busy; clicked => { SocialActions.squad-join(root.c.id); } }
+    if root.c.action == 2: WSans { x: parent.width - 18px - self.preferred-width; y: 22.5px; text: root.c.badge; font-size: 12.48px; color: WS.ink-3; }
+}
+
+component WNoSquad inherits Rectangle {
+    in property <SSquadView> s;
+    height: col.preferred-height;
+    col := VerticalLayout {
+        spacing: 0px;
+        WHead { height: 60px; kicker: "Create squad"; title: "Start a squad"; title-size: 27px; }
+        Rectangle { height: 16px; }
+        WSans { wrap: word-wrap; text: "Squads hold up to 4 players. Once you join one, you cannot create or join another until you leave."; font-size: 14.4px; color: WS.ink-3; }
+        Rectangle { height: 30px; }
+        HorizontalLayout {
+            height: 68px;
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                WBox { placeholder: "Squad name"; initial: ""; rev: root.s.name-rev; enabled: !root.s.busy; edited(t) => { SocialActions.squad-name-edited(t); } accepted => { SocialActions.squad-create(); } }
+            }
+            WPrivacy { private: root.s.private-draft; clicked => { SocialActions.squad-toggle-private(); } }
+            VerticalLayout {
+                alignment: center;
+                WBtn { send: true; text: root.s.busy ? "Working..." : "Create"; enabled: !root.s.busy; clicked => { SocialActions.squad-create(); } }
+            }
+        }
+        Rectangle { height: 16px; }
+        WHead { height: 60px; kicker: "Search all squads"; title: "Find a squad"; title-size: 27px; }
+        Rectangle { height: 30px; }
+        HorizontalLayout {
+            height: 44px;
+            spacing: 10px;
+            WBox { placeholder: "Search by squad name"; initial: ""; rev: 0; enabled: !root.s.searching; edited(t) => { SocialActions.squad-search-edited(t); } accepted => { SocialActions.squad-search(); } }
+            VerticalLayout {
+                alignment: center;
+                WBtn { send: true; text: root.s.searching ? "Searching..." : "Search"; enabled: !root.s.searching; clicked => { SocialActions.squad-search(); } }
+            }
+        }
+        Rectangle { height: 32px; }
+        Rectangle {
+            height: 35px;
+            WSans { x: 0px; y: 0px; text: "Suggested squads"; font-size: 16px; font-weight: 700; }
+            WSans { x: 0px; y: 21px; text: "Don't know a name? Join or request one of these."; font-size: 12.48px; font-weight: 800; color: WS.ink-3; }
+            if root.s.can-reload: WBtn { x: parent.width - self.width; y: 8.5px; text: root.s.suggestions-loading ? "Loading..." : "Reload"; enabled: !root.s.suggestions-loading; clicked => { SocialActions.squad-reload(); } }
+        }
+        Rectangle { height: 26px; }
+        VerticalLayout {
+            spacing: 9px;
+            for c in root.s.suggestions: WSquadCard { c: c; busy: root.s.busy; }
+            if root.s.suggestions-loading: WEmpty { text: "Loading suggestions..."; }
+            if !root.s.suggestions-loading && root.s.suggestions.length == 0: WEmpty { text: "No squads exist yet. Create the first one."; }
+        }
+        if root.s.pending-note != "": VerticalLayout {
+            padding-top: 16px;
+            WSans { wrap: word-wrap; text: root.s.pending-note; font-size: 14.4px; color: WS.ink-3; }
+        }
+        Rectangle { height: 34px; }
+        WSans { height: 14px; text: "SEARCH RESULTS"; font-size: 12.48px; font-weight: 800; letter-spacing: 0.75px; color: WS.ink-3; }
+        Rectangle { height: 30px; }
+        VerticalLayout {
+            spacing: 9px;
+            for c in root.s.results: WSquadCard { c: c; busy: root.s.busy; }
+            if root.s.results.length == 0: WEmpty { text: "Search by name to discover public and private squads."; }
+        }
+    }
+}
+
+// `.squad-member-card`: the summary row (serif name, detail, role pill), the manage area under it
+component WMember inherits Rectangle {
+    in property <SSquadMember> m;
+    in property <bool> busy;
+    private property <length> summary-h: 12px + nm.preferred-height + 3px + 12px + 12px + 1px;
+    height: lay.preferred-height;
+    lay := VerticalLayout {
+        Rectangle {
+            height: root.summary-h;
+            badge := Rectangle {
+                x: parent.width - self.width;
+                y: (parent.height - 1px - self.height) / 2;
+                width: bt.preferred-width + 16px;
+                height: 20px;
+                border-radius: 10px;
+                background: root.m.role-key == 0 ? WS.t.watch.with-alpha(0.18) : root.m.role-key == 1 ? WS.sage.with-alpha(0.18) : root.m.role-key == 2 ? WS.t.ok.with-alpha(0.16) : WS.line.with-alpha(0.3);
+                bt := WSans { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.m.role.to-uppercase(); font-size: 10.5px; letter-spacing: 1.575px; color: WS.muted; }
+            }
+            nm := WSerif { x: 0px; y: 12px; width: badge.x - 12px; text: root.m.name; font-size: 18px; overflow: elide; }
+            WSans { x: 0px; y: 12px + nm.preferred-height + 3px; width: badge.x - 12px; text: root.m.detail; font-size: 11.5px; color: WS.muted; overflow: elide; }
+            Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-soft; }
+            TouchArea { mouse-cursor: pointer; clicked => { SocialActions.squad-expand(root.m.id); } }
+            accessible-role: button;
+            accessible-label: root.m.name + ", " + root.m.role;
+            accessible-expanded: root.m.expanded;
+        }
+        if root.m.expanded: VerticalLayout {
+            padding: 11px;
+            padding-top: 12px;
+            spacing: 0px;
+            WSans { text: root.m.manage-title; font-size: 16px; font-weight: 700; }
+            Rectangle { height: 3px; }
+            WSans { wrap: word-wrap; text: root.m.manage-detail; font-size: 12.16px; color: WS.ink-3; }
+            if root.m.roles.length > 0: HorizontalLayout {
+                padding-top: 10px;
+                alignment: start;
+                spacing: 8px;
+                for r in root.m.roles: WBtn { send: r.current; text: r.label; enabled: !root.busy && !r.current; clicked => { SocialActions.squad-role(root.m.id, r.role); } }
+            }
+            if root.m.can-kick: HorizontalLayout {
+                padding-top: 10px;
+                alignment: start;
+                WBtn { text: "Kick from squad"; enabled: !root.busy; clicked => { SocialActions.squad-kick(root.m.id); } }
+            }
+        }
+        if root.m.expanded: Rectangle { height: 1px; background: WS.rule-soft; }
+    }
+}
+
+// `.squad-lb-rows .arena-lb-row` in Wabi: rank, name and tag, hours and sessions; no avatar
+component WBoardRow inherits Rectangle {
+    in property <SBoardRow> e;
+    callback open();
+    height: 24px + max(nm.preferred-height + 12px, hr.preferred-height + 12px);
+    background: root.e.is-self ? WS.paper-1 : transparent;
+    WSerif { x: 6px; width: 26px; height: parent.height; vertical-alignment: center; text: root.e.rank; font-size: 16px; color: WS.faint; }
+    nm := WSerif { x: 44px; y: 12px; width: parent.width - 44px - 112px; text: root.e.name + (root.e.is-self ? " (You)" : ""); font-size: 19px; overflow: elide; }
+    WSans { x: 44px; y: 12px + nm.preferred-height; text: root.e.code; font-size: 10.5px; color: WS.faint; }
+    hr := WSerif { x: parent.width - 6px - self.preferred-width; y: 12px; text: root.e.hours; font-size: 19px; }
+    WSans { x: parent.width - 6px - self.preferred-width; y: 12px + hr.preferred-height; text: root.e.sessions + " sess."; font-size: 10.5px; color: WS.faint; }
+    Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-soft; }
+    TouchArea { mouse-cursor: pointer; clicked => { root.open(); } }
+    accessible-role: button;
+    accessible-label: "Rank " + root.e.rank + ", " + root.e.name + ", " + root.e.hours;
+}
+
+// `.squad-chat-message`
+component WChat inherits Rectangle {
+    in property <SChatMessage> m;
+    height: 13px + nm.preferred-height + 4px + max(25.5px, body.preferred-height * 1.2) + 13px + 1px;
+    nm := WSerif { x: 0px; y: 13px; text: root.m.name; font-size: 18px; letter-spacing: 0.08px; }
+    WSans { x: nm.preferred-width + 5px; y: 13px + nm.preferred-height - self.preferred-height - 3px; text: root.m.role; font-size: 11.5px; color: WS.muted; }
+    body := WSerif { x: 0px; y: 13px + nm.preferred-height + 4px; width: parent.width - (root.m.is-self ? 64px : 0px); wrap: word-wrap; text: root.m.body; font-size: 17px; letter-spacing: 0.08px; }
+    if root.m.is-self: Rectangle {
+        x: parent.width - self.width;
+        y: 13px;
+        width: dl.preferred-width + 18px;
+        height: 24px;
+        border-radius: 12px;
+        background: WS.vermilion.with-alpha(0.12);
+        dl := WSans { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "Delete"; font-size: 11.52px; font-weight: 800; color: dt.has-hover ? WS.vermilion : WS.faint; }
+        dt := TouchArea { mouse-cursor: pointer; clicked => { SocialActions.squad-chat-delete(root.m.id); } }
+        accessible-role: button;
+        accessible-label: "Delete message";
+    }
+    Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-soft; }
+    accessible-role: text;
+    accessible-label: root.m.name + " (" + root.m.role + "): " + root.m.body;
+}
+
+component WInSquad inherits Rectangle {
+    in property <SSquadView> s;
+    callback open-person(string);
+    private property <length> col-w: (root.width - 34px) / 2;
+    height: col.preferred-height;
+    col := VerticalLayout {
+        spacing: 0px;
+        // `.squad-hq-head`
+        Rectangle {
+            height: 79px;
+            WSans { x: 0px; y: 4px; text: root.s.kicker.to-uppercase(); font-size: 10.5px; letter-spacing: 2.1px; color: WS.muted; }
+            WSerif { x: 0px; y: 22px; width: parent.width - 140px; text: root.s.name; font-size: 30px; font-weight: 500; overflow: elide; }
+            WSans { x: 0px; y: 56px; text: root.s.meta; font-size: 11.5px; color: WS.muted; }
+            HorizontalLayout {
+                x: parent.width - self.preferred-width;
+                y: 0px;
+                height: 18px;
+                spacing: 16px;
+                if root.s.is-leader: WBtn { text: "Edit"; clicked => { SocialActions.squad-edit(); } }
+                WBtn { text: "Leave"; enabled: !root.s.busy; clicked => { SocialActions.squad-leave(); } }
+            }
+            Rectangle { y: parent.height - 1px; height: 1px; background: WS.rule-hard; }
+        }
+        if root.s.settings-editing: VerticalLayout {
+            padding-top: 30px;
+            HorizontalLayout {
+                height: 68px;
+                spacing: 10px;
+                VerticalLayout {
+                    alignment: center;
+                    WBox { placeholder: "Squad name"; initial: root.s.settings-name; rev: root.s.settings-rev; edited(t) => { SocialActions.squad-settings-name(t); } accepted => { SocialActions.squad-settings-save(); } }
+                }
+                WPrivacy { private: root.s.settings-private; clicked => { SocialActions.squad-settings-private(); } }
+                VerticalLayout {
+                    alignment: center;
+                    WBtn { send: true; text: "Save"; enabled: !root.s.busy; clicked => { SocialActions.squad-settings-save(); } }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    WBtn { text: "Cancel"; clicked => { SocialActions.squad-settings-cancel(); } }
+                }
+            }
+        }
+        Rectangle { height: 16px; }
+        // `.squad-stats-grid`: three ruled cells
+        Rectangle {
+            height: 80px;
+            for st[i] in root.s.stats: Rectangle {
+                x: i * parent.width / 3;
+                width: parent.width / 3;
+                Rectangle { x: parent.width - 1px; width: 1px; background: WS.line; }
+                Rectangle { y: parent.height - 1px; height: 1px; background: WS.line; }
+                WSerif { x: 18px; y: 17px; width: parent.width - 36px; text: st.value; font-size: 26px; font-weight: 500; letter-spacing: 0.08px; overflow: elide; }
+                WSans { x: 18px; y: 50px; width: parent.width - 36px; text: st.label.to-uppercase(); font-size: 10.5px; letter-spacing: 1.575px; color: WS.muted; overflow: elide; }
+                accessible-role: text;
+                accessible-label: st.label + ": " + st.value;
+            }
+        }
+        Rectangle { height: 44px; }
+        // the roster beside the internal leaderboard
+        HorizontalLayout {
+            spacing: 34px;
+            alignment: start;
+            VerticalLayout {
+                width: root.col-w;
+                alignment: start;
+                WHead { kicker: "Squad roster"; title: "Members"; }
+                Rectangle { height: 30px; }
+                VerticalLayout {
+                    spacing: 9px;
+                    for m in root.s.members: WMember { m: m; busy: root.s.busy; }
+                }
+            }
+            VerticalLayout {
+                width: root.col-w;
+                alignment: start;
+                // the period chips are hidden in Wabi; the head says "this week" whatever the period
+                WHead { kicker: "Internal leaderboard"; title: "Squad members"; aside: "this week"; }
+                Rectangle { height: 16px; }
+                VerticalLayout {
+                    for e in root.s.board: WBoardRow { e: e; open => { root.open-person(e.id); } }
+                    if root.s.board.length == 0: WEmpty { text: "Sync your squad to see member rankings."; }
+                }
+            }
+        }
+        Rectangle { height: 50px; }
+        // `.squad-chat-card` (its title hidden in Wabi)
+        WHead { kicker: "Squad chat"; title: ""; }
+        Rectangle { height: 16px; }
+        VerticalLayout {
+            spacing: 9px;
+            for m in root.s.messages: WChat { m: m; width: root.width - 4px; }
+            if root.s.messages.length == 0: WEmpty { text: "No messages yet. Start the squad chat."; }
+        }
+        Rectangle { height: 30px; }
+        // `.squad-chat-form`
+        Rectangle {
+            height: 59px;
+            Rectangle { height: 1px; background: WS.rule-soft; }
+            chat-input := TextInput {
+                x: 0px;
+                y: 16px;
+                width: parent.width - 45px;
+                height: 26px;
+                vertical-alignment: center;
+                single-line: true;
+                text: root.s.chat-draft;
+                font-family: WS.serif;
+                font-size: 17px;
+                color: WS.ink;
+                edited => { SocialActions.squad-chat-edited(self.text); }
+                accepted => { SocialActions.squad-chat-send(); }
+                accessible-role: text-input;
+                accessible-label: "Message your squad";
+            }
+            // `chat-rev` bumps when Rust clears or replaces the draft (as the Field Notebook field)
+            property <int> chat-rev: root.s.chat-rev;
+            changed chat-rev => { chat-input.text = root.s.chat-draft; }
+            if chat-input.text == "": WSerif { x: 0px; y: 16px; height: 26px; vertical-alignment: center; text: "Message your squad"; font-size: 17px; color: WS.muted; }
+            WBtn { x: parent.width - self.width; y: 20px; send: true; text: "Send"; enabled: chat-input.text != ""; clicked => { SocialActions.squad-chat-send(); } }
+        }
+        // `.squad-requests-card` (elders and up)
+        if root.s.can-manage-requests: VerticalLayout {
+            padding-top: 16px;
+            spacing: 0px;
+            WHead { height: 60px; kicker: "Private requests"; title: "Join requests"; title-size: 27px; }
+            Rectangle { height: 16px; }
+            VerticalLayout {
+                spacing: 9px;
+                for r in root.s.requests: Rectangle {
+                    height: 60px;
+                    border-width: 1px;
+                    border-radius: 16px;
+                    border-color: WS.line;
+                    background: WS.paper-1;
+                    WAvatar { x: 11px; y: 11px; a: r.avatar; size: 38px; }
+                    WSans { x: 61px; y: 12.5px; width: parent.width - 240px; text: r.name; font-size: 16px; font-weight: 700; overflow: elide; }
+                    WSans { x: 61px; y: 33.5px; text: r.code; font-size: 12.48px; color: WS.ink-3; }
+                    HorizontalLayout {
+                        x: parent.width - 11px - self.preferred-width;
+                        y: 21px;
+                        height: 18px;
+                        spacing: 7px;
+                        WBtn { send: true; text: "Accept"; enabled: !root.s.busy; clicked => { SocialActions.squad-respond(r.id, true); } }
+                        WBtn { text: "Decline"; enabled: !root.s.busy; clicked => { SocialActions.squad-respond(r.id, false); } }
+                    }
+                }
+                if root.s.requests.length == 0: WEmpty { text: "No pending squad requests."; }
+            }
+        }
+    }
+}
+
+export component WabiSquadPanel inherits Rectangle {
+    in property <SSquadView> s;
+    callback open-person(string);
+    // the conditional page reports its height
+    in-out property <length> page-h: 400px;
+    height: root.page-h + 40px;
+    if !root.s.has-squad: WNoSquad {
+        y: 0px;
+        width: parent.width;
+        s: root.s;
+        init => { root.page-h = self.height; }
+        changed height => { root.page-h = self.height; }
+    }
+    if root.s.has-squad: WInSquad {
+        y: 0px;
+        width: parent.width;
+        s: root.s;
+        open-person(id) => { root.open-person(id); }
+        init => { root.page-h = self.height; }
+        changed height => { root.page-h = self.height; }
+    }
+}

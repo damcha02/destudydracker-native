@@ -7,8 +7,9 @@ import { FN } from "../fn/palette.slint";
 import { WS } from "../wabi/palette.slint";
 import { MonoText, SerifText, SansText, HLine } from "../fn/parts.slint";
 import { Emoji } from "../break/types.slint";
-import { SocialView, SStat } from "types.slint";
-import { FnAvatar, SocialBlue } from "fn-social.slint";
+import { SocialView, SStat, SSquadView, SBadge, SBadgeGroup, SocialActions } from "types.slint";
+import { FnAvatar, SocialBlue } from "fn-parts.slint";
+import { Backdrop, BlurBackdrop } from "../backdrop.slint";
 
 export global SocialStyle {
     in-out property <bool> wabi: false;
@@ -25,7 +26,7 @@ export global SocialStyle {
     out property <string> mono: SocialStyle.wabi ? WS.sans : FN.mono;
 }
 
-component DButton inherits Rectangle {
+export component DButton inherits Rectangle {
     in property <string> text;
     in property <bool> primary;
     in property <bool> enabled: true;
@@ -54,13 +55,14 @@ component DButton inherits Rectangle {
 }
 
 // `.help-modal`: a 720px sheet over a dimmed backdrop
-component Sheet inherits Rectangle {
+export component Sheet inherits Rectangle {
     in property <string> eyebrow;
     in property <string> title;
     in property <string> text;
     in property <length> extra-h;
     callback dismiss();
-    Rectangle { background: #00000080; TouchArea { clicked => { root.dismiss(); } } }
+    visible: !Backdrop.capturing;
+    BlurBackdrop { dim: #00000080; TouchArea { clicked => { root.dismiss(); } } }
     Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
@@ -158,7 +160,7 @@ component DStat inherits Rectangle {
     background: SocialStyle.paper-2;
     Text { x: 10px; y: 9px; width: 28px; height: 28px; horizontal-alignment: center; vertical-alignment: center; text: root.s.icon; font-family: Emoji.family; font-size: 16px; color: SocialStyle.muted; }
     Text { x: 46px; y: 9.3px; text: root.s.value; font-family: SocialStyle.sans; font-size: 14.4px; font-weight: 700; color: SocialStyle.ink; }
-    Text { x: 46px; y: 25.7px; text: root.s.label; font-family: SocialStyle.sans; font-size: 9.92px; font-weight: 800; color: SocialStyle.muted; }
+    Text { x: 46px; y: 25.7px; text: root.s.label.to-uppercase(); font-family: SocialStyle.sans; font-size: 9.92px; font-weight: 800; color: SocialStyle.muted; }
     accessible-role: text;
     accessible-label: root.s.label + ": " + root.s.value;
 }
@@ -172,7 +174,8 @@ export component PlayerDialog inherits Rectangle {
     private property <length> body-h: root.v.v-state == 1 ? 100px : 60px;
     forward-focus: keys;
     keys := FocusScope { key-pressed(e) => { if e.text == Key.Escape { root.dismiss(); return accept; } reject } }
-    Rectangle { background: #00000080; TouchArea { clicked => { root.dismiss(); } } }
+    visible: !Backdrop.capturing;
+    BlurBackdrop { dim: SocialStyle.wabi ? WS.desk.with-alpha(0.66) : #14110c8c; TouchArea { clicked => { root.dismiss(); } } }
     Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
@@ -263,4 +266,248 @@ export component MessageBanner inherits Rectangle {
     }
     accessible-role: text;
     accessible-label: root.message;
+}
+
+// `.arena-icon-button`: the round × (30px, 6% white wash)
+export component RoundClose inherits Rectangle {
+    callback clicked();
+    width: 30px;
+    height: 30px;
+    border-radius: 15px;
+    border-width: 1px;
+    border-color: SocialStyle.line;
+    background: touch.has-hover ? #ffffff1a : #ffffff0f;
+    Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "×"; font-family: SocialStyle.sans; font-size: 11.52px; font-weight: 800; color: SocialStyle.muted; }
+    touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    accessible-role: button;
+    accessible-label: "Close";
+    accessible-action-default => { root.clicked(); }
+}
+
+// `.arena-pending-badge`
+component PendingBadge inherits Rectangle {
+    in property <string> text;
+    width: b.preferred-width + 14px;
+    height: 19px;
+    border-width: 1px;
+    border-color: SocialStyle.line;
+    b := MonoText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.text.to-uppercase(); font-family: SocialStyle.mono; font-size: 10px; letter-spacing: 0.8px; color: SocialStyle.muted; }
+}
+
+// Stage 22b: the squad details (`.arena-player-card.squad-details-modal`, 560px): the large rank
+// badge, kicker, name, the join/request action, four stats and the roster.
+export component SquadDetailsDialog inherits Rectangle {
+    in property <SSquadView> s;
+    in property <bool> busy;
+    private property <length> w: min(560px, root.width - 32px);
+    private property <length> roster-h: root.s.d-members.length * 71px - (root.s.d-members.length > 0 ? 8px : 0px);
+    private property <length> body-h: root.s.d-state == 1 ? 116px + 22px + 40px + root.roster-h : 60px;
+    forward-focus: keys;
+    keys := FocusScope { key-pressed(e) => { if e.text == Key.Escape { SocialActions.details-close(); return accept; } reject } }
+    visible: !Backdrop.capturing;
+    BlurBackdrop { dim: SocialStyle.wabi ? WS.desk.with-alpha(0.66) : #14110c8c; TouchArea { clicked => { SocialActions.details-close(); } } }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.w;
+        height: 21px + 83px + root.body-h + 21px;
+        border-width: 1px;
+        border-color: SocialStyle.line;
+        background: SocialStyle.paper;
+        drop-shadow-offset-y: 1px;
+        drop-shadow-color: #0000002e;
+        TouchArea { }
+        Rectangle {
+            x: 21px;
+            y: 27.5px;
+            width: 54px;
+            height: 54px;
+            border-width: 1px;
+            border-color: SocialStyle.line;
+            background: SocialStyle.paper-2;
+            Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.s.d-rank; font-family: SocialStyle.sans; font-size: 21.6px; font-weight: 900; color: SocialStyle.ink; }
+        }
+        MonoText { x: 85px; y: 25px; text: root.s.d-kicker.to-uppercase(); font-family: SocialStyle.mono; font-size: 10px; letter-spacing: 1.8px; color: SocialStyle.faint; }
+        Text { x: 85px; y: 43px; width: parent.width - 85px - 21px - 30px - 8px; text: root.s.d-name; font-family: SocialStyle.sans; font-size: 18.72px; font-weight: 700; color: SocialStyle.ink; overflow: elide; }
+        RoundClose { x: parent.width - 21px - 30px; y: 39px; clicked => { SocialActions.details-close(); } }
+        HorizontalLayout {
+            x: 85px;
+            y: 69px;
+            height: 19px;
+            spacing: 8px;
+            alignment: start;
+            PendingBadge { text: root.s.d-badge; }
+            if root.s.d-can-join: DButton { y: -6px; height: 30px; text: root.s.d-join-label; primary: true; enabled: !root.busy; clicked => { SocialActions.details-join(); } }
+        }
+        Rectangle {
+            x: 21px;
+            y: 104px;
+            width: parent.width - 42px;
+            height: root.body-h;
+            if root.s.d-state == 0: Text { width: parent.width; height: 46px; horizontal-alignment: center; vertical-alignment: center; text: "Loading squad..."; font-family: SocialStyle.sans; font-size: 14px; color: SocialStyle.muted; }
+            if root.s.d-state == 2: Text { width: parent.width; height: 46px; vertical-alignment: center; text: "Could not load squad details."; font-family: SocialStyle.sans; font-size: 14px; color: FN.critical; }
+            if root.s.d-state == 1: Rectangle {
+                for st[i] in root.s.d-stats: DStat {
+                    x: mod(i, 2) * (parent.width / 2 + 4px);
+                    y: floor(i / 2) * 54px;
+                    width: parent.width / 2 - 4px;
+                    s: st;
+                }
+                // `.section-label` (4px in, ruled in ink)
+                MonoText { x: 4px; y: 138px; text: "MEMBERS"; font-family: SocialStyle.mono; font-size: 10px; letter-spacing: 1.8px; color: SocialStyle.faint; }
+                Rectangle { x: 4px; y: 157px; width: parent.width - 4px; height: 1px; background: SocialStyle.ink; }
+                for m[i] in root.s.d-members: Rectangle {
+                    y: 178px + i * 71px;
+                    height: 63px;
+                    border-width: 1px;
+                    border-radius: 14px;
+                    border-color: SocialStyle.line.with-alpha(0.78);
+                    background: SocialStyle.paper-2.with-alpha(0.86);
+                    FnAvatar { x: 11px; y: (parent.height - self.height) / 2; a: m.avatar; }
+                    Text { x: 61px; y: 11px; width: parent.width - 72px; text: m.name; font-family: SocialStyle.sans; font-size: 16px; font-weight: 700; color: SocialStyle.ink; overflow: elide; }
+                    Text { x: 61px; y: 38px; width: parent.width - 72px; text: m.detail; font-family: SocialStyle.sans; font-size: 12.48px; color: SocialStyle.muted; overflow: elide; }
+                    accessible-role: text;
+                    accessible-label: m.name + ", " + m.detail;
+                }
+            }
+        }
+    }
+    accessible-role: groupbox;
+    accessible-label: root.s.d-name + " squad details";
+}
+
+// `.profile-badge-card`: 88px, the emoji, the name, `×N` for daily badges; locked badges fade to
+// 48% (production also greys them out with `filter: grayscale(1)`: Slint cannot desaturate an
+// emoji glyph, parity debt). Hover or focus shows the tooltip above the card.
+component BadgeCard inherits Rectangle {
+    in property <SBadge> b;
+    out property <bool> hot: touch.has-hover || fs.has-focus;
+    height: 88px;
+    border-radius: 20px;
+    border-width: 1px;
+    // Field Notebook defines no `--accent`: production's `color-mix(var(--accent) ...)` borders fall
+    // back to `currentColor` and its earned background to none
+    border-color: !SocialStyle.wabi ? (root.hot || root.b.earned ? (root.b.earned ? FN.ink : FN.ink-3) : FN.line-soft)
+        : root.hot ? WS.sage.mix(FN.line-soft, 0.58) : root.b.earned ? WS.sage.mix(FN.line-soft, 0.42) : FN.line-soft;
+    background: !root.b.earned ? SocialStyle.paper-2 : SocialStyle.wabi ? WS.sage.mix(SocialStyle.paper-2, 0.10) : transparent;
+    opacity: root.b.earned || root.hot ? 1 : 0.48;
+    Text { y: 19.9px; width: parent.width; horizontal-alignment: center; text: root.b.icon; font-family: Emoji.family; font-size: 27.2px; color: SocialStyle.muted; }
+    Text { y: 53.1px; width: parent.width; horizontal-alignment: center; text: root.b.name; font-family: SocialStyle.sans; font-size: 13.44px; font-weight: 800; color: root.b.earned ? SocialStyle.accent : SocialStyle.muted; }
+    if root.b.count != "": Rectangle {
+        x: parent.width - 8px - self.width;
+        y: 8px;
+        width: max(24px, c.preferred-width + 12px);
+        height: 18px;
+        // production's pill colours are `color-mix()` over an `--accent` Field Notebook leaves
+        // undefined, so the declarations drop out: the count shows as bare text
+        c := MonoText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.b.count; font-family: SocialStyle.mono; font-size: 10.88px; font-weight: 800; color: SocialStyle.ink; }
+    }
+    touch := TouchArea { mouse-cursor: help; clicked => { fs.focus(); } }
+    fs := FocusScope { }
+    accessible-role: button;
+    accessible-label: root.b.name + ", " + (root.b.earned ? "Unlocked" : "Locked") + ". " + root.b.how + (root.b.count != "" ? ", " + root.b.count : "");
+}
+
+component BadgeTip inherits Rectangle {
+    in property <SBadge> b;
+    width: 240px;
+    height: 20px + 13.7px + 4px + tip.preferred-height + 2px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: SocialStyle.ink;
+    background: SocialStyle.wabi ? WS.paper-2 : #282520;
+    drop-shadow-offset-y: 2px;
+    drop-shadow-color: #00000038;
+    Text { x: 13px; y: 11px; text: (root.b.earned ? "Unlocked" : "Locked").to-uppercase(); font-family: SocialStyle.sans; font-size: 12.48px; font-weight: 700; letter-spacing: 1px; color: SocialStyle.accent; }
+    tip := Text { x: 13px; y: 28.6px; width: parent.width - 26px; wrap: word-wrap; text: root.b.how; font-family: SocialStyle.sans; font-size: 12.48px; color: SocialStyle.muted; }
+}
+
+component BadgeGrid inherits Rectangle {
+    in property <[SBadge]> badges;
+    private property <length> cw: (root.width - 30px) / 4;
+    height: ceil(root.badges.length / 4) * 98px - 10px;
+    for b[i] in root.badges: card := BadgeCard {
+        x: mod(i, 4) * (root.cw + 10px);
+        y: floor(i / 4) * 98px - (self.hot ? 2px : 0px);
+        width: root.cw;
+        b: b;
+        if card.hot: BadgeTip { x: (parent.width - self.width) / 2; y: -10px - self.height; b: b; }
+    }
+}
+
+// Stage 22b: the badges collection (`.profile-badges-modal`, 860px, scrolls inside).
+export component BadgesDialog inherits Rectangle {
+    in property <[SBadgeGroup]> groups;
+    private property <length> w: min(860px, root.width - 32px);
+    private property <length> inner: root.w - 50px;
+    private property <length> content-h: col.preferred-height;
+    forward-focus: keys;
+    keys := FocusScope { key-pressed(e) => { if e.text == Key.Escape { SocialActions.badges(false); return accept; } reject } }
+    visible: !Backdrop.capturing;
+    BlurBackdrop { dim: SocialStyle.wabi ? WS.desk.with-alpha(0.66) : #14110c8c; TouchArea { clicked => { SocialActions.badges(false); } } }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.w;
+        height: min(root.height - 36px, 25px + 98px + root.content-h + 25px);
+        border-radius: 30px;
+        border-width: 1px;
+        border-color: SocialStyle.ink;
+        // Field Notebook: the layered background mixes the undefined `--accent`, so the whole
+        // declaration drops out and the blurred page shows through (as in production)
+        background: SocialStyle.wabi ? WS.paper-1 : transparent;
+        drop-shadow-offset-y: 2px;
+        drop-shadow-color: #00000047;
+        clip: true;
+        TouchArea { scroll-event(e) => { return reject; } }
+        Flickable {
+            x: 1px;
+            y: 1px;
+            width: parent.width - 2px;
+            height: parent.height - 2px;
+            viewport-height: 24px + 98px + root.content-h + 24px;
+            MonoText { x: 24px; y: 28px; text: "PROFILE COLLECTION"; font-family: SocialStyle.mono; font-size: 10px; letter-spacing: 1.8px; color: SocialStyle.faint; }
+            Text { x: 24px; y: 42px; text: "Badges"; font-family: SocialStyle.sans; font-size: 35.2px; font-weight: 700; letter-spacing: -1.408px; color: SocialStyle.ink; }
+            Text { x: 24px; y: 86px; text: "Hover or focus a badge to see how to unlock it."; font-family: SocialStyle.sans; font-size: 14.4px; color: SocialStyle.faint; }
+            RoundClose { x: parent.width - 24px - 30px; y: 24px; clicked => { SocialActions.badges(false); } }
+            col := VerticalLayout {
+                x: 24px;
+                y: 122px;
+                width: root.inner;
+                spacing: 18px;
+                for g in root.groups: Rectangle {
+                    height: grp.preferred-height + 34px;
+                    border-radius: 24px;
+                    border-width: 1px;
+                    border-color: FN.line-soft;
+                    background: SocialStyle.wabi ? WS.paper-2.with-alpha(0.72) : FN.surface-inset.with-alpha(0.72);
+                    grp := VerticalLayout {
+                        x: 17px;
+                        y: 17px;
+                        width: parent.width - 34px;
+                        height: self.preferred-height;
+                        spacing: 12px;
+                        Rectangle {
+                            height: 21px;
+                            Text { x: 0px; y: 3px; text: g.title; font-family: SocialStyle.sans; font-size: 16px; font-weight: 700; color: SocialStyle.ink; }
+                            Text { x: parent.width - self.preferred-width; y: 4px; text: g.source; font-family: SocialStyle.sans; font-size: 14.4px; color: SocialStyle.faint; }
+                        }
+                        BadgeGrid { badges: g.badges; }
+                        if g.sub-title != "": VerticalLayout {
+                            padding-top: 4px;
+                            Rectangle { height: 1px; background: FN.line-soft; }
+                            Rectangle {
+                                height: 42px;
+                                Text { x: 0px; y: 15px; text: g.sub-title; font-family: SocialStyle.sans; font-size: 15.2px; font-weight: 700; letter-spacing: 0.304px; color: SocialStyle.ink; }
+                                Text { x: parent.width - self.preferred-width; y: 16px; text: g.sub-source; font-family: SocialStyle.sans; font-size: 14.4px; color: SocialStyle.faint; }
+                            }
+                            BadgeGrid { badges: g.sub-badges; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    accessible-role: groupbox;
+    accessible-label: "Profile badges";
 }

@@ -1,0 +1,424 @@
+// Stage 22b: the Field Notebook Squad subtab: production's `SocialScreen.tsx` squad panel under
+// `:root[data-app-style="field-notebook"] .study-circle-root`, geometry from the production boxes
+// (1520x980, local mock). Data: `SocialData.squad`; actions: `SocialActions`. The role controls
+// shown follow production's client rules; the Worker decides (a refusal arrives as a message).
+import { FN } from "../fn/palette.slint";
+import { MonoText, SerifText, SansText, HLine, DotLine } from "../fn/parts.slint";
+import { Emoji, CssLine } from "../break/types.slint";
+import { SAvatar, SStat, SBoardRow, SSquadView, SSquadMember, SSquadCard, SChatMessage, SJoinRequest, SocialActions } from "types.slint";
+import { FnAvatar, Kicker, SendButton, PaperButton, PanelHead, EmptyCard, ProfileToggle, Chip, SocialBlue, WrapText } from "fn-parts.slint";
+import { FnTextField } from "fn-feed.slint";
+
+// `article.arena-panel.squad-card`: 18 px padding, hairline edge, paper surface
+component SquadCard inherits Rectangle {
+    in property <length> content-h;
+    height: root.content-h + 38px;
+    border-width: 1px;
+    border-color: FN.line;
+    background: FN.surface;
+    drop-shadow-offset-y: 1px;
+    drop-shadow-color: #0000002e;
+    Rectangle { x: 19px; y: 19px; width: parent.width - 38px; height: root.content-h; @children }
+}
+
+// `.arena-pending-badge` / `.squad-role-badge`
+component Badge inherits Rectangle {
+    in property <string> text;
+    in property <bool> heavy;
+    width: t.preferred-width + (root.heavy ? 16px : 14px);
+    height: root.heavy ? 23px : 19px;
+    border-width: 1px;
+    border-color: FN.line;
+    t := MonoText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.text; font-size: 10px; font-weight: root.heavy ? 900 : 400; letter-spacing: 0.8px; color: FN.ink-3; }
+}
+
+// `.arena-empty.small` as the squad screens use it (production draws it dashed)
+component SmallEmpty inherits Rectangle {
+    in property <string> text;
+    height: 40px;
+    border-radius: 20px;
+    border-width: 1px;
+    border-color: FN.line;
+    MonoText { x: 12px; width: parent.width - 24px; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.text; font-size: 11px; color: FN.ink-4; overflow: elide; }
+}
+
+component SearchCard inherits Rectangle {
+    in property <SSquadCard> c;
+    in property <bool> busy;
+    height: 58px;
+    SansText { x: 11px; y: 11px; width: parent.width - 120px; text: root.c.name; font-size: 16px; font-weight: 700; color: FN.ink; overflow: elide; }
+    SansText { x: 11px; y: 32px; width: parent.width - 120px; text: root.c.meta; font-size: 12.48px; color: FN.ink-3; overflow: elide; }
+    if root.c.action <= 1: PaperButton {
+        x: parent.width - 11px - self.width;
+        y: (parent.height - self.height) / 2;
+        text: root.c.action == 0 ? "JOIN" : "REQUEST";
+        enabled: !root.busy;
+        clicked => { SocialActions.squad-join(root.c.id); }
+    }
+    if root.c.action == 2: Badge { x: parent.width - 11px - self.width; y: (parent.height - self.height) / 2; text: root.c.badge.to-uppercase(); }
+    DotLine { y: parent.height - 1px; width: parent.width; }
+}
+
+component NoSquad inherits Rectangle {
+    in property <SSquadView> s;
+    height: col.preferred-height;
+    col := VerticalLayout {
+        spacing: 16px;
+        SquadCard {
+            content-h: create.preferred-height;
+            create := VerticalLayout {
+                spacing: 16px;
+                PanelHead { icon: "S"; kicker: "CREATE SQUAD"; title: "Start a squad"; }
+                WrapText { text: "Squads hold up to 4 players. Once you join one, you cannot create or join another until you leave."; font-size: 14.4px; ink: FN.ink-3; }
+                Rectangle { height: 4px; }
+                HorizontalLayout {
+                    height: 68px;
+                    spacing: 10px;
+                    VerticalLayout {
+                        alignment: center;
+                        FnTextField { height: 44px; ruled: false; placeholder: "Squad name"; initial: ""; rev: root.s.name-rev; enabled: !root.s.busy; edited(t) => { SocialActions.squad-name-edited(t); } accepted => { SocialActions.squad-create(); } }
+                    }
+                    ProfileToggle {
+                        title: root.s.private-draft ? "Private squad" : "Public squad";
+                        text: root.s.private-draft ? "Players must request to join." : "Players can join instantly.";
+                        on: !root.s.private-draft;
+                        clicked => { SocialActions.squad-toggle-private(); }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        SendButton { text: root.s.busy ? "Working..." : "Create"; enabled: !root.s.busy; clicked => { SocialActions.squad-create(); } }
+                    }
+                }
+            }
+        }
+        SquadCard {
+            content-h: find.preferred-height;
+            find := VerticalLayout {
+                spacing: 0px;
+                PanelHead { icon: "⌕"; kicker: "SEARCH ALL SQUADS"; title: "Find a squad"; }
+                Rectangle { height: 30px; }
+                HorizontalLayout {
+                    height: 44px;
+                    spacing: 10px;
+                    FnTextField { height: 44px; ruled: false; placeholder: "Search by squad name"; initial: ""; rev: 0; enabled: !root.s.searching; edited(t) => { SocialActions.squad-search-edited(t); } accepted => { SocialActions.squad-search(); } }
+                    SendButton { y: 4px; text: root.s.searching ? "Searching..." : "Search"; enabled: !root.s.searching; clicked => { SocialActions.squad-search(); } }
+                }
+                Rectangle { height: 32px; }
+                Rectangle {
+                    height: 42px;
+                    SansText { x: 0px; y: 0px; text: "Suggested squads"; font-size: 16px; font-weight: 700; color: FN.ink; }
+                    SansText { x: 0px; y: 21px; text: "Don't know a name? Join or request one of these."; font-size: 12.48px; font-weight: 800; color: FN.ink-3; }
+                    if root.s.can-reload: PaperButton { x: parent.width - self.width; y: 2.5px; text: root.s.suggestions-loading ? "LOADING..." : "RELOAD"; enabled: !root.s.suggestions-loading; clicked => { SocialActions.squad-reload(); } }
+                    Rectangle { y: parent.height - 1px; height: 1px; background: FN.ink; }
+                }
+                Rectangle { height: 26px; }
+                VerticalLayout {
+                    spacing: 9px;
+                    for c in root.s.suggestions: SearchCard { c: c; busy: root.s.busy; }
+                    if root.s.suggestions-loading: SmallEmpty { text: "Loading suggestions..."; }
+                    if !root.s.suggestions-loading && root.s.suggestions.length == 0: SmallEmpty { text: "No squads exist yet. Create the first one."; }
+                }
+                if root.s.pending-note != "": VerticalLayout {
+                    padding-top: 16px;
+                    WrapText { text: root.s.pending-note; font-size: 14.4px; ink: FN.ink-3; }
+                }
+                Rectangle { height: 34px; }
+                Rectangle {
+                    height: 21px;
+                    SansText { x: 0px; y: 0px; text: "SEARCH RESULTS"; font-size: 12.48px; font-weight: 800; letter-spacing: 0.75px; color: FN.ink-3; }
+                    Rectangle { y: parent.height - 1px; height: 1px; background: FN.ink; }
+                }
+                Rectangle { height: 30px; }
+                VerticalLayout {
+                    spacing: 9px;
+                    for c in root.s.results: SearchCard { c: c; busy: root.s.busy; }
+                    if root.s.results.length == 0: SmallEmpty { text: "Search by name to discover public and private squads."; }
+                }
+            }
+        }
+    }
+}
+
+component MemberCard inherits Rectangle {
+    in property <SSquadMember> m;
+    in property <bool> busy;
+    callback open-person(string);
+    private property <length> summary-h: max(38px, nm.preferred-height + 3px + dt.preferred-height) + 22px;
+    height: lay.preferred-height + 2px;
+    border-width: 1px;
+    border-color: FN.line-soft;
+    background: FN.surface-2;
+    lay := VerticalLayout {
+        x: 1px;
+        y: 1px;
+        width: parent.width - 2px;
+        Rectangle {
+            height: root.summary-h;
+            FnAvatar { x: 11px; y: (parent.height - self.height) / 2; a: root.m.avatar; size: 38px; font: 13.44px; }
+            badge := Badge { x: parent.width - 11px - self.width; y: (parent.height - self.height) / 2; heavy: true; text: root.m.role.to-uppercase(); }
+            nm := SansText { x: 61px; y: (parent.height - self.preferred-height - 3px - dt.preferred-height) / 2; width: badge.x - 12px - self.x; text: root.m.name; font-size: 16px; font-weight: 700; color: FN.ink; wrap: word-wrap; }
+            dt := SansText { x: 61px; y: nm.y + nm.preferred-height + 3px; width: badge.x - 12px - self.x; text: root.m.detail; font-size: 12.48px; color: FN.ink-3; wrap: word-wrap; }
+            DotLine { y: parent.height - 1px; width: parent.width; }
+            TouchArea { mouse-cursor: pointer; clicked => { SocialActions.squad-expand(root.m.id); } }
+            accessible-role: button;
+            accessible-label: root.m.name + ", " + root.m.role;
+            accessible-expanded: root.m.expanded;
+        }
+        if root.m.expanded: VerticalLayout {
+            padding: 11px;
+            spacing: 8px;
+            WrapText { text: root.m.manage-title; font-size: 14px; font-weight: 700; ink: FN.ink; }
+            WrapText { text: root.m.manage-detail; font-size: 12.48px; ink: FN.ink-3; }
+            if root.m.roles.length > 0: HorizontalLayout {
+                alignment: start;
+                spacing: 6px;
+                for r in root.m.roles: PaperButton { text: r.label.to-uppercase(); enabled: !root.busy && !r.current; clicked => { SocialActions.squad-role(root.m.id, r.role); } }
+            }
+            if root.m.can-kick: HorizontalLayout {
+                alignment: start;
+                PaperButton { text: "KICK FROM SQUAD"; enabled: !root.busy; clicked => { SocialActions.squad-kick(root.m.id); } }
+            }
+        }
+    }
+}
+
+component ChatRow inherits Rectangle {
+    in property <SChatMessage> m;
+    height: max(38px, nm.preferred-height + 4px + body.preferred-height) + 21px;
+    FnAvatar { x: 10px; y: 10px; a: root.m.avatar; size: 38px; font: 13.44px; }
+    nm := SansText { x: 58px; y: 10px; text: root.m.name; font-size: 13.44px; font-weight: 700; color: FN.ink; }
+    SansText { x: 58px + nm.preferred-width + 4px; y: 10px + (nm.preferred-height - self.preferred-height) / 2 + 1px; text: root.m.role; font-size: 10.88px; font-weight: 800; color: FN.ink-3; }
+    body := SansText { x: 58px; y: 10px + nm.preferred-height + 4px; width: parent.width - 68px - (root.m.is-self ? 64px : 0px); text: root.m.body; font-size: 14.4px; color: FN.ink; wrap: word-wrap; }
+    if root.m.is-self: Rectangle {
+        x: parent.width - 10px - self.width;
+        y: 10px;
+        width: dl.preferred-width + 18px;
+        height: 24px;
+        border-radius: 12px;
+        background: FN.critical.with-alpha(0.12);
+        dl := SansText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "Delete"; font-size: 11.52px; font-weight: 800; color: FN.critical; }
+        TouchArea { mouse-cursor: pointer; clicked => { SocialActions.squad-chat-delete(root.m.id); } }
+        accessible-role: button;
+        accessible-label: "Delete message";
+    }
+    DotLine { y: parent.height - 1px; width: parent.width - 4px; }
+    accessible-role: text;
+    accessible-label: root.m.name + " (" + root.m.role + "): " + root.m.body;
+}
+
+component BoardRow inherits Rectangle {
+    in property <SBoardRow> e;
+    callback open();
+    height: 66px;
+    background: root.e.is-self ? FN.ink.with-alpha(0.04) : transparent;
+    Rectangle {
+        x: 0px;
+        y: (parent.height - 30px) / 2;
+        width: 30px;
+        height: 30px;
+        border-width: 1px;
+        border-color: FN.line;
+        MonoText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.e.rank; font-size: 12px; color: root.e.is-self ? SocialBlue.blue : FN.ink-3; }
+    }
+    FnAvatar { x: 62px; y: (parent.height - self.height) / 2; a: root.e.avatar; size: 38px; font: 13.44px; }
+    SerifText { x: 112px; y: 14px; width: parent.width - 112px - 90px; text: root.e.name + (root.e.is-self ? " (You)" : ""); font-size: 17px; font-weight: 600; color: FN.ink; overflow: elide; }
+    MonoText { x: 112px; y: 37px; text: root.e.code; font-size: 11px; color: FN.ink-4; }
+    SerifText { x: parent.width - self.preferred-width; y: 14px; text: root.e.hours; font-size: 17px; font-weight: 600; color: FN.ink; }
+    MonoText { x: parent.width - self.preferred-width; y: 38px; text: root.e.sessions + " SESS."; font-size: 10.5px; color: FN.ink-4; }
+    DotLine { y: parent.height - 1px; width: parent.width; }
+    TouchArea { mouse-cursor: pointer; clicked => { root.open(); } }
+    accessible-role: button;
+    accessible-label: "Rank " + root.e.rank + ", " + root.e.name + ", " + root.e.hours;
+}
+
+component InSquad inherits Rectangle {
+    in property <SSquadView> s;
+    callback open-person(string);
+    private property <length> col-w: (root.width - 24px) / 2;
+    height: col.preferred-height;
+    col := VerticalLayout {
+        spacing: 16px;
+        // `.squad-hq-card`
+        SquadCard {
+            content-h: hq.preferred-height;
+            hq := VerticalLayout {
+                spacing: 0px;
+                Rectangle {
+                    height: 78px;
+                    Rectangle {
+                        x: 0px;
+                        y: 14px;
+                        width: 36px;
+                        height: 36px;
+                        border-width: 1px;
+                        border-color: FN.line;
+                        background: FN.surface-2;
+                        SansText { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: "S"; font-size: 18.88px; color: FN.ink-3; }
+                    }
+                    Kicker { x: 46px; y: 4px; text: root.s.kicker.to-uppercase(); }
+                    SansText { x: 46px; y: 18px; width: parent.width - 46px - 140px; text: root.s.name; font-size: 24px; font-weight: 700; color: FN.ink; overflow: elide; }
+                    SansText { x: 46px; y: 46px; text: root.s.meta; font-size: 16px; color: FN.ink-3; }
+                    HorizontalLayout {
+                        x: parent.width - self.preferred-width;
+                        y: 0px;
+                        height: 30px;
+                        spacing: 8px;
+                        if root.s.is-leader: PaperButton { text: "EDIT"; clicked => { SocialActions.squad-edit(); } }
+                        PaperButton { text: "LEAVE"; enabled: !root.s.busy; clicked => { SocialActions.squad-leave(); } }
+                    }
+                    Rectangle { y: parent.height - 2px; height: 2px; background: FN.ink; }
+                }
+                if root.s.settings-editing: VerticalLayout {
+                    padding-top: 16px;
+                    HorizontalLayout {
+                        height: 68px;
+                        spacing: 10px;
+                        VerticalLayout {
+                            alignment: center;
+                            FnTextField { height: 44px; ruled: false; placeholder: "Squad name"; initial: root.s.settings-name; rev: root.s.settings-rev; edited(t) => { SocialActions.squad-settings-name(t); } accepted => { SocialActions.squad-settings-save(); } }
+                        }
+                        ProfileToggle {
+                            title: root.s.settings-private ? "Private squad" : "Public squad";
+                            text: root.s.settings-private ? "Players must request to join." : "Players can join instantly.";
+                            on: !root.s.settings-private;
+                            clicked => { SocialActions.squad-settings-private(); }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 6px;
+                            SendButton { text: "Save"; enabled: !root.s.busy; clicked => { SocialActions.squad-settings-save(); } }
+                            PaperButton { text: "CANCEL"; clicked => { SocialActions.squad-settings-cancel(); } }
+                        }
+                    }
+                }
+                Rectangle { height: 32px; }
+                HorizontalLayout {
+                    height: 64px;
+                    spacing: 10px;
+                    for st in root.s.stats: Rectangle {
+                        border-width: 1px;
+                        border-color: FN.line-soft;
+                        background: FN.surface-2;
+                        SansText { x: 13px; y: 13px; width: parent.width - 26px; text: st.value; font-size: 17.6px; font-weight: 700; color: FN.ink; overflow: elide; }
+                        SansText { x: 13px; y: 37px; width: parent.width - 26px; text: st.label; font-size: 12.16px; font-weight: 800; color: FN.ink-3; overflow: elide; }
+                        accessible-role: text;
+                        accessible-label: st.label + ": " + st.value;
+                    }
+                }
+            }
+        }
+        // the roster and the internal leaderboard, side by side
+        HorizontalLayout {
+            spacing: 24px;
+            alignment: start;
+            VerticalLayout {
+                width: root.col-w;
+                alignment: start;
+                SquadCard {
+                    content-h: roster.preferred-height;
+                    roster := VerticalLayout {
+                        spacing: 0px;
+                        PanelHead { icon: "R"; kicker: "SQUAD ROSTER"; title: "Members"; }
+                        Rectangle { height: 30px; }
+                        VerticalLayout {
+                            spacing: 9px;
+                            for m in root.s.members: MemberCard { m: m; busy: root.s.busy; open-person(id) => { root.open-person(id); } }
+                        }
+                    }
+                }
+            }
+            VerticalLayout {
+                width: root.col-w;
+                alignment: start;
+                SquadCard {
+                    content-h: board.preferred-height;
+                    board := VerticalLayout {
+                        spacing: 0px;
+                        PanelHead { icon: "⚔"; kicker: "INTERNAL LEADERBOARD"; title: "Squad members"; }
+                        Rectangle { height: 16px; }
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: 8px;
+                            Chip { text: "Daily"; active: root.s.period == 0; clicked => { SocialActions.squad-period(0); } }
+                            Chip { text: "Weekly"; active: root.s.period == 1; clicked => { SocialActions.squad-period(1); } }
+                            Chip { text: "Overall"; active: root.s.period == 2; clicked => { SocialActions.squad-period(2); } }
+                        }
+                        Rectangle { height: 14px + 28px; }
+                        VerticalLayout {
+                            for e in root.s.board: BoardRow { e: e; open => { root.open-person(e.id); } }
+                            if root.s.board.length == 0: SmallEmpty { text: "Sync your squad to see member rankings."; }
+                        }
+                    }
+                }
+            }
+        }
+        // `.squad-chat-card`
+        SquadCard {
+            content-h: chat.preferred-height;
+            chat := VerticalLayout {
+                spacing: 0px;
+                PanelHead { icon: "#"; kicker: "SQUAD CHAT"; title: "Chat"; }
+                Rectangle { height: 30px; }
+                VerticalLayout {
+                    spacing: 10px;
+                    for m in root.s.messages: ChatRow { m: m; }
+                    if root.s.messages.length == 0: SmallEmpty { text: "No messages yet. Start the squad chat."; }
+                }
+                Rectangle { height: 30px; }
+                HorizontalLayout {
+                    height: 44px;
+                    spacing: 10px;
+                    chat-field := FnTextField { height: 44px; ruled: false; placeholder: "Message your squad"; initial: root.s.chat-draft; rev: root.s.chat-rev; edited(t) => { SocialActions.squad-chat-edited(t); } accepted => { SocialActions.squad-chat-send(); } }
+                    SendButton { y: 4px; text: "Send"; enabled: chat-field.value != ""; clicked => { SocialActions.squad-chat-send(); } }
+                }
+            }
+        }
+        // `.squad-requests-card` (elder and above)
+        if root.s.can-manage-requests: SquadCard {
+            content-h: req.preferred-height;
+            req := VerticalLayout {
+                spacing: 0px;
+                PanelHead { icon: "?"; kicker: "PRIVATE REQUESTS"; title: "Join requests"; }
+                Rectangle { height: 16px; }
+                for r in root.s.requests: Rectangle {
+                    height: 59px;
+                    FnAvatar { x: 10px; y: 10px; a: r.avatar; size: 38px; font: 13.44px; }
+                    SansText { x: 60px; y: 11.5px; width: parent.width - 240px; text: r.name; font-size: 16px; font-weight: 700; color: FN.ink; overflow: elide; }
+                    SansText { x: 60px; y: 32.5px; text: r.code; font-size: 12.48px; color: FN.ink-3; }
+                    HorizontalLayout {
+                        x: parent.width - 10px - self.preferred-width;
+                        y: 14px;
+                        height: 30px;
+                        spacing: 7px;
+                        PaperButton { text: "ACCEPT"; enabled: !root.s.busy; clicked => { SocialActions.squad-respond(r.id, true); } }
+                        PaperButton { text: "DECLINE"; enabled: !root.s.busy; clicked => { SocialActions.squad-respond(r.id, false); } }
+                    }
+                    DotLine { y: parent.height - 1px; width: parent.width; }
+                }
+                if root.s.requests.length == 0: SmallEmpty { text: "No pending squad requests."; }
+            }
+        }
+    }
+}
+
+export component FnSquadPanel inherits Rectangle {
+    in property <SSquadView> s;
+    callback open-person(string);
+    private property <length> single-w: min(720px, root.width);
+    // `.social-single-panel.squad-panel`: surface-2, 28/26/40 padding, 720 px wide
+    height: lay.preferred-height;
+    Rectangle {
+        x: (root.width - root.single-w) / 2;
+        width: root.single-w;
+        height: parent.height;
+        background: FN.surface-2;
+        lay := VerticalLayout {
+            padding-left: 26px;
+            padding-right: 26px;
+            padding-top: 28px;
+            padding-bottom: 40px;
+            if !root.s.has-squad: NoSquad { s: root.s; }
+            if root.s.has-squad: InSquad { s: root.s; open-person(id) => { root.open-person(id); } }
+        }
+    }
+}

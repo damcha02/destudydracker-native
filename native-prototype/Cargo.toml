@@ -47,7 +47,13 @@ png = "0.18"
 resvg = { version = "0.47", default-features = false }
 ureq = { version = "3.4", default-features = false, features = ["rustls"] }
 getrandom = "0.3"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+# Stage 22b: SHA-256 of the offline-reconciliation intervals (production's `chainTipHash`).
+# `ring` is ALREADY linked as rustls' crypto provider; this names it directly to use its digest
+# module and adds no crate.
+ring = { version = "0.17", default-features = false }
+# Stage 22b adds "gif": production lets feed images be GIFs; the `gif` decoder crate is already
+# compiled for resvg, so this enables code, not a new crate.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 tiny-skia = "0.12"
 
 [target.'cfg(windows)'.dependencies]
@@ -76,14 +82,20 @@ windows-sys = { version = "0.59", features = [
 
 # Toast notifications (Stage 18, src/platform/win_toast.rs): WinRT `ToastNotificationManager`. The
 # `windows` crate is ALREADY in the dependency tree (slint -> winit -> accesskit_windows); this adds
-# only three feature flags on the copy that is resolved anyway, no new crate.
-windows = { version = "0.62", features = ["UI_Notifications", "Data_Xml_Dom", "Foundation"] }
+# only feature flags on the copy that is resolved anyway, no new crate. Stage 22b adds the shell's
+# IFileOpenDialog (src/file_picker.rs): Win32_System_Com / Win32_UI_Shell(_Common) / Foundation.
+windows = { version = "0.62", features = ["UI_Notifications", "Data_Xml_Dom", "Foundation", "Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common"] }
 
 [build-dependencies]
 slint-build = "1.17.1"
 
 [dev-dependencies]
 social-mock = { path = "crates/social-mock" }
+
+# Stage 22b (src/file_picker.rs): the XDG desktop portal's file dialog through the zbus that
+# accesskit_unix ALREADY links; "blocking-api" is a feature flag on that copy (no new crate).
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { version = "5", default-features = false, features = ["async-io", "blocking-api"] }
 
 [target.'cfg(windows)'.build-dependencies]
 # Embeds the application icon and version/identity resource (assets/branding/app.rc) into the
